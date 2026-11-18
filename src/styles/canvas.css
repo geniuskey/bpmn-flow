@@ -413,3 +413,30 @@
 .bf-band-label {
   font-size: 11px;
 }
+
+/* Collection marker on data objects */
+.bf-collection-marker {
+  fill: none;
+  stroke: var(--bf-shape-stroke);
+  stroke-width: 1.5px;
+}
+
+/* Black-box pool (participant without a process) */
+.bf-black-box {
+  fill: var(--bf-pool-band);
+}
+
+/* Message attached to a message flow */
+.bf-envelope-body {
+  fill: var(--bf-shape-fill);
+  stroke: var(--bf-connection);
+  stroke-width: 1.2px;
+}
+.bf-envelope-flap {
+  fill: none;
+  stroke: var(--bf-connection);
+  stroke-width: 1.2px;
+}
+.bf-non-initiating .bf-envelope-body {
+  fill: color-mix(in oklch, var(--bf-shape-stroke) 22%, var(--bf-shape-fill));
+}

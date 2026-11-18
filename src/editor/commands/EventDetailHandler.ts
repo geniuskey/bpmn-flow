@@ -47,6 +47,8 @@ export function timerOf(definition: ModdleElement): { timerType: TimerType; valu
 interface Context {
   element: Element;
   detail: EventDetail;
+  /** Which definition of a Multiple event to edit (default: the first). */
+  definitionIndex?: number;
   log?: ChangeLog;
   created?: ModdleElement;
 }
@@ -67,7 +69,7 @@ export default class EventDetailHandler {
 
   execute(context: Context): Element[] {
     const event = bo(context.element);
-    const definition = event && getMany(event, 'eventDefinitions')[0];
+    const definition = event && getMany(event, 'eventDefinitions')[context.definitionIndex ?? 0];
     if (!definition) return [];
     const log = new ChangeLog();
     const { detail } = context;

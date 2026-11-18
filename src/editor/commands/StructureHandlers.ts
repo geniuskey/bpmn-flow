@@ -3,6 +3,7 @@
  * - `root.toCollaboration`: turns a process diagram into a collaboration
  * - `lanes.updateMembership`: recomputes `flowNodeRef` from node positions
  * - `lane.add`: inserts a lane into a pool, growing the pool
+ * - `pool.setBlackBox`: turns an empty pool into a black-box pool (no process) or back
  */
 import type Canvas from 'diagram-js/lib/core/Canvas';
 import type Modeling from 'diagram-js/lib/features/modeling/Modeling';
@@ -16,6 +17,7 @@ import { center, contains, isFlowNodeShape, lanesOf, participantOf } from '../mo
 export const ROOT_TO_COLLABORATION = 'root.toCollaboration';
 export const UPDATE_LANES = 'lanes.updateMembership';
 export const ADD_LANE = 'lane.add';
+export const SET_POOL_BLACK_BOX = 'pool.setBlackBox';
 
 export const POOL_BAND = 30;
 export const NEW_LANE_HEIGHT = 125;
@@ -107,6 +109,9 @@ export class AddLaneHandler {
       ? context.target
       : participantOf(context.target.parent);
     if (!participant) throw new Error('Lanes can only be added to pools.');
+    if (!getRef(bo(participant), 'processRef')) {
+      throw new Error('A black-box pool has no process and therefore no lanes.');
+    }
     const lanes = lanesOf(participant);
     const laneX = participant.x + POOL_BAND;
     const laneWidth = participant.width - POOL_BAND;
@@ -168,4 +173,71 @@ export class AddLaneHandler {
 
 export function hasLanes(participant: Shape | undefined): boolean {
   return !!participant && getMany(getRef(bo(participant), 'processRef'), 'laneSets').length > 0;
+}
+
+/**
+ * Why a pool cannot become a black box, or null when it can: only a pool whose
+ * process is empty, used by no other pool and not drawn in another diagram, so
+ * nothing is lost.
+ */
+export function blackBoxBlocker(pool: Shape, definitions: ModdleElement): string | null {
+  const participant = bo(pool);
+  if (!participant || !is(participant, 'bpmn:Participant')) return 'Not a pool.';
+  const process = getRef(participant, 'processRef');
+  if (!process) return null;
+  if (childrenOf(pool).length) return 'Remove the content of the pool first.';
+  const content = ['flowElements', 'artifacts', 'laneSets'].some(
+    (key) => getMany(process, key).length > 0,
+  );
+  if (content || getRef(process, 'ioSpecification')) return 'The pool’s process has content.';
+  const sharedBy = (getMany(participant.$parent, 'participants') as ModdleElement[]).some(
+    (p) => p !== participant && getRef(p, 'processRef') === process,
+  );
+  if (sharedBy) return 'Another pool uses the same process.';
+  const drawn = getMany(definitions, 'diagrams').some(
+    (d) => getRef(getRef(d, 'plane'), 'bpmnElement') === process,
+  );
+  if (drawn) return 'The process has its own diagram.';
+  return null;
+}
+
+export class SetPoolBlackBoxHandler {
+  static $inject = ['elementFactory', 'bpmnDefinitions'];
+  constructor(
+    private readonly factory: BpmnElementFactory,
+    private readonly definitions: ModdleElement,
+  ) {}
+
+  execute(context: {
+    element: Shape;
+    blackBox: boolean;
+    process?: ModdleElement;
+    log?: ChangeLog;
+  }): Shape[] {
+    const participant = bo(context.element);
+    if (!participant || !is(participant, 'bpmn:Participant')) throw new Error('Not a pool.');
+    const roots = this.definitions.get('rootElements') as ModdleElement[];
+    const current = getRef(participant, 'processRef');
+    const log = new ChangeLog();
+    if (context.blackBox && current) {
+      const blocker = blackBoxBlocker(context.element, this.definitions);
+      if (blocker) throw new Error(blocker);
+      log.set(participant, 'processRef', undefined);
+      log.remove(roots, current);
+    } else if (!context.blackBox && !current) {
+      const process = (context.process ??= this.factory.createModdle('bpmn:Process', {
+        isExecutable: false,
+      }));
+      log.insert(roots, process);
+      log.setParent(process, this.definitions);
+      log.set(participant, 'processRef', process);
+    }
+    context.log = log;
+    return [context.element];
+  }
+
+  revert(context: { element: Shape; log?: ChangeLog }): Shape[] {
+    context.log?.undo();
+    return [context.element];
+  }
 }

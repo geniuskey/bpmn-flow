@@ -51,7 +51,9 @@ function shapeKind(el: ModdleElement): VisualKind {
   if (is(el, 'bpmn:Gateway')) return 'gateway';
   if (is(el, 'bpmn:TextAnnotation')) return 'textAnnotation';
   if (is(el, 'bpmn:Group')) return 'group';
-  if (is(el, 'bpmn:DataObjectReference')) return 'dataObject';
+  if (is(el, 'bpmn:DataObjectReference') || is(el, 'bpmn:DataInput') || is(el, 'bpmn:DataOutput')) {
+    return 'dataObject';
+  }
   if (is(el, 'bpmn:ConversationNode')) return 'conversation';
   return 'dataStore';
 }
@@ -86,8 +88,18 @@ export function hasExternalLabel(el: ModdleElement): boolean {
     is(el, 'bpmn:Gateway') ||
     is(el, 'bpmn:DataObjectReference') ||
     is(el, 'bpmn:DataStoreReference') ||
+    is(el, 'bpmn:DataInput') ||
+    is(el, 'bpmn:DataOutput') ||
     is(el, 'bpmn:ConversationNode')
   );
+}
+
+/** Collection flag: on the referenced data object, or on a data input / output itself. */
+export function isCollection(el: ModdleElement): boolean {
+  const target = is(el, 'bpmn:DataObjectReference')
+    ? (el.get('dataObjectRef') as ModdleElement | undefined)
+    : el;
+  return target?.get('isCollection') === true;
 }
 
 /** Thrown events show filled markers; caught events show outlined markers. */

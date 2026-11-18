@@ -250,3 +250,113 @@ test('transactions, ad-hoc sub-processes, compensation and loop markers', async 
   );
   expect(['valid', 'skipped']).toContain(xsdValidate(xml));
 });
+
+test('BPMN 2.0 notation: multiple events, event-based gateway variants, collections, black-box pools', async ({
+  page,
+}) => {
+  await page.goto('/?sample=notation');
+  await expect(el(page, 'Task_handle')).toBeVisible();
+  await expect(page.getByText('Read-only')).toHaveCount(0);
+  // Black-box pool, message envelopes (shaded when non-initiating), collection marker and data state.
+  await expect(el(page, 'Pool_customer').locator('.bf-black-box')).toHaveCount(1);
+  await expect(el(page, 'Pool_service').locator('.bf-black-box')).toHaveCount(0);
+  await expect(el(page, 'Mf_request').locator('.bf-message-envelope')).toHaveCount(1);
+  await expect(el(page, 'Mf_reply').locator('.bf-non-initiating')).toHaveCount(1);
+  await expect(el(page, 'Data_requests').locator('.bf-collection-marker')).toHaveCount(1);
+  await expect(el(page, 'Data_requests')).toContainText('[approved]');
+
+  const inspector = page.getByTestId('inspector');
+  // Parallel multiple start event.
+  await el(page, 'Start_pm').click();
+  await expect(inspector.getByLabel('Event definition')).toHaveValue('__multiple');
+  await expect(inspector.getByLabel('Parallel multiple')).toBeChecked();
+  await expect(inspector.getByLabel('Timer expression')).toHaveValue('2027-01-01T09:00:00Z');
+
+  // Multiple end event: remove a trigger, then add it back.
+  await el(page, 'End_multi').click();
+  await inspector.getByLabel('Remove Signal trigger').click();
+  let xml = await exportXml(page);
+  let end = /<bpmn:endEvent id="End_multi"[\s\S]*?<\/bpmn:endEvent>/.exec(xml)![0];
+  expect(end).toContain('messageEventDefinition id="End_multi_msg"');
+  expect(end).not.toContain('signalEventDefinition');
+  await expect(inspector.getByLabel('Event definition')).toHaveValue('bpmn:MessageEventDefinition');
+  await inspector.getByLabel('Add trigger').selectOption('bpmn:SignalEventDefinition');
+  xml = await exportXml(page);
+  end = /<bpmn:endEvent id="End_multi"[\s\S]*?<\/bpmn:endEvent>/.exec(xml)![0];
+  expect(end).toContain('signalEventDefinition');
+  await expect(inspector.getByLabel('Event definition')).toHaveValue('__multiple');
+
+  // Instantiating parallel event-based gateway.
+  await el(page, 'Gw_event').click();
+  await inspector.getByLabel('Instantiate').check();
+  await inspector.getByLabel('Event gateway type').selectOption('Parallel');
+  // Collection off.
+  await el(page, 'Data_requests').click();
+  await inspector.getByLabel('Collection').uncheck();
+  xml = await exportXml(page);
+  expect(xml).toMatch(
+    /<bpmn:eventBasedGateway id="Gw_event" instantiate="true" eventGatewayType="Parallel">/,
+  );
+  expect(xml).toContain('<bpmn:dataObject id="Data_requests_obj" />');
+  expect(['valid', 'skipped']).toContain(xsdValidate(xml));
+  saveForInterop('e2e-notation.bpmn', xml);
+});
+
+test('process data inputs / outputs and black-box pools', async ({ page }) => {
+  await page.goto('/?sample=notation');
+  await expect(el(page, 'In_ticket')).toBeVisible();
+  await expect(page.getByText('Read-only')).toHaveCount(0);
+  await expect(el(page, 'Out_report').locator('.bf-collection-marker')).toHaveCount(1);
+  await expect(el(page, 'Dia_ticket')).toHaveCount(1);
+  await expect(el(page, 'Doa_report')).toHaveCount(1);
+
+  // A new data input in the pool, read by the task.
+  const timer = await center(page, 'Catch_timer');
+  const endMulti = await center(page, 'End_multi');
+  const endUpdate = await center(page, 'End_update');
+  const input = await place(page, 'DataInput', {
+    x: (timer.x + endMulti.x) / 2,
+    y: endUpdate.y,
+  });
+  await connect(page, input, 'Task_handle');
+  let xml = await exportXml(page);
+  const io = /<bpmn:ioSpecification id="IO_service">[\s\S]*?<\/bpmn:ioSpecification>/.exec(xml)![0];
+  expect(io).toContain(`<bpmn:dataInput id="${input}"`);
+  expect(io).toMatch(new RegExp(`<bpmn:dataInputRefs>${input}</bpmn:dataInputRefs>`));
+  const task = /<bpmn:userTask id="Task_handle"[\s\S]*?<\/bpmn:userTask>/.exec(xml)![0];
+  expect(task).toContain(`<bpmn:sourceRef>${input}</bpmn:sourceRef>`);
+  expect(['valid', 'skipped']).toContain(xsdValidate(xml));
+  saveForInterop('e2e-data-io.bpmn', xml);
+
+  // Deleting it removes it from the I/O specification and drops its association.
+  await el(page, input).click();
+  await page.keyboard.press('Delete');
+  xml = await exportXml(page);
+  expect(xml).not.toContain(input);
+  expect(xml).toContain('<bpmn:dataInputRefs>In_ticket</bpmn:dataInputRefs>');
+
+  // Black-box pool: give the customer a process, then make it a black box again.
+  const inspector = page.getByTestId('inspector');
+  await page.getByTestId('canvas').click({ position: { x: 15, y: 15 } });
+  await el(page, 'Pool_customer').click({ position: { x: 300, y: 10 } });
+  await expect(inspector.getByLabel('Black-box pool')).toBeChecked();
+  await inspector.getByLabel('Black-box pool').uncheck();
+  await expect(el(page, 'Pool_customer').locator('.bf-black-box')).toHaveCount(0);
+  xml = await exportXml(page);
+  expect(xml).toMatch(/<bpmn:participant id="Pool_customer" name="Customer" processRef="[^"]+"/);
+  expect(count(xml, 'process')).toBe(2);
+  await inspector.getByLabel('Black-box pool').check();
+  xml = await exportXml(page);
+  expect(xml).toContain('<bpmn:participant id="Pool_customer" name="Customer" />');
+  expect(count(xml, 'process')).toBe(1);
+  expect(['valid', 'skipped']).toContain(xsdValidate(xml));
+  // Undo brings the same process back.
+  await page.getByRole('button', { name: 'Undo' }).click();
+  expect(count(await exportXml(page), 'process')).toBe(2);
+  await page.getByRole('button', { name: 'Redo' }).click();
+  expect(count(await exportXml(page), 'process')).toBe(1);
+
+  // A pool with content cannot become a black box.
+  await el(page, 'Pool_service').click({ position: { x: 15, y: 60 } });
+  await expect(inspector.getByLabel('Black-box pool')).toBeDisabled();
+});

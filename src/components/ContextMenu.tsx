@@ -132,11 +132,14 @@ export function ContextMenu({ host }: { host: HTMLElement | null }) {
   );
 }
 
+/** Lanes can be added to a pool with a process (not a black box) or to a lane. */
 function isPoolOrLane(id: string | undefined): boolean {
-  const type = id
-    ? (useEditorStore.getState().controller?.getElement(id) as { type?: string } | undefined)?.type
-    : '';
-  return type === 'bpmn:Participant' || type === 'bpmn:Lane';
+  const element = id
+    ? (useEditorStore.getState().controller?.getElement(id) as
+        { type?: string; businessObject?: { get(key: string): unknown } } | undefined)
+    : undefined;
+  if (element?.type === 'bpmn:Lane') return true;
+  return element?.type === 'bpmn:Participant' && !!element.businessObject?.get('processRef');
 }
 
 function MenuItem({ label, keys, onClick }: { label: string; keys?: string; onClick: () => void }) {

@@ -63,6 +63,9 @@ import EventDetailHandler, {
 } from './commands/EventDetailHandler';
 import {
   ADD_LANE,
+  SET_POOL_BLACK_BOX,
+  SetPoolBlackBoxHandler,
+  blackBoxBlocker,
   AddLaneHandler,
   ROOT_TO_COLLABORATION,
   RootToCollaborationHandler,
@@ -125,6 +128,7 @@ class BpmnFlowCommands {
     commandStack.registerHandler(ROOT_TO_COLLABORATION, RootToCollaborationHandler);
     commandStack.registerHandler(UPDATE_LANES, UpdateLanesHandler);
     commandStack.registerHandler(ADD_LANE, AddLaneHandler);
+    commandStack.registerHandler(SET_POOL_BLACK_BOX, SetPoolBlackBoxHandler);
     commandStack.registerHandler(APPLY_LAYOUT, ApplyLayoutHandler);
   }
 }
@@ -468,9 +472,15 @@ export class EditorController {
     if (element) this.exec(SET_EVENT_DEFINITION, { element, definitionType });
   }
 
-  updateEventDetail(id: string, detail: EventDetail): void {
+  /** Sets all triggers at once: several definitions make a "Multiple" event. */
+  setEventDefinitions(id: string, definitionTypes: string[]): void {
     const element = this.getElement(id);
-    if (element) this.exec(UPDATE_EVENT_DETAIL, { element, detail });
+    if (element) this.exec(SET_EVENT_DEFINITION, { element, definitionTypes });
+  }
+
+  updateEventDetail(id: string, detail: EventDetail, definitionIndex = 0): void {
+    const element = this.getElement(id);
+    if (element) this.exec(UPDATE_EVENT_DETAIL, { element, detail, definitionIndex });
   }
 
   setChoreographyParticipant(
@@ -490,6 +500,20 @@ export class EditorController {
   setDefaultFlow(gatewayId: string, flow: ModdleElement | undefined): void {
     const element = this.getElement(gatewayId);
     if (element) this.exec(UPDATE_PROPERTIES, { element, properties: { default: flow } });
+  }
+
+  /** Black-box pool: a participant without a process (only for empty pools). */
+  setPoolBlackBox(id: string, blackBox: boolean): void {
+    const element = this.getElement(id);
+    if (element) this.exec(SET_POOL_BLACK_BOX, { element, blackBox });
+  }
+
+  /** Why the pool cannot become a black box, or null when it can. */
+  poolBlackBoxBlocker(id: string): string | null {
+    const element = this.getElement(id) as Shape | undefined;
+    const definitions = this.document?.definitions;
+    if (!element || !definitions) return 'Not available.';
+    return blackBoxBlocker(element, definitions);
   }
 
   addLane(targetId: string): void {

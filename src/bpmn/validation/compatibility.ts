@@ -20,6 +20,7 @@ import {
   isEditableConnection,
   isEditableFlowNode,
   isEditableShapeElement,
+  isProcessDataIo,
 } from '../model/elements';
 import { getRef, is, walkContainment, type ModdleElement } from '../model/moddle';
 
@@ -63,6 +64,8 @@ const KNOWN_TYPES = new Set<string>([
 
 /** Elements that need a BPMNShape / BPMNEdge to be shown. */
 function needsShape(el: ModdleElement): boolean {
+  // Process data inputs / outputs are optional on the diagram.
+  if (isProcessDataIo(el)) return false;
   if (isEditableShapeElement(el)) return true;
   // Choreography participants are drawn as bands of their activities, not as pools.
   if (is(el, 'bpmn:Participant')) return !is(el.$parent, 'bpmn:Choreography');

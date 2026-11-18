@@ -11,7 +11,7 @@ import type Rules from 'diagram-js/lib/features/rules/Rules';
 import type { Element, Shape } from 'diagram-js/lib/model/Types';
 import type ElementRegistry from 'diagram-js/lib/core/ElementRegistry';
 import { isEditableFlowNode } from '@/bpmn/model/elements';
-import { is, type ModdleElement } from '@/bpmn/model/moddle';
+import { getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
 import type Canvas from 'diagram-js/lib/core/Canvas';
 import type EventBus from 'diagram-js/lib/core/EventBus';
 import { bo } from '../model';
@@ -132,7 +132,7 @@ export default class BpmnContextPadProvider {
         'edit',
       );
     }
-    if (is(b, 'bpmn:Participant') || is(b, 'bpmn:Lane')) {
+    if ((is(b, 'bpmn:Participant') && getRef(b, 'processRef')) || is(b, 'bpmn:Lane')) {
       entries['lane.add'] = entry(
         ICONS.laneBelow,
         'Add lane below',

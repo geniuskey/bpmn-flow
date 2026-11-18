@@ -31,6 +31,37 @@ def executable_copy(path: Path, tmp: Path) -> Path:
     return target
 
 
+def without_process_data_io_associations(xml: str) -> tuple[str, int]:
+    """
+    SpiffWorkflow resolves data associations only to data object / data store
+    references, although BPMN allows any item-aware element (e.g. a process
+    data input / output). Drop just those associations so the rest of the file
+    can still be checked.
+    """
+    ids = set(re.findall(r'<bpmn:data(?:Input|Output) id="([^"]+)"', xml))
+    removed = 0
+
+    def drop(match: re.Match) -> str:
+        nonlocal removed
+        refs = re.findall(r'<bpmn:(?:sourceRef|targetRef)>([^<]+)</bpmn:(?:sourceRef|targetRef)>', match.group(0))
+        if any(r in ids for r in refs):
+            removed += 1
+            return ""
+        return match.group(0)
+
+    xml = re.sub(r'<bpmn:data(?:Input|Output)Association\b[\s\S]*?</bpmn:data(?:Input|Output)Association>', drop, xml)
+    return xml, removed
+
+
+def parse_and_run(path: Path) -> str:
+    parser = BpmnParser()
+    parser.add_bpmn_file(str(path))
+    ids = parser.get_process_ids()
+    if not ids:
+        raise ValueError("no process found")
+    return "; ".join(run_process(parser, pid) for pid in ids)
+
+
 def run_process(parser: BpmnParser, pid: str) -> str:
     spec = parser.get_spec(pid)
     elements = len([t for t in spec.task_specs.values() if t.bpmn_id])
@@ -77,6 +108,24 @@ def main() -> int:
                 if "No start event found" in message and "<bpmn:startEvent" not in f.read_text(encoding="utf-8"):
                     print(f"NOTE  {f.name}: no process content to execute (e.g. a conversation diagram)")
                     continue
+                if "Cannot resolve data" in message:
+                    xml, removed = without_process_data_io_associations(
+                        executable_copy(f, Path(tmp)).read_text(encoding="utf-8")
+                    )
+                    if removed:
+                        stripped = Path(tmp) / f"stripped-{f.name}"
+                        stripped.write_text(xml, encoding="utf-8")
+                        try:
+                            rest = parse_and_run(stripped)
+                        except Exception as inner:
+                            failures += 1
+                            print(f"FAIL {f.name}: {type(inner).__name__}: {inner}")
+                            continue
+                        print(
+                            f"LIMIT {f.name}: SpiffWorkflow cannot resolve data associations to process "
+                            f"data inputs/outputs ({removed} skipped); rest: {rest}"
+                        )
+                        continue
                 if "no support implemented for this task type" in message or "has no implementation" in message:
                     print(f"LIMIT {f.name}: SpiffWorkflow does not implement an element used here ({message.strip()})")
                     continue

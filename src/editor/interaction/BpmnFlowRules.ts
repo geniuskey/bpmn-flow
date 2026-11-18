@@ -49,6 +49,7 @@ const CHOREOGRAPHY_SHAPES = [
 ];
 const CONVERSATION_SHAPES = ['bpmn:Conversation', 'bpmn:SubConversation', 'bpmn:CallConversation'];
 const DATA_SHAPES = ['bpmn:DataObjectReference', 'bpmn:DataStoreReference'];
+const DATA_IO_SHAPES = ['bpmn:DataInput', 'bpmn:DataOutput'];
 
 function isUnsupported(el: Element): boolean {
   return !!(el as Partial<BpmnData>).unsupported;
@@ -70,6 +71,16 @@ function isActivity(el: Element | undefined): boolean {
 
 function isData(el: Element | undefined): boolean {
   return !!el && !isUnsupported(el) && DATA_SHAPES.includes(bo(el)?.$type ?? '');
+}
+
+/** Data that can feed an activity: data objects, stores and process data inputs. */
+function isDataSource(el: Element | undefined): boolean {
+  return isData(el) || (!!el && !isUnsupported(el) && is(bo(el), 'bpmn:DataInput'));
+}
+
+/** Data an activity can write: data objects, stores and process data outputs. */
+function isDataTarget(el: Element | undefined): boolean {
+  return isData(el) || (!!el && !isUnsupported(el) && is(bo(el), 'bpmn:DataOutput'));
 }
 
 function rootFrom(el: Element): Element {
@@ -99,6 +110,15 @@ export function canContain(target: Element | undefined, type: string): boolean {
   }
   // Choreographies hold events, gateways and choreography activities — no tasks or data.
   const container = processOf(target);
+  // Data inputs / outputs belong to a process: its diagram root or a pool / lane.
+  if (DATA_IO_SHAPES.includes(type)) {
+    return (
+      !!container &&
+      is(container, 'bpmn:Process') &&
+      !is(container, 'bpmn:Choreography') &&
+      (!target.parent || is(targetBo, 'bpmn:Participant') || is(targetBo, 'bpmn:Lane'))
+    );
+  }
   const inChoreography =
     !!container && (is(container, 'bpmn:Choreography') || is(container, 'bpmn:SubChoreography'));
   if (CHOREOGRAPHY_SHAPES.includes(type) && !inChoreography) return false;
@@ -182,8 +202,8 @@ export function dataAssociationType(
   source: Element | undefined,
   target: Element | undefined,
 ): string | null {
-  if (isData(source) && isActivity(target)) return 'bpmn:DataInputAssociation';
-  if (isActivity(source) && isData(target)) return 'bpmn:DataOutputAssociation';
+  if (isDataSource(source) && isActivity(target)) return 'bpmn:DataInputAssociation';
+  if (isActivity(source) && isDataTarget(target)) return 'bpmn:DataOutputAssociation';
   return null;
 }
 
@@ -260,6 +280,7 @@ export function canMoveToContainer(shapes: Element[], delta: Delta): boolean {
   const destPool = participantOf(dest);
   for (const n of leaving) {
     if (is(bo(n), 'bpmn:DataObjectReference')) return false; // its data object stays in its scope
+    if (DATA_IO_SHAPES.includes(bo(n)?.$type ?? '')) return false; // belongs to its process
     const attached = (n.attachers ?? []) as Shape[];
     const connections = [
       ...n.incoming,
@@ -290,7 +311,11 @@ export function canMoveShape(shape: Element, delta: Delta): boolean {
 
 function childBounds(container: Shape): Bounds | null {
   const nodes = childrenOf(container).filter(
-    (c) => isFlowNodeShape(c) || isData(c) || ARTIFACT_SHAPES.includes(bo(c)?.$type ?? ''),
+    (c) =>
+      isFlowNodeShape(c) ||
+      isData(c) ||
+      DATA_IO_SHAPES.includes(bo(c)?.$type ?? '') ||
+      ARTIFACT_SHAPES.includes(bo(c)?.$type ?? ''),
   ) as Shape[];
   if (!nodes.length) return null;
   const minX = Math.min(...nodes.map((n) => n.x));

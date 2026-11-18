@@ -20,7 +20,13 @@ execFileSync('npx', ['vitest', 'run', 'tests/roundtrip/interop-export.test.ts'],
 if (!process.argv.includes('--no-e2e')) {
   execFileSync(
     'npx',
-    ['playwright', 'test', 'tests/e2e/modeling.spec.ts', 'tests/e2e/collaboration.spec.ts'],
+    [
+      'playwright',
+      'test',
+      'tests/e2e/modeling.spec.ts',
+      'tests/e2e/collaboration.spec.ts',
+      'tests/e2e/elements.spec.ts',
+    ],
     {
       stdio: 'inherit',
       env,

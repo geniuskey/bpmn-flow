@@ -81,7 +81,10 @@ export const EDITABLE_ARTIFACT_TYPES = [
   'bpmn:DataStoreReference',
 ] as const;
 
-/** Event definitions allowed per event type (at most one per event). */
+/**
+ * Event definitions allowed per event type. An event with more than one is a
+ * BPMN "Multiple" event (or "Parallel Multiple" when `parallelMultiple` is set).
+ */
 export const EVENT_DEFINITIONS: Record<string, readonly string[]> = {
   'bpmn:StartEvent': [
     'bpmn:MessageEventDefinition',
@@ -225,18 +228,33 @@ export type ElementCategory = 'event' | 'activity' | 'gateway' | 'flow' | 'conta
 export function isEditableFlowNode(el: ModdleElement | undefined): boolean {
   if (!el) return false;
   if (!(EDITABLE_FLOW_NODE_TYPES as readonly string[]).includes(el.$type)) return false;
-  // Events support none or exactly one definition from the supported list.
+  // Events support none, one, or several ("Multiple") definitions from the supported list.
   if (is(el, 'bpmn:Event')) {
-    const defs = getMany(el, 'eventDefinitions');
-    if (defs.length > 1) return false;
-    if (defs.length === 1 && !supportedEventDefinitions(el.$type).includes(defs[0]!.$type))
-      return false;
+    const allowed = supportedEventDefinitions(el.$type);
+    if (getMany(el, 'eventDefinitions').some((d) => !allowed.includes(d.$type))) return false;
   }
   return true;
 }
 
+/** Process data inputs / outputs (drawn as data objects with an arrow). */
+export const PROCESS_DATA_IO_TYPES = ['bpmn:DataInput', 'bpmn:DataOutput'] as const;
+
+/**
+ * A data input / output of a process (not of a task). Only these are drawn; the
+ * ones of activities stay invisible in their I/O specification.
+ */
+export function isProcessDataIo(el: ModdleElement | undefined): boolean {
+  if (!el || !(PROCESS_DATA_IO_TYPES as readonly string[]).includes(el.$type)) return false;
+  // Not placed yet (palette preview): it will be added to a process.
+  if (!el.$parent) return true;
+  return is(el.$parent, 'bpmn:InputOutputSpecification') && is(el.$parent.$parent, 'bpmn:Process');
+}
+
 export function isEditableArtifact(el: ModdleElement | undefined): boolean {
-  return !!el && (EDITABLE_ARTIFACT_TYPES as readonly string[]).includes(el.$type);
+  return (
+    !!el &&
+    ((EDITABLE_ARTIFACT_TYPES as readonly string[]).includes(el.$type) || isProcessDataIo(el))
+  );
 }
 
 /** Any element the editor can show and edit as a shape (besides pools and lanes). */
@@ -280,4 +298,18 @@ export function labelOf(el: ModdleElement): string | undefined {
 export function humanizeType(type: string): string {
   const local = type.includes(':') ? type.slice(type.indexOf(':') + 1) : type;
   return local.replace(/([a-z])([A-Z])/g, '$1 $2');
+}
+
+/** BPMN "Multiple" trigger: the event has more than one event definition. */
+export function isMultipleEvent(el: ModdleElement): boolean {
+  return is(el, 'bpmn:Event') && getMany(el, 'eventDefinitions').length > 1;
+}
+
+/** Catching events may be "Parallel Multiple" (all triggers required). */
+export function canBeParallelMultiple(el: ModdleElement): boolean {
+  return (
+    is(el, 'bpmn:StartEvent') ||
+    is(el, 'bpmn:IntermediateCatchEvent') ||
+    is(el, 'bpmn:BoundaryEvent')
+  );
 }

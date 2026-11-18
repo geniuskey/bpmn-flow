@@ -26,6 +26,22 @@ const EDITABLE: Record<string, (target: ModdleElement, value: PropertyValue) => 
   text: (t, v) => is(t, 'bpmn:TextAnnotation') && (v === undefined || typeof v === 'string'),
   cancelActivity: (t, v) => is(t, 'bpmn:BoundaryEvent') && typeof v === 'boolean',
   isInterrupting: (t, v) => is(t, 'bpmn:StartEvent') && typeof v === 'boolean',
+  // BPMN "Parallel Multiple": only on catching events with several triggers.
+  parallelMultiple: (t, v) =>
+    (is(t, 'bpmn:StartEvent') ||
+      is(t, 'bpmn:IntermediateCatchEvent') ||
+      is(t, 'bpmn:BoundaryEvent')) &&
+    (v === undefined || (typeof v === 'boolean' && getMany(t, 'eventDefinitions').length > 1)),
+  instantiate: (t, v) =>
+    is(t, 'bpmn:EventBasedGateway') && (v === undefined || typeof v === 'boolean'),
+  eventGatewayType: (t, v) =>
+    is(t, 'bpmn:EventBasedGateway') && (v === undefined || v === 'Exclusive' || v === 'Parallel'),
+  // Stored on the referenced bpmn:DataObject (collection marker).
+  isCollection: (t, v) =>
+    ((is(t, 'bpmn:DataObjectReference') && !!getRef(t, 'dataObjectRef')) ||
+      is(t, 'bpmn:DataInput') ||
+      is(t, 'bpmn:DataOutput')) &&
+    (v === undefined || typeof v === 'boolean'),
   isForCompensation: (t, v) =>
     is(t, 'bpmn:Activity') && (v === undefined || typeof v === 'boolean'),
   // A gateway's default flow must be one of its outgoing sequence flows.
@@ -55,6 +71,8 @@ export class UpdatePropertiesHandler {
       else if (key === 'name' && is(target, 'bpmn:Group')) {
         const categoryValue = getRef(target, 'categoryValueRef');
         if (categoryValue) log.set(categoryValue, 'value', value);
+      } else if (key === 'isCollection' && is(target, 'bpmn:DataObjectReference')) {
+        log.set(getRef(target, 'dataObjectRef')!, 'isCollection', value);
       } else log.set(target, key, value);
     }
     context.log = log;

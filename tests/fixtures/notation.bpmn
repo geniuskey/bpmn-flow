@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_notation" targetNamespace="http://example.com/bpmn-flow/fixtures">
+  <bpmn:message id="Msg_request" name="Request" />
+  <bpmn:message id="Msg_reply" name="Reply" />
+  <bpmn:signal id="Sig_done" name="Done" />
+  <bpmn:collaboration id="Collab_notation">
+    <bpmn:participant id="Pool_service" name="Service desk" processRef="Process_service" />
+    <bpmn:participant id="Pool_customer" name="Customer" />
+    <bpmn:messageFlow id="Mf_request" sourceRef="Pool_customer" targetRef="Start_pm" messageRef="Msg_request" />
+    <bpmn:messageFlow id="Mf_reply" sourceRef="End_multi" targetRef="Pool_customer" messageRef="Msg_reply" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_service" name="Handle request" isExecutable="false">
+    <bpmn:ioSpecification id="IO_service">
+      <bpmn:dataInput id="In_ticket" name="Ticket" />
+      <bpmn:dataOutput id="Out_report" name="Reports" isCollection="true" />
+      <bpmn:inputSet id="IS_service"><bpmn:dataInputRefs>In_ticket</bpmn:dataInputRefs></bpmn:inputSet>
+      <bpmn:outputSet id="OS_service"><bpmn:dataOutputRefs>Out_report</bpmn:dataOutputRefs></bpmn:outputSet>
+    </bpmn:ioSpecification>
+    <bpmn:startEvent id="Start_pm" name="Request and slot" parallelMultiple="true">
+      <bpmn:outgoing>s1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="Start_pm_msg" messageRef="Msg_request" />
+      <bpmn:timerEventDefinition id="Start_pm_timer">
+        <bpmn:timeDate>2027-01-01T09:00:00Z</bpmn:timeDate>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Task_handle" name="Handle request">
+      <bpmn:incoming>s1</bpmn:incoming>
+      <bpmn:outgoing>s2</bpmn:outgoing>
+      <bpmn:property id="Task_handle_target" name="__targetRef_placeholder" />
+      <bpmn:dataInputAssociation id="Dia_ticket">
+        <bpmn:sourceRef>In_ticket</bpmn:sourceRef>
+        <bpmn:targetRef>Task_handle_target</bpmn:targetRef>
+      </bpmn:dataInputAssociation>
+      <bpmn:dataOutputAssociation id="Doa_report">
+        <bpmn:targetRef>Out_report</bpmn:targetRef>
+      </bpmn:dataOutputAssociation>
+    </bpmn:userTask>
+    <bpmn:boundaryEvent id="Boundary_multi" name="Update" cancelActivity="false" attachedToRef="Task_handle">
+      <bpmn:outgoing>s8</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="Boundary_multi_msg" messageRef="Msg_request" />
+      <bpmn:signalEventDefinition id="Boundary_multi_sig" signalRef="Sig_done" />
+    </bpmn:boundaryEvent>
+    <bpmn:eventBasedGateway id="Gw_event">
+      <bpmn:incoming>s2</bpmn:incoming>
+      <bpmn:outgoing>s3</bpmn:outgoing>
+      <bpmn:outgoing>s4</bpmn:outgoing>
+    </bpmn:eventBasedGateway>
+    <bpmn:intermediateCatchEvent id="Catch_msg" name="Confirmed">
+      <bpmn:incoming>s3</bpmn:incoming>
+      <bpmn:outgoing>s5</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="Catch_msg_def" messageRef="Msg_request" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="Catch_timer" name="2 days">
+      <bpmn:incoming>s4</bpmn:incoming>
+      <bpmn:outgoing>s6</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="Catch_timer_def">
+        <bpmn:timeDuration>P2D</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateThrowEvent id="Throw_multi" name="Notify">
+      <bpmn:incoming>s5</bpmn:incoming>
+      <bpmn:incoming>s6</bpmn:incoming>
+      <bpmn:outgoing>s7</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="Throw_multi_msg" messageRef="Msg_reply" />
+      <bpmn:signalEventDefinition id="Throw_multi_sig" signalRef="Sig_done" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:endEvent id="End_multi" name="Closed">
+      <bpmn:incoming>s7</bpmn:incoming>
+      <bpmn:messageEventDefinition id="End_multi_msg" messageRef="Msg_reply" />
+      <bpmn:signalEventDefinition id="End_multi_sig" signalRef="Sig_done" />
+    </bpmn:endEvent>
+    <bpmn:endEvent id="End_update" name="Noted">
+      <bpmn:incoming>s8</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:dataObject id="Data_requests_obj" isCollection="true" />
+    <bpmn:dataObjectReference id="Data_requests" name="Requests" dataObjectRef="Data_requests_obj">
+      <bpmn:dataState id="Data_requests_state" name="approved" />
+    </bpmn:dataObjectReference>
+    <bpmn:sequenceFlow id="s1" sourceRef="Start_pm" targetRef="Task_handle" />
+    <bpmn:sequenceFlow id="s2" sourceRef="Task_handle" targetRef="Gw_event" />
+    <bpmn:sequenceFlow id="s3" sourceRef="Gw_event" targetRef="Catch_msg" />
+    <bpmn:sequenceFlow id="s4" sourceRef="Gw_event" targetRef="Catch_timer" />
+    <bpmn:sequenceFlow id="s5" sourceRef="Catch_msg" targetRef="Throw_multi" />
+    <bpmn:sequenceFlow id="s6" sourceRef="Catch_timer" targetRef="Throw_multi" />
+    <bpmn:sequenceFlow id="s7" sourceRef="Throw_multi" targetRef="End_multi" />
+    <bpmn:sequenceFlow id="s8" sourceRef="Boundary_multi" targetRef="End_update" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_notation">
+    <bpmndi:BPMNPlane id="Plane_notation" bpmnElement="Collab_notation">
+      <bpmndi:BPMNShape id="Pool_service_di" bpmnElement="Pool_service" isHorizontal="true"><dc:Bounds x="100" y="80" width="760" height="280" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pool_customer_di" bpmnElement="Pool_customer" isHorizontal="true"><dc:Bounds x="100" y="420" width="760" height="70" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_pm_di" bpmnElement="Start_pm"><dc:Bounds x="162" y="182" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_handle_di" bpmnElement="Task_handle"><dc:Bounds x="240" y="160" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_multi_di" bpmnElement="Boundary_multi"><dc:Bounds x="302" y="222" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_event_di" bpmnElement="Gw_event"><dc:Bounds x="395" y="175" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Catch_msg_di" bpmnElement="Catch_msg"><dc:Bounds x="502" y="122" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Catch_timer_di" bpmnElement="Catch_timer"><dc:Bounds x="502" y="242" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Throw_multi_di" bpmnElement="Throw_multi"><dc:Bounds x="612" y="182" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_multi_di" bpmnElement="End_multi"><dc:Bounds x="732" y="182" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_update_di" bpmnElement="End_update"><dc:Bounds x="402" y="292" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="In_ticket_di" bpmnElement="In_ticket"><dc:Bounds x="162" y="95" width="36" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Out_report_di" bpmnElement="Out_report"><dc:Bounds x="215" y="280" width="36" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Data_requests_di" bpmnElement="Data_requests"><dc:Bounds x="690" y="95" width="36" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="s1_di" bpmnElement="s1"><di:waypoint x="198" y="200" /><di:waypoint x="240" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s2_di" bpmnElement="s2"><di:waypoint x="340" y="200" /><di:waypoint x="395" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s3_di" bpmnElement="s3"><di:waypoint x="420" y="175" /><di:waypoint x="420" y="140" /><di:waypoint x="502" y="140" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s4_di" bpmnElement="s4"><di:waypoint x="420" y="225" /><di:waypoint x="420" y="260" /><di:waypoint x="502" y="260" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s5_di" bpmnElement="s5"><di:waypoint x="538" y="140" /><di:waypoint x="630" y="140" /><di:waypoint x="630" y="182" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s6_di" bpmnElement="s6"><di:waypoint x="538" y="260" /><di:waypoint x="630" y="260" /><di:waypoint x="630" y="218" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s7_di" bpmnElement="s7"><di:waypoint x="648" y="200" /><di:waypoint x="732" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s8_di" bpmnElement="s8"><di:waypoint x="320" y="258" /><di:waypoint x="320" y="310" /><di:waypoint x="402" y="310" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Dia_ticket_di" bpmnElement="Dia_ticket"><di:waypoint x="198" y="125" /><di:waypoint x="260" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Doa_report_di" bpmnElement="Doa_report"><di:waypoint x="270" y="240" /><di:waypoint x="251" y="285" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Mf_request_di" bpmnElement="Mf_request"><di:waypoint x="180" y="420" /><di:waypoint x="180" y="218" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Mf_reply_di" bpmnElement="Mf_reply" messageVisibleKind="non_initiating"><di:waypoint x="750" y="218" /><di:waypoint x="750" y="420" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

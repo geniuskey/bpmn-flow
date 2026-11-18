@@ -19,7 +19,7 @@ import { readLabelBounds } from '@/bpmn/di/di';
 import { getMany, getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
 import type { BpmnConnection, BpmnShape } from '../model';
 import { arrowHeadPath, outlinePath, polylineMid, polylinePath, startMarkerPath } from './geometry';
-import { hasExternalLabel, isExpanded, isThrowing, visualFor } from './visuals';
+import { hasExternalLabel, isCollection, isExpanded, isThrowing, visualFor } from './visuals';
 import { bandKind, bandsOf, isInitiatingBand, layoutBands } from '../modeling/choreography';
 
 export const FONT_FAMILY = 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -36,6 +36,15 @@ function el<K extends keyof SVGElementTagNameMap>(
   for (const c of className.split(' ')) if (c) svgClasses(node).add(c);
   svgAppend(parent, node);
   return node;
+}
+
+/** Regular pentagon pointing up (Multiple trigger, event-based gateway). */
+function pentagonPath(cx: number, cy: number, r: number): string {
+  const pts = [0, 1, 2, 3, 4].map((k) => {
+    const a = -Math.PI / 2 + (k * 2 * Math.PI) / 5;
+    return `${cx + r * Math.cos(a)},${cy + r * Math.sin(a)}`;
+  });
+  return `M${pts.join('L')}z`;
 }
 
 function path(parent: SVGElement, d: string, className: string): SVGPathElement {
@@ -127,7 +136,9 @@ export default class BpmnFlowRenderer extends BaseRenderer {
         this.drawGatewayMarker(gfx, shape);
         break;
       case 'participant':
-        main = this.drawPool(gfx, shape, 'bf-participant');
+        main = getRef(bo, 'processRef')
+          ? this.drawPool(gfx, shape, 'bf-participant')
+          : this.drawBlackBoxPool(gfx, shape);
         break;
       case 'lane':
         main = this.drawPool(gfx, shape, 'bf-lane');
@@ -168,6 +179,20 @@ export default class BpmnFlowRenderer extends BaseRenderer {
         const f = Math.min(10, w / 3);
         main = path(gfx, `M0,0H${w - f}L${w},${f}V${h}H0z`, 'bf-shape bf-data');
         path(gfx, `M${w - f},0V${f}H${w}`, 'bf-data-fold');
+        if (is(bo, 'bpmn:DataInput') || is(bo, 'bpmn:DataOutput')) {
+          // Data input: hollow arrow; data output: filled arrow (top-left corner).
+          path(
+            gfx,
+            'M4,7h6v-3l6,6l-6,6v-3h-6z',
+            is(bo, 'bpmn:DataOutput') ? 'bf-event-marker-filled' : 'bf-event-marker',
+          );
+        }
+        if (isCollection(bo)) {
+          // Collection: three vertical bars at the bottom center.
+          const x = w / 2;
+          const y = h - 12;
+          path(gfx, `M${x - 4},${y}v8M${x},${y}v8M${x + 4},${y}v8`, 'bf-collection-marker');
+        }
         break;
       }
       case 'dataStore': {
@@ -227,6 +252,19 @@ export default class BpmnFlowRenderer extends BaseRenderer {
       el(gfx, 'circle', { cx: a.x, cy: a.y, r: 4 }, 'bf-message-start');
       const head = arrowHeadPath(points);
       if (head) path(gfx, head, 'bf-message-arrow');
+      if (getRef(bo, 'messageRef')) {
+        // Envelope at the middle; shaded for a non-initiating (reply) message.
+        const mid = polylineMid(points);
+        const shaded = connection.di?.get('messageVisibleKind') === 'non_initiating';
+        const g = el(
+          gfx,
+          'g',
+          { transform: `translate(${mid.x - 10}, ${mid.y - 7})` },
+          shaded ? 'bf-message-envelope bf-non-initiating' : 'bf-message-envelope',
+        );
+        path(g, 'M0,0h20v14h-20z', 'bf-envelope-body');
+        path(g, 'M0,0L10,7L20,0', 'bf-envelope-flap');
+      }
     }
     if (unsupported) this.drawTitle(gfx, `${bo.$type} — not editable in BPMN Flow yet`);
     if (visual.kind === 'association') {
@@ -298,7 +336,12 @@ export default class BpmnFlowRenderer extends BaseRenderer {
 
   /** Label below events/gateways; uses BPMN DI label bounds when present. */
   private drawExternalLabel(gfx: SVGElement, shape: BpmnShape): void {
-    const name = shape.businessObject.name;
+    const bo = shape.businessObject;
+    const state =
+      is(bo, 'bpmn:DataObjectReference') || is(bo, 'bpmn:DataStoreReference')
+        ? (getRef(bo, 'dataState')?.name as string | undefined)
+        : undefined;
+    const name = [bo.name, state && `[${state}]`].filter(Boolean).join('\n');
     if (!name) return;
     const label = readLabelBounds(shape.di);
     const width = Math.max(label?.width ?? 0, 90);
@@ -342,14 +385,22 @@ export default class BpmnFlowRenderer extends BaseRenderer {
         'bf-marker',
       );
     } else if (is(bo, 'bpmn:EventBasedGateway')) {
+      // Event-based: double ring + pentagon. Instantiating: single ring + pentagon,
+      // or single ring + open cross for the parallel variant.
+      const instantiate = bo.get('instantiate') === true;
       el(gfx, 'circle', { cx, cy, r: s * 1.2 }, 'bf-marker-thin');
-      el(gfx, 'circle', { cx, cy, r: s * 0.95 }, 'bf-marker-thin');
-      const r = s * 0.55;
-      const pts = [0, 1, 2, 3, 4].map((k) => {
-        const a = -Math.PI / 2 + (k * 2 * Math.PI) / 5;
-        return `${cx + r * Math.cos(a)},${cy + r * Math.sin(a)}`;
-      });
-      path(gfx, `M${pts.join('L')}z`, 'bf-marker-thin');
+      if (!instantiate) el(gfx, 'circle', { cx, cy, r: s * 0.95 }, 'bf-marker-thin');
+      if (instantiate && bo.get('eventGatewayType') === 'Parallel') {
+        const a = s * 0.75;
+        const b = s * 0.22;
+        path(
+          gfx,
+          `M${cx - b},${cy - a}H${cx + b}V${cy - b}H${cx + a}V${cy + b}H${cx + b}V${cy + a}H${cx - b}V${cy + b}H${cx - a}V${cy - b}H${cx - b}z`,
+          'bf-marker-thin',
+        );
+      } else {
+        path(gfx, pentagonPath(cx, cy, s * 0.55), 'bf-marker-thin');
+      }
     } else if (shape.di.get('isMarkerVisible') === true) {
       // BPMN: the exclusive gateway "X" marker is optional and controlled by DI.
       const d = s * 0.8;
@@ -403,13 +454,30 @@ export default class BpmnFlowRenderer extends BaseRenderer {
 
   /** Marker for the (single) event definition: message envelope, timer clock, terminate dot. */
   private drawEventMarker(gfx: SVGElement, shape: BpmnShape): void {
-    const def = getMany(shape.businessObject, 'eventDefinitions')[0];
+    const defs = getMany(shape.businessObject, 'eventDefinitions');
+    const def = defs[0];
     if (!def) return;
     const cx = shape.width / 2;
     const cy = shape.height / 2;
     const r = Math.min(shape.width, shape.height) / 2;
     const thrown = isThrowing(shape.businessObject);
     const cls = thrown ? 'bf-event-marker-filled' : 'bf-event-marker';
+    if (defs.length > 1) {
+      if (shape.businessObject.get('parallelMultiple') === true) {
+        // Parallel Multiple: open cross (catching only).
+        const a = r * 0.5;
+        const b = r * 0.16;
+        path(
+          gfx,
+          `M${cx - b},${cy - a}H${cx + b}V${cy - b}H${cx + a}V${cy + b}H${cx + b}V${cy + a}H${cx - b}V${cy + b}H${cx - a}V${cy - b}H${cx - b}z`,
+          'bf-event-marker',
+        );
+      } else {
+        // Multiple: pentagon, filled when thrown.
+        path(gfx, pentagonPath(cx, cy, r * 0.52), cls);
+      }
+      return;
+    }
     if (is(def, 'bpmn:MessageEventDefinition')) {
       const w = r * 0.95;
       const h = r * 0.65;
@@ -648,6 +716,15 @@ export default class BpmnFlowRenderer extends BaseRenderer {
       path(gfx, `M${cx - 6},${by}h12v12h-12z`, 'bf-icon-stroke');
       path(gfx, `M${cx - 3},${by + 6}h6M${cx},${by + 3}v6`, 'bf-icon-stroke');
     }
+    return main;
+  }
+
+  /** Black-box pool (no process): a plain rectangle with the name in the middle. */
+  private drawBlackBoxPool(gfx: SVGElement, shape: BpmnShape): SVGElement {
+    const box = { x: 0, y: 0, width: shape.width, height: shape.height };
+    const main = path(gfx, outlinePath('rect', box), 'bf-shape bf-participant bf-black-box');
+    const name = shape.businessObject.name;
+    if (name) this.drawCenteredText(gfx, name, box, 'bf-label bf-pool-label');
     return main;
   }
 

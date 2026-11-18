@@ -25,6 +25,10 @@ type Cache = { bfCreated?: Record<string, ModdleElement> };
 /** Name BPMN tools use for the placeholder target of data input associations. */
 export const TARGET_REF_PLACEHOLDER = '__targetRef_placeholder';
 
+function isProcessDataIoType(type: string): boolean {
+  return type === 'bpmn:DataInput' || type === 'bpmn:DataOutput';
+}
+
 function isArtifact(el: ModdleElement): boolean {
   return is(el, 'bpmn:TextAnnotation') || is(el, 'bpmn:Group') || is(el, 'bpmn:Association');
 }
@@ -218,6 +222,8 @@ export default class SemanticSync extends CommandInterceptor {
         this.ensureRootElement(category, log);
         log.set(element, 'categoryValueRef', value);
       }
+    } else if (isProcessDataIoType(element.$type)) {
+      this.addDataIo(shape, element, log);
     } else {
       const container = processOf(shape.parent);
       if (!container) {
@@ -269,6 +275,11 @@ export default class SemanticSync extends CommandInterceptor {
       }
       return;
     }
+    if (isProcessDataIoType(element.$type)) {
+      this.removeDataIo(element, log);
+      this.removeForeignDi([element], log);
+      return;
+    }
     if (parent) log.remove(parent.get(listProperty(element)) as ModdleElement[], element);
     const planeElements = this.plane().get('planeElement') as ModdleElement[];
     for (const band of bandsOf(shape)) log.remove(planeElements, band);
@@ -281,6 +292,62 @@ export default class SemanticSync extends CommandInterceptor {
       }
     }
     this.removeForeignDi([element], log);
+  }
+
+  /**
+   * A process data input / output lives in the process's I/O specification and
+   * is listed in its first input / output set (both created when missing, as
+   * BPMN requires at least one of each).
+   */
+  private addDataIo(shape: Shape, element: ModdleElement, log: ChangeLog): void {
+    const process = processOf(shape.parent);
+    if (!process || !is(process, 'bpmn:Process')) {
+      throw new Error('Data inputs and outputs belong to a process (a pool), not a sub-process.');
+    }
+    let io = getRef(process, 'ioSpecification');
+    if (!io) {
+      io = this.created(shape, 'ioSpecification', () =>
+        this.factory.createModdle('bpmn:InputOutputSpecification'),
+      );
+      log.setParent(io, process);
+      log.set(process, 'ioSpecification', io);
+    }
+    const input = is(element, 'bpmn:DataInput');
+    const setKey = input ? 'inputSets' : 'outputSets';
+    let set = getMany(io, setKey)[0];
+    if (!set) {
+      set = this.created(shape, setKey, () =>
+        this.factory.createModdle(input ? 'bpmn:InputSet' : 'bpmn:OutputSet'),
+      );
+      this.insertInto(io, setKey, set, log);
+    }
+    // The other set is required too.
+    const otherKey = input ? 'outputSets' : 'inputSets';
+    if (!getMany(io, otherKey).length) {
+      const other = this.created(shape, otherKey, () =>
+        this.factory.createModdle(input ? 'bpmn:OutputSet' : 'bpmn:InputSet'),
+      );
+      this.insertInto(io, otherKey, other, log);
+    }
+    this.insertInto(io, input ? 'dataInputs' : 'dataOutputs', element, log);
+    log.insert(set.get(input ? 'dataInputRefs' : 'dataOutputRefs') as ModdleElement[], element);
+  }
+
+  private removeDataIo(element: ModdleElement, log: ChangeLog): void {
+    const io = element.$parent;
+    if (!io) return;
+    const input = is(element, 'bpmn:DataInput');
+    log.remove(io.get(input ? 'dataInputs' : 'dataOutputs') as ModdleElement[], element);
+    const refsKey = input ? 'dataInputRefs' : 'dataOutputRefs';
+    for (const set of getMany(io, input ? 'inputSets' : 'outputSets')) {
+      log.remove(set.get(refsKey) as ModdleElement[], element);
+      // Optional/while-executing refs may also point at it.
+      for (const key of input
+        ? ['optionalInputRefs', 'whileExecutingInputRefs']
+        : ['optionalOutputRefs', 'whileExecutingOutputRefs']) {
+        log.remove(set.get(key) as ModdleElement[], element);
+      }
+    }
   }
 
   /**

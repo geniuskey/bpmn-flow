@@ -2,6 +2,7 @@ import { Lock } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { readBounds } from '@/bpmn/di/di';
 import {
+  canBeParallelMultiple,
   DEFINITION_REQUIRED,
   humanizeType,
   isEditableConnection,
@@ -10,6 +11,7 @@ import {
   supportedEventDefinitions,
 } from '@/bpmn/model/elements';
 import { getMany, getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
+import { isCollection } from '@/editor/renderer/visuals';
 import { Badge } from '@/components/ui/badge';
 import type { BpmnData } from '@/editor/model';
 import { alternativeTypes } from '@/editor/commands/ChangeTypeHandler';
@@ -18,6 +20,7 @@ import {
   REFERENCES,
   TIMER_TYPES,
   timerOf,
+  type EventDetail,
   type TimerType,
 } from '@/editor/commands/EventDetailHandler';
 import { useDocumentStore } from '@/stores/documentStore';
@@ -203,25 +206,78 @@ function ElementDetails({ id }: { id: string }) {
           </Row>
         )}
         {eventDefs.length > 0 && (
-          <Row label="Event type">
-            <select
-              aria-label="Event definition"
-              className={inputClass}
-              value={getMany(bo, 'eventDefinitions')[0]?.$type ?? ''}
-              disabled={readOnly || !supported}
-              onChange={(e) =>
-                controller?.setEventDefinition(element.id, e.target.value || undefined)
-              }
-            >
-              {!DEFINITION_REQUIRED.includes(bo.$type) && <option value="">None</option>}
-              {eventDefs.map((t) => (
-                <option key={t} value={t}>
-                  {humanizeType(t).replace(/ Event Definition$/, '')}
-                </option>
-              ))}
-            </select>
-          </Row>
+          <EventTriggerFields
+            elementId={element.id}
+            event={bo}
+            allowed={eventDefs}
+            readOnly={readOnly}
+          />
         )}
+        {supported && is(bo, 'bpmn:EventBasedGateway') && (
+          <>
+            <Row label="Instantiate">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  aria-label="Instantiate"
+                  checked={bo.get('instantiate') === true}
+                  disabled={readOnly}
+                  onChange={(e) =>
+                    controller?.updateProperties(element.id, {
+                      instantiate: e.target.checked || undefined,
+                      eventGatewayType: e.target.checked
+                        ? (bo.get('eventGatewayType') as string | undefined)
+                        : undefined,
+                    })
+                  }
+                />
+                <span className="text-muted-foreground">Starts the process</span>
+              </label>
+            </Row>
+            {bo.get('instantiate') === true && (
+              <Row label="Gateway type">
+                <select
+                  aria-label="Event gateway type"
+                  className={inputClass}
+                  value={bo.get('eventGatewayType') === 'Parallel' ? 'Parallel' : 'Exclusive'}
+                  disabled={readOnly}
+                  onChange={(e) =>
+                    controller?.updateProperties(element.id, {
+                      eventGatewayType: e.target.value === 'Parallel' ? 'Parallel' : undefined,
+                    })
+                  }
+                >
+                  <option value="Exclusive">Exclusive</option>
+                  <option value="Parallel">Parallel</option>
+                </select>
+              </Row>
+            )}
+          </>
+        )}
+        {is(bo, 'bpmn:Participant') && is(bo.$parent, 'bpmn:Collaboration') && (
+          <BlackBoxField elementId={element.id} pool={bo} readOnly={readOnly} />
+        )}
+        {supported &&
+          ((is(bo, 'bpmn:DataObjectReference') && getRef(bo, 'dataObjectRef')) ||
+            is(bo, 'bpmn:DataInput') ||
+            is(bo, 'bpmn:DataOutput')) && (
+            <Row label="Collection">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  aria-label="Collection"
+                  checked={isCollection(bo)}
+                  disabled={readOnly}
+                  onChange={(e) =>
+                    controller?.updateProperties(element.id, {
+                      isCollection: e.target.checked || undefined,
+                    })
+                  }
+                />
+                <span className="text-muted-foreground">Collection of data</span>
+              </label>
+            </Row>
+          )}
         {supported && is(bo, 'bpmn:ChoreographyActivity') && (
           <ChoreographyFields elementId={element.id} activity={bo} readOnly={readOnly} />
         )}
@@ -259,9 +315,17 @@ function ElementDetails({ id }: { id: string }) {
             </Row>
           </>
         )}
-        {eventDefs.length > 0 && (
-          <EventDetailFields elementId={element.id} event={bo} readOnly={readOnly} />
-        )}
+        {eventDefs.length > 0 &&
+          getMany(bo, 'eventDefinitions').map((definition, index, all) => (
+            <EventDetailFields
+              key={`${definition.$type}:${index}`}
+              elementId={element.id}
+              definition={definition}
+              definitionIndex={index}
+              prefix={all.length > 1 ? triggerLabel(definition.$type) : undefined}
+              readOnly={readOnly}
+            />
+          ))}
         {(is(bo, 'bpmn:BoundaryEvent') ||
           (is(bo, 'bpmn:StartEvent') && bo.$parent?.get('triggeredByEvent') === true)) && (
           <Row label="Interrupting">
@@ -433,28 +497,34 @@ const TIMER_LABELS: Record<TimerType, string> = {
 /** Timer expression, referenced message/signal/error/escalation, or condition. */
 function EventDetailFields({
   elementId,
-  event,
+  definition,
+  definitionIndex,
+  prefix,
   readOnly,
 }: {
   elementId: string;
-  event: ModdleElement;
+  definition: ModdleElement;
+  definitionIndex: number;
+  /** Trigger name shown before each label on Multiple events. */
+  prefix?: string;
   readOnly: boolean;
 }) {
   const controller = useEditorStore((s) => s.controller);
-  const definition = getMany(event, 'eventDefinitions')[0];
-  if (!definition) return null;
+  const update = (detail: EventDetail) =>
+    controller?.updateEventDetail(elementId, detail, definitionIndex);
+  const rowLabel = (label: string) => (prefix ? `${prefix} ${label.toLowerCase()}` : label);
   if (is(definition, 'bpmn:TimerEventDefinition')) {
     const timer = timerOf(definition) ?? { timerType: 'timeDuration' as TimerType, value: '' };
     return (
       <>
-        <Row label="Timer">
+        <Row label={rowLabel('Timer')}>
           <select
             aria-label="Timer type"
             className={inputClass}
             value={timer.timerType}
             disabled={readOnly}
             onChange={(e) =>
-              controller?.updateEventDetail(elementId, {
+              update({
                 kind: 'timer',
                 timerType: e.target.value as TimerType,
                 value: timer.value,
@@ -468,15 +538,15 @@ function EventDetailFields({
             ))}
           </select>
         </Row>
-        <Row label="Expression">
+        <Row label={rowLabel('Expression')}>
           <TextField
-            key={`${elementId}:timer:${timer.timerType}:${timer.value}`}
+            key={`${elementId}:${definitionIndex}:timer:${timer.timerType}:${timer.value}`}
             label="Timer expression"
             value={timer.value}
             disabled={readOnly}
             placeholder="ISO 8601"
             onCommit={(v) =>
-              controller?.updateEventDetail(elementId, {
+              update({
                 kind: 'timer',
                 timerType: timer.timerType,
                 value: v,
@@ -491,15 +561,13 @@ function EventDetailFields({
     const condition =
       getRef<ModdleElement & { body?: string }>(definition, 'condition')?.body ?? '';
     return (
-      <Row label="Condition">
+      <Row label={rowLabel('Condition')}>
         <TextField
-          key={`${elementId}:condition:${condition}`}
+          key={`${elementId}:${definitionIndex}:condition:${condition}`}
           label="Event condition"
           value={condition}
           disabled={readOnly}
-          onCommit={(v) =>
-            controller?.updateEventDetail(elementId, { kind: 'condition', value: v })
-          }
+          onCommit={(v) => update({ kind: 'condition', value: v })}
         />
       </Row>
     );
@@ -509,16 +577,158 @@ function EventDetailFields({
   const current = getRef(definition, reference[0]);
   const label = humanizeType(reference[1]);
   return (
-    <Row label={label}>
+    <Row label={rowLabel(label)}>
       <TextField
-        key={`${elementId}:ref:${current?.name ?? ''}`}
+        key={`${elementId}:${definitionIndex}:ref:${current?.name ?? ''}`}
         label={`${label} name`}
         value={current?.name ?? ''}
         disabled={readOnly}
         placeholder={`${label} name`}
-        onCommit={(v) => controller?.updateEventDetail(elementId, { kind: 'reference', name: v })}
+        onCommit={(v) => update({ kind: 'reference', name: v })}
       />
     </Row>
+  );
+}
+
+/** Black-box pool: a participant without a process. Collapsing needs an empty pool. */
+function BlackBoxField({
+  elementId,
+  pool,
+  readOnly,
+}: {
+  elementId: string;
+  pool: ModdleElement;
+  readOnly: boolean;
+}) {
+  const controller = useEditorStore((s) => s.controller);
+  const blackBox = !getRef(pool, 'processRef');
+  const blocker = blackBox ? null : (controller?.poolBlackBoxBlocker(elementId) ?? null);
+  return (
+    <Row label="Black box">
+      <label className="flex items-center gap-2" title={blocker ?? undefined}>
+        <input
+          type="checkbox"
+          aria-label="Black-box pool"
+          checked={blackBox}
+          disabled={readOnly || !!blocker}
+          onChange={(e) => controller?.setPoolBlackBox(elementId, e.target.checked)}
+        />
+        <span className="text-muted-foreground">{blocker ?? 'No process; content hidden'}</span>
+      </label>
+    </Row>
+  );
+}
+
+/** "bpmn:TimerEventDefinition" -> "Timer" */
+function triggerLabel(type: string): string {
+  return humanizeType(type).replace(/ Event Definition$/, '');
+}
+
+/**
+ * Event trigger: none, one definition, or several (BPMN "Multiple"; catching
+ * events can also be "Parallel Multiple").
+ */
+function EventTriggerFields({
+  elementId,
+  event,
+  allowed,
+  readOnly,
+}: {
+  elementId: string;
+  event: ModdleElement;
+  allowed: readonly string[];
+  readOnly: boolean;
+}) {
+  const controller = useEditorStore((s) => s.controller);
+  const types = getMany(event, 'eventDefinitions').map((d) => d.$type);
+  const multiple = types.length > 1;
+  const remaining = allowed.filter((t) => !types.includes(t));
+  const required = DEFINITION_REQUIRED.includes(event.$type);
+  const set = (next: string[]) => controller?.setEventDefinitions(elementId, next);
+  return (
+    <>
+      <Row label="Event type">
+        <select
+          aria-label="Event definition"
+          className={inputClass}
+          value={multiple ? '__multiple' : (types[0] ?? '')}
+          disabled={readOnly}
+          onChange={(e) => {
+            if (e.target.value !== '__multiple') set(e.target.value ? [e.target.value] : []);
+          }}
+        >
+          {!required && <option value="">None</option>}
+          {allowed.map((t) => (
+            <option key={t} value={t}>
+              {triggerLabel(t)}
+            </option>
+          ))}
+          {multiple && (
+            <option value="__multiple">
+              {event.get('parallelMultiple') === true ? 'Parallel multiple' : 'Multiple'}
+            </option>
+          )}
+        </select>
+      </Row>
+      {multiple && (
+        <Row label="Triggers">
+          <div className="flex flex-wrap gap-1">
+            {types.map((t) => (
+              <Badge key={t} className="gap-1">
+                {triggerLabel(t)}
+                <button
+                  type="button"
+                  aria-label={`Remove ${triggerLabel(t)} trigger`}
+                  className="text-muted-foreground hover:text-foreground disabled:opacity-50"
+                  disabled={readOnly}
+                  onClick={() => set(types.filter((x) => x !== t))}
+                >
+                  ×
+                </button>
+              </Badge>
+            ))}
+          </div>
+        </Row>
+      )}
+      {types.length > 0 && remaining.length > 0 && (
+        <Row label={multiple ? 'Add trigger' : 'Multiple'}>
+          <select
+            aria-label="Add trigger"
+            className={inputClass}
+            value=""
+            disabled={readOnly}
+            onChange={(e) => {
+              if (e.target.value) set([...types, e.target.value]);
+            }}
+          >
+            <option value="">Add trigger…</option>
+            {remaining.map((t) => (
+              <option key={t} value={t}>
+                {triggerLabel(t)}
+              </option>
+            ))}
+          </select>
+        </Row>
+      )}
+      {multiple && canBeParallelMultiple(event) && (
+        <Row label="Parallel">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              aria-label="Parallel multiple"
+              checked={event.get('parallelMultiple') === true}
+              disabled={readOnly}
+              onChange={(e) =>
+                controller?.updateProperties(elementId, {
+                  parallelMultiple: e.target.checked || undefined,
+                })
+              }
+            />
+            <span className="text-muted-foreground">All triggers required</span>
+          </label>
+        </Row>
+      )}
+    </>
   );
 }
 
