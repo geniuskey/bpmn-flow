@@ -2,13 +2,144 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="BPMN Flow — Modern BPMN Process Editor & Analyzer" />
-    <title>BPMN Flow</title>
+    <title>BPMN Flow — Free Online BPMN 2.0 Editor &amp; Process Analyzer</title>
+    <meta
+      name="description"
+      content="Open, edit, analyze and export BPMN 2.0 XML in your browser. Free, no install or sign-up; files stay on your device and unknown content is never silently dropped."
+    />
+    <link rel="canonical" href="https://pages.euiyun.com/bpmn-flow/" />
+    <meta name="theme-color" content="#4f46e5" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="BPMN Flow" />
+    <meta property="og:url" content="https://pages.euiyun.com/bpmn-flow/" />
+    <meta
+      property="og:title"
+      content="BPMN Flow — Free Online BPMN 2.0 Editor &amp; Process Analyzer"
+    />
+    <meta
+      property="og:description"
+      content="Open, edit, analyze and export BPMN 2.0 XML in your browser. No install, no sign-up."
+    />
+    <meta property="og:image" content="https://pages.euiyun.com/bpmn-flow/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="BPMN Flow editor showing a process diagram with lanes" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="BPMN Flow — Free Online BPMN 2.0 Editor &amp; Process Analyzer"
+    />
+    <meta
+      name="twitter:description"
+      content="Open, edit, analyze and export BPMN 2.0 XML in your browser. No install, no sign-up."
+    />
+    <meta name="twitter:image" content="https://pages.euiyun.com/bpmn-flow/og-image.png" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "BPMN Flow",
+        "url": "https://pages.euiyun.com/bpmn-flow/",
+        "description": "Browser-based editor and analyzer for BPMN 2.0 process diagrams. Opens, edits, analyzes and exports standard BPMN 2.0 XML without losing content it does not understand.",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires JavaScript",
+        "image": "https://pages.euiyun.com/bpmn-flow/og-image.png",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "featureList": [
+          "Open and export BPMN 2.0 XML",
+          "All BPMN event, task and gateway types",
+          "Pools, lanes and message flows",
+          "Automatic layout",
+          "Process analysis: unreachable nodes, dead ends, gateway issues, loops",
+          "Time and cost estimates",
+          "Autosave in the browser"
+        ],
+        "sameAs": ["https://github.com/geniuskey/bpmn-flow"]
+      }
+    </script>
+    <style>
+      /* Shown until the app mounts (and to crawlers / no-JS visitors). React replaces #root. */
+      .seo-intro {
+        max-width: 44rem;
+        margin: 0 auto;
+        padding: 3rem 1rem;
+        font-size: 16px;
+        line-height: 1.6;
+      }
+      .seo-intro h1 {
+        font-size: 1.75rem;
+        line-height: 1.25;
+        font-weight: 700;
+        margin: 0 0 0.75rem;
+      }
+      .seo-intro h2 {
+        font-size: 1.125rem;
+        font-weight: 600;
+        margin: 1.75rem 0 0.5rem;
+      }
+      .seo-intro p {
+        margin: 0 0 0.75rem;
+      }
+      .seo-intro a {
+        color: #4f46e5;
+        text-decoration: underline;
+      }
+      .seo-intro ul {
+        list-style: disc;
+        padding-left: 1.25rem;
+      }
+      @media (prefers-color-scheme: dark) {
+        .seo-intro a {
+          color: #a5b4fc;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="seo-intro">
+        <h1>BPMN Flow — online BPMN 2.0 editor and process analyzer</h1>
+        <p>
+          BPMN Flow opens, edits, analyzes and exports standard BPMN 2.0 XML directly in your
+          browser. It is free, needs no install or account, and keeps your files on your device.
+          Content the editor does not understand is preserved, and files it cannot round-trip safely
+          open read-only instead of being silently changed.
+        </p>
+        <noscript
+          ><p><strong>BPMN Flow needs JavaScript to run.</strong></p></noscript
+        >
+        <h2>Features</h2>
+        <ul>
+          <li>
+            Model with every BPMN event, task and gateway type, sub-processes, boundary events, data
+            objects and annotations
+          </li>
+          <li>Pools, lanes, message flows and collaborations</li>
+          <li>Automatic layout with orthogonal connection routing</li>
+          <li>
+            Process analysis: unreachable or isolated nodes, dead ends, missing end paths, gateway
+            issues, loops and complexity
+          </li>
+          <li>Time and cost estimates from your own task data</li>
+          <li>Verified BPMN 2.0 XML export, compatibility report and browser autosave</li>
+        </ul>
+        <h2>Try a sample</h2>
+        <ul>
+          <li><a href="?sample=simple-process">Simple process</a></li>
+          <li><a href="?sample=collaboration-lanes">Collaboration with lanes</a></li>
+          <li><a href="?sample=analysis-issues">Process with analysis findings</a></li>
+        </ul>
+        <p><a href="https://github.com/geniuskey/bpmn-flow">Source on GitHub</a></p>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
