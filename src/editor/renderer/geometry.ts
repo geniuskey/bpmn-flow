@@ -8,7 +8,7 @@ export interface Box {
   height: number;
 }
 
-export type Outline = 'circle' | 'diamond' | 'roundRect' | 'rect';
+export type Outline = 'circle' | 'diamond' | 'roundRect' | 'rect' | 'hexagon';
 
 export function circlePath(b: Box): string {
   const cx = b.x + b.width / 2;
@@ -36,6 +36,13 @@ export function rectPath(b: Box, r = 0): string {
 
 export const TASK_RADIUS = 10;
 
+/** Conversation node: hexagon with flat top and bottom. */
+export function hexagonPath(b: Box): string {
+  const q = b.width / 4;
+  const m = b.y + b.height / 2;
+  return `M${b.x + q},${b.y}H${b.x + 3 * q}L${b.x + b.width},${m}L${b.x + 3 * q},${b.y + b.height}H${b.x + q}L${b.x},${m}z`;
+}
+
 export function outlinePath(outline: Outline, b: Box): string {
   switch (outline) {
     case 'circle':
@@ -46,6 +53,8 @@ export function outlinePath(outline: Outline, b: Box): string {
       return rectPath(b, TASK_RADIUS);
     case 'rect':
       return rectPath(b);
+    case 'hexagon':
+      return hexagonPath(b);
   }
 }
 

@@ -76,7 +76,7 @@ with three independent BPMN implementations (none is a project dependency):
 Python tools live in a local `.venv-interop`
 (`python3 -m venv .venv-interop && .venv-interop/bin/pip install SpiffWorkflow pm4py`).
 
-Result on 2026-11-18 (13 files: 8 edited fixtures, 5 diagrams built in the UI):
+Result on 2026-11-18 (17 files: 10 edited fixtures, 7 diagrams built in the UI):
 
 | File                                                                                                       | SpiffWorkflow                                                                                                   | pm4py                                           | Camunda Model API                                             |
 | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------- |
@@ -99,7 +99,12 @@ editor had no time expression (now editable, and flagged by
 
 ## Known gaps
 
-- Desktop modelers (Camunda Modeler, Signavio, ARIS, …) are not driven
-  automatically; Camunda's own parser is checked instead.
+- Desktop and SaaS modelers (Camunda Modeler, Signavio, ARIS, …) are not driven
+  automatically. Camunda Modeler opens files with bpmn-js, which the project's
+  license policy excludes from use (an attempt to run it in a sandbox for
+  verification was refused for that reason); Signavio and ARIS are proprietary
+  services that require accounts. Camunda's own engine parser is checked instead,
+  together with the OMG XSD — and BPMN Flow reads files with bpmn-moddle, the same
+  model library bpmn-js uses.
 - Label bounds are moved with their shape but not resized after renaming.
 - Vendor color extensions (e.g. `bioc:fill`) are preserved but not rendered.

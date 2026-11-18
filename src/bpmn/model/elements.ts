@@ -54,6 +54,14 @@ export const EDITABLE_CONNECTION_TYPES = [
   'bpmn:Association',
   'bpmn:DataInputAssociation',
   'bpmn:DataOutputAssociation',
+  'bpmn:ConversationLink',
+] as const;
+
+/** Conversation diagram nodes (drawn in a collaboration, linked to pools). */
+export const CONVERSATION_TYPES = [
+  'bpmn:Conversation',
+  'bpmn:SubConversation',
+  'bpmn:CallConversation',
 ] as const;
 
 /** Artifacts and data elements that are shown and edited as shapes. */
@@ -211,8 +219,12 @@ export function isEditableArtifact(el: ModdleElement | undefined): boolean {
 }
 
 /** Any element the editor can show and edit as a shape (besides pools and lanes). */
+export function isConversationNode(el: ModdleElement | undefined): boolean {
+  return !!el && (CONVERSATION_TYPES as readonly string[]).includes(el.$type);
+}
+
 export function isEditableShapeElement(el: ModdleElement | undefined): boolean {
-  return isEditableFlowNode(el) || isEditableArtifact(el);
+  return isEditableFlowNode(el) || isEditableArtifact(el) || isConversationNode(el);
 }
 
 export function isEditableConnection(el: ModdleElement | undefined): boolean {

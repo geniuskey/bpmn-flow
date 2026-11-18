@@ -52,12 +52,12 @@ describe('visual mapping', () => {
   it('maps supported and unsupported elements', async () => {
     const { di } = await load('unsupported-elements.bpmn');
     expect(visualFor(bo(di, 'End_unsup'), false).kind).toBe('event');
-    // Conversations are outside the editable set and drawn as placeholders.
+    // Choreography tasks are outside the editable set and drawn as placeholders.
     expect(visualFor(bo(di, 'Start_msg'), false).kind).toBe('event');
-    expect(visualFor(bo(di, 'Conv_1'), false)).toMatchObject({
+    expect(visualFor(bo(di, 'Send_invoice'), false)).toMatchObject({
       kind: 'unsupportedShape',
       outline: 'rect',
-      caption: 'Conversation',
+      caption: 'Choreography Task',
     });
   });
 });

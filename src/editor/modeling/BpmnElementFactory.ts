@@ -18,6 +18,9 @@ export const DEFAULT_SIZE: Record<string, { width: number; height: number }> = {
   'bpmn:Group': { width: 300, height: 200 },
   'bpmn:DataObjectReference': { width: 36, height: 50 },
   'bpmn:DataStoreReference': { width: 50, height: 50 },
+  'bpmn:Conversation': { width: 50, height: 43 },
+  'bpmn:SubConversation': { width: 50, height: 43 },
+  'bpmn:CallConversation': { width: 50, height: 43 },
 };
 
 /** Event types that need a definition get this one by default. */

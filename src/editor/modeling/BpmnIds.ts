@@ -4,6 +4,10 @@ import { walkContainment, type ModdleElement } from '@/bpmn/model/moddle';
 const PREFIX: Record<string, string> = {
   'bpmn:SequenceFlow': 'Flow',
   'bpmn:MessageFlow': 'MessageFlow',
+  'bpmn:Conversation': 'Conversation',
+  'bpmn:SubConversation': 'Conversation',
+  'bpmn:CallConversation': 'Conversation',
+  'bpmn:ConversationLink': 'ConversationLink',
   'bpmn:Participant': 'Participant',
   'bpmn:Lane': 'Lane',
   'bpmn:LaneSet': 'LaneSet',

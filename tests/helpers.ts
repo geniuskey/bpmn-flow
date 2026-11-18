@@ -14,4 +14,6 @@ export const EDITABLE_FIXTURES = [
   'collaboration-messages.bpmn',
   'all-elements.bpmn',
   'advanced-elements.bpmn',
+  'multi-diagram.bpmn',
+  'conversation.bpmn',
 ];

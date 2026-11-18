@@ -21,6 +21,8 @@ export interface DiIndex {
   diagram?: ModdleElement;
   plane?: ModdleElement;
   diagramCount: number;
+  /** Planes of all diagrams, in document order. */
+  planes: ModdleElement[];
   /** semantic element id -> BPMNShape */
   shapes: Map<string, ModdleElement>;
   /** semantic element id -> BPMNEdge */
@@ -39,22 +41,44 @@ export function indexDi(definitions: ModdleElement): DiIndex {
     diagram,
     plane,
     diagramCount: diagrams.length,
+    planes: diagrams.map((d) => getRef(d, 'plane')).filter((p): p is ModdleElement => !!p),
     shapes: new Map(),
     edges: new Map(),
     duplicates: [],
     dangling: [],
   };
-  for (const di of getMany(plane, 'planeElement')) {
-    const target = getRef(di, 'bpmnElement');
-    if (!target?.id) {
-      index.dangling.push(di);
-      continue;
+  // Elements may be drawn in any diagram (e.g. a collapsed sub-process in its own plane).
+  for (const p of index.planes) {
+    for (const di of getMany(p, 'planeElement')) {
+      const target = getRef(di, 'bpmnElement');
+      if (!target?.id) {
+        index.dangling.push(di);
+        continue;
+      }
+      const map = is(di, 'bpmndi:BPMNEdge') ? index.edges : index.shapes;
+      if (map.has(target.id)) index.duplicates.push(di);
+      else map.set(target.id, di);
     }
-    const map = is(di, 'bpmndi:BPMNEdge') ? index.edges : index.shapes;
-    if (map.has(target.id)) index.duplicates.push(di);
-    else map.set(target.id, di);
   }
   return index;
+}
+
+/** All DI elements (in every diagram) and planes that point to `element`. */
+export function diReferencing(
+  definitions: ModdleElement,
+  element: ModdleElement,
+): { planeElements: { plane: ModdleElement; di: ModdleElement }[]; diagrams: ModdleElement[] } {
+  const planeElements: { plane: ModdleElement; di: ModdleElement }[] = [];
+  const diagrams: ModdleElement[] = [];
+  for (const diagram of getMany(definitions, 'diagrams')) {
+    const plane = getRef(diagram, 'plane');
+    if (!plane) continue;
+    if (getRef(plane, 'bpmnElement') === element) diagrams.push(diagram);
+    for (const di of getMany(plane, 'planeElement')) {
+      if (getRef(di, 'bpmnElement') === element) planeElements.push({ plane, di });
+    }
+  }
+  return { planeElements, diagrams };
 }
 
 export function readBounds(diShape: ModdleElement | undefined): Bounds | undefined {

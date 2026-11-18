@@ -11,7 +11,9 @@ import type Rules from 'diagram-js/lib/features/rules/Rules';
 import type { Element, Shape } from 'diagram-js/lib/model/Types';
 import type ElementRegistry from 'diagram-js/lib/core/ElementRegistry';
 import { isEditableFlowNode } from '@/bpmn/model/elements';
-import { is } from '@/bpmn/model/moddle';
+import { is, type ModdleElement } from '@/bpmn/model/moddle';
+import type Canvas from 'diagram-js/lib/core/Canvas';
+import type EventBus from 'diagram-js/lib/core/EventBus';
 import { bo } from '../model';
 import type BpmnElementFactory from '../modeling/BpmnElementFactory';
 import { ADD_LANE } from '../commands/StructureHandlers';
@@ -20,6 +22,18 @@ import { deletable } from './BpmnFlowRules';
 import type DirectEditing from './DirectEditing';
 import { ICONS } from './icons';
 import { findFreePosition } from './placement';
+
+/** The extra diagram (drill-down plane) that draws a collapsed sub-process, if any. */
+function canvasRootFor(canvas: Canvas, element: ModdleElement): string | null {
+  if (!is(element, 'bpmn:SubProcess')) return null;
+  const root = canvas
+    .getRootElements()
+    .find(
+      (r) =>
+        r.id !== '__root' && (r as { businessObject?: ModdleElement }).businessObject === element,
+    );
+  return root?.id ?? null;
+}
 
 function entry(icon: string, title: string, action: (event: Event) => void, group: string) {
   return {
@@ -40,6 +54,8 @@ export default class BpmnContextPadProvider {
     'elementRegistry',
     'commandStack',
     'directEditing',
+    'canvas',
+    'eventBus',
   ];
 
   constructor(
@@ -51,6 +67,8 @@ export default class BpmnContextPadProvider {
     private readonly registry: ElementRegistry,
     private readonly commandStack: CommandStack,
     private readonly directEditing: DirectEditing,
+    private readonly canvas: Canvas,
+    private readonly eventBus: EventBus,
   ) {
     contextPad.registerProvider(this);
   }
@@ -95,6 +113,15 @@ export default class BpmnContextPadProvider {
         'Connect to… (drag to target)',
         (event) => this.connect.start(event as MouseEvent, element, undefined, true),
         'connect',
+      );
+    }
+    const drillDown = canvasRootFor(this.canvas, b);
+    if (drillDown) {
+      entries['drill-down'] = entry(
+        ICONS.open,
+        'Open sub-process diagram',
+        () => this.eventBus.fire('bpmnflow.showDiagram', { rootId: drillDown }),
+        'edit',
       );
     }
     if (this.directEditing.canEdit(element)) {

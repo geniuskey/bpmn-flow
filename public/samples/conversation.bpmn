@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_conv" targetNamespace="http://example.com/bpmn-flow/fixtures">
+  <bpmn:collaboration id="Collab_conv">
+    <bpmn:participant id="Buyer" name="Buyer" processRef="Process_buyer" />
+    <bpmn:participant id="Seller" name="Seller" />
+    <bpmn:participant id="Bank" name="Bank" />
+    <bpmn:conversation id="Conv_1" name="Invoicing" />
+    <bpmn:callConversation id="Conv_2" name="Payment" />
+    <bpmn:conversationLink id="CL_1" sourceRef="Buyer" targetRef="Conv_1" />
+    <bpmn:conversationLink id="CL_2" sourceRef="Conv_1" targetRef="Seller" />
+    <bpmn:conversationLink id="CL_3" sourceRef="Buyer" targetRef="Conv_2" />
+    <bpmn:conversationLink id="CL_4" sourceRef="Conv_2" targetRef="Bank" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_buyer" isExecutable="false" />
+  <bpmndi:BPMNDiagram id="Diagram_conv">
+    <bpmndi:BPMNPlane id="Plane_conv" bpmnElement="Collab_conv">
+      <bpmndi:BPMNShape id="Buyer_di" bpmnElement="Buyer" isHorizontal="true"><dc:Bounds x="100" y="60" width="500" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Seller_di" bpmnElement="Seller" isHorizontal="true"><dc:Bounds x="100" y="300" width="230" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bank_di" bpmnElement="Bank" isHorizontal="true"><dc:Bounds x="370" y="300" width="230" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Conv_1_di" bpmnElement="Conv_1"><dc:Bounds x="190" y="198" width="50" height="43" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Conv_2_di" bpmnElement="Conv_2"><dc:Bounds x="460" y="198" width="50" height="43" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="CL_1_di" bpmnElement="CL_1"><di:waypoint x="215" y="140" /><di:waypoint x="215" y="198" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="CL_2_di" bpmnElement="CL_2"><di:waypoint x="215" y="241" /><di:waypoint x="215" y="300" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="CL_3_di" bpmnElement="CL_3"><di:waypoint x="485" y="140" /><di:waypoint x="485" y="198" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="CL_4_di" bpmnElement="CL_4"><di:waypoint x="485" y="241" /><di:waypoint x="485" y="300" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

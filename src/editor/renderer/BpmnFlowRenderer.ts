@@ -185,6 +185,17 @@ export default class BpmnFlowRenderer extends BaseRenderer {
         );
         break;
       }
+      case 'conversation': {
+        const call = is(bo, 'bpmn:CallConversation') ? ' bf-call-conversation' : '';
+        main = path(gfx, outlinePath('hexagon', box), `bf-shape bf-conversation${call}`);
+        if (is(bo, 'bpmn:SubConversation')) {
+          const cx = shape.width / 2;
+          const by = shape.height - 14;
+          path(gfx, `M${cx - 5},${by}h10v10h-10z`, 'bf-icon-stroke');
+          path(gfx, `M${cx - 3},${by + 5}h6M${cx},${by + 2}v6`, 'bf-icon-stroke');
+        }
+        break;
+      }
       default:
         main = path(gfx, outlinePath(visual.outline, box), `bf-shape${unsupported}`);
         if (visual.outline === 'roundRect' || visual.outline === 'rect') {
@@ -219,6 +230,9 @@ export default class BpmnFlowRenderer extends BaseRenderer {
         const head = arrowHeadPath(points, 9, 5);
         if (head) path(gfx, head, 'bf-open-arrow');
       }
+    }
+    if (visual.kind === 'conversationLink') {
+      svgClasses(line).add('bf-conversation-link');
     }
     if (visual.kind === 'dataAssociation') {
       svgClasses(line).add('bf-association');

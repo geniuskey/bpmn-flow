@@ -77,7 +77,16 @@ import BpmnElementFactory from './modeling/BpmnElementFactory';
 import BpmnIds from './modeling/BpmnIds';
 import SemanticSync from './modeling/SemanticSync';
 import StructureBehavior from './modeling/StructureBehavior';
-import { bo, childrenOf, rootOf } from './model';
+import { bo, childrenOf, rootOf, type BpmnData } from './model';
+import { labelOf } from '@/bpmn/model/elements';
+import { getMany, getRef } from '@/bpmn/model/moddle';
+
+export interface DiagramInfo {
+  rootId: string;
+  name: string;
+  type: string;
+  active: boolean;
+}
 
 export type EditorTool = 'select' | 'pan' | 'lasso' | 'connect';
 
@@ -91,6 +100,8 @@ export interface EditorSnapshot {
   dirty: boolean;
   zoom: number;
   readOnly: boolean;
+  /** Root id of the BPMN diagram that is shown. */
+  activeDiagram: string;
   /** Tool currently active inside diagram-js (tools end themselves, e.g. after one connection). */
   activeTool: EditorTool;
 }
@@ -173,6 +184,7 @@ export class EditorController {
     zoom: 1,
     readOnly: true,
     activeTool: 'select',
+    activeDiagram: '__root',
   };
   private savedStackIndex = -1;
   private tool: EditorTool = 'select';
@@ -243,6 +255,7 @@ export class EditorController {
       this.update({ selection: e.newSelection.map((el) => el.id) });
     });
     eventBus.on('commandStack.changed', () => this.refreshStack());
+    eventBus.on('bpmnflow.showDiagram', (e: { rootId: string }) => this.showDiagram(e.rootId));
     eventBus.on('tool-manager.update', (e: { tool: string | null }) => {
       if (this.get<ConnectTool>('connectTool')?.isActive()) return;
       const map: Record<string, EditorTool> = { hand: 'pan', lasso: 'lasso' };
@@ -257,6 +270,7 @@ export class EditorController {
       canRedo: false,
       dirty: false,
       readOnly,
+      activeDiagram: '__root',
       revision: this.snapshot.revision + 1,
     });
   }
@@ -520,6 +534,13 @@ export class EditorController {
   reveal(ids: string[]): void {
     const resolved = this.resolveIds(ids);
     const canvas = this.get<Canvas>('canvas');
+    // Switch to the diagram that draws the first element.
+    const first = resolved.map((id) => this.getElement(id)).find(Boolean);
+    if (first && canvas) {
+      let root: Element = first;
+      while (root.parent) root = root.parent;
+      if (root !== (canvas.getRootElement() as unknown as Element)) this.showDiagram(root.id);
+    }
     const selectable = resolved.filter((id) => this.getElement(id)?.parent);
     this.select(selectable, false);
     this.highlight(resolved);
@@ -548,11 +569,62 @@ export class EditorController {
   selectAll(): void {
     if (!this.diagram) return;
     const canvas = this.diagram.get<Canvas>('canvas');
-    const registry = this.diagram.get<ElementRegistry>('elementRegistry');
-    const root = canvas.getRootElement();
-    this.diagram
-      .get<Selection>('selection')
-      .select(registry.filter((e) => e !== root && !!e.parent));
+    // Only the elements of the diagram that is shown.
+    const all: Element[] = [];
+    const visit = (parent: Element) => {
+      for (const child of childrenOf(parent)) {
+        all.push(child);
+        visit(child);
+      }
+    };
+    visit(rootOf(canvas));
+    this.diagram.get<Selection>('selection').select(all);
+  }
+
+  /** BPMN diagrams of the document (each is a diagram-js root). */
+  getDiagrams(): DiagramInfo[] {
+    const canvas = this.get<Canvas>('canvas');
+    const doc = this.document;
+    if (!canvas || !doc) return [];
+    const live = new Set(getMany(doc.definitions, 'diagrams').map((d) => getRef(d, 'plane')));
+    const active = canvas.getRootElement();
+    return (canvas.getRootElements() as unknown as (Element & BpmnData)[])
+      .filter((root) => live.has(root.di))
+      .map((root) => {
+        const b = root.businessObject;
+        const diagram = root.di.$parent;
+        return {
+          rootId: root.id,
+          name: (diagram?.name as string | undefined) || labelOf(b) || b.id || 'Diagram',
+          type: b.$type,
+          active: root === (active as unknown as Element),
+        };
+      });
+  }
+
+  /** Shows another BPMN diagram (e.g. the content of a collapsed sub-process). */
+  showDiagram(rootId: string): void {
+    const canvas = this.get<Canvas>('canvas');
+    const root = canvas?.getRootElements().find((r) => r.id === rootId);
+    if (!canvas || !root || root === canvas.getRootElement()) return;
+    this.get<Selection>('selection')?.select([]);
+    canvas.setRootElement(root);
+    this.fit();
+    this.update({ revision: this.snapshot.revision + 1, activeDiagram: rootId });
+  }
+
+  /** The diagram that draws the content of a collapsed sub-process, if any. */
+  drillDownOf(id: string): string | null {
+    const element = this.getElement(id) as (Element & BpmnData) | undefined;
+    if (!element) return null;
+    const canvas = this.get<Canvas>('canvas');
+    const root = canvas
+      ?.getRootElements()
+      .find(
+        (r) =>
+          (r as unknown as BpmnData).businessObject === element.businessObject && r.id !== '__root',
+      );
+    return root && this.getDiagrams().some((d) => d.rootId === root.id) ? root.id : null;
   }
 
   getElement(id: string): Element | undefined {

@@ -1,12 +1,7 @@
 /**
  * Maps BPMN elements to visual kinds. Pure; shared by the renderer and tests.
  */
-import {
-  humanizeType,
-  isEditableArtifact,
-  isEditableConnection,
-  isEditableFlowNode,
-} from '@/bpmn/model/elements';
+import { humanizeType, isEditableConnection, isEditableShapeElement } from '@/bpmn/model/elements';
 import { getMany, is, type ModdleElement } from '@/bpmn/model/moddle';
 import type { Outline } from './geometry';
 
@@ -21,6 +16,8 @@ export type VisualKind =
   | 'group'
   | 'dataObject'
   | 'dataStore'
+  | 'conversation'
+  | 'conversationLink'
   | 'sequenceFlow'
   | 'messageFlow'
   | 'association'
@@ -39,6 +36,7 @@ export function outlineFor(el: ModdleElement): Outline {
   if (is(el, 'bpmn:Event')) return 'circle';
   if (is(el, 'bpmn:Gateway')) return 'diamond';
   if (is(el, 'bpmn:Activity') || is(el, 'bpmn:Group')) return 'roundRect';
+  if (is(el, 'bpmn:ConversationNode')) return 'hexagon';
   return 'rect';
 }
 
@@ -50,6 +48,7 @@ function shapeKind(el: ModdleElement): VisualKind {
   if (is(el, 'bpmn:TextAnnotation')) return 'textAnnotation';
   if (is(el, 'bpmn:Group')) return 'group';
   if (is(el, 'bpmn:DataObjectReference')) return 'dataObject';
+  if (is(el, 'bpmn:ConversationNode')) return 'conversation';
   return 'dataStore';
 }
 
@@ -61,11 +60,12 @@ export function visualFor(el: ModdleElement, isEdge: boolean): Visual {
     if (is(el, 'bpmn:MessageFlow')) return { kind: 'messageFlow', outline: 'rect' };
     if (is(el, 'bpmn:Association')) return { kind: 'association', outline: 'rect' };
     if (is(el, 'bpmn:DataAssociation')) return { kind: 'dataAssociation', outline: 'rect' };
+    if (is(el, 'bpmn:ConversationLink')) return { kind: 'conversationLink', outline: 'rect' };
     return { kind: 'sequenceFlow', outline: 'rect' };
   }
   if (is(el, 'bpmn:Participant')) return { kind: 'participant', outline: 'rect' };
   if (is(el, 'bpmn:Lane')) return { kind: 'lane', outline: 'rect' };
-  if (isEditableFlowNode(el) || isEditableArtifact(el)) {
+  if (isEditableShapeElement(el)) {
     return { kind: shapeKind(el), outline: outlineFor(el) };
   }
   const eventDefs = getMany(el, 'eventDefinitions').map((d) =>
@@ -81,7 +81,8 @@ export function hasExternalLabel(el: ModdleElement): boolean {
     is(el, 'bpmn:Event') ||
     is(el, 'bpmn:Gateway') ||
     is(el, 'bpmn:DataObjectReference') ||
-    is(el, 'bpmn:DataStoreReference')
+    is(el, 'bpmn:DataStoreReference') ||
+    is(el, 'bpmn:ConversationNode')
   );
 }
 

@@ -36,10 +36,10 @@ describe('compatibility assessment', () => {
     expect(doc.report.mode).toBe('readonly');
     expect(doc.report.exportAllowed).toBe(true);
     const unsupported = doc.report.issues.filter((i) => i.code === 'UNSUPPORTED_ELEMENT');
-    // Conversation diagrams are a separate BPMN diagram type and stay read-only.
+    // Choreography diagrams are a separate BPMN diagram type and stay read-only.
     expect(unsupported.map((i) => i.elementType).sort()).toEqual([
-      'bpmn:Conversation',
-      'bpmn:ConversationLink',
+      'bpmn:Choreography',
+      'bpmn:ChoreographyTask',
     ]);
     expect(codes(doc.report.issues)).toContain('PRESERVED_ELEMENT');
   });

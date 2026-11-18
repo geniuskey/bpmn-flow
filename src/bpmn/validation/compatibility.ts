@@ -10,15 +10,16 @@
 import { indexDi } from '../di/di';
 import {
   CONTAINER_TYPES,
+  CONVERSATION_TYPES,
   EDITABLE_ARTIFACT_TYPES,
   EDITABLE_CONNECTION_TYPES,
   EDITABLE_FLOW_NODE_TYPES,
   PASSIVE_TYPES,
   PRESERVED_ROOT_TYPES,
   humanizeType,
-  isEditableArtifact,
   isEditableConnection,
   isEditableFlowNode,
+  isEditableShapeElement,
 } from '../model/elements';
 import { getRef, is, walkContainment, type ModdleElement } from '../model/moddle';
 
@@ -55,13 +56,14 @@ const KNOWN_TYPES = new Set<string>([
   ...EDITABLE_FLOW_NODE_TYPES,
   ...EDITABLE_CONNECTION_TYPES,
   ...EDITABLE_ARTIFACT_TYPES,
+  ...CONVERSATION_TYPES,
   ...CONTAINER_TYPES,
   ...PASSIVE_TYPES,
 ]);
 
 /** Elements that need a BPMNShape / BPMNEdge to be shown. */
 function needsShape(el: ModdleElement): boolean {
-  if (isEditableFlowNode(el) || isEditableArtifact(el)) return true;
+  if (isEditableShapeElement(el)) return true;
   if (is(el, 'bpmn:Lane') || is(el, 'bpmn:Participant')) return true;
   return false;
 }
@@ -113,10 +115,9 @@ export function assessCompatibility(
     if (di.diagramCount > 1) {
       issues.push({
         code: 'MULTIPLE_DIAGRAMS',
-        severity: 'warning',
-        message: `The file contains ${di.diagramCount} diagrams. Only the first is shown; editing is disabled to keep the others consistent.`,
+        severity: 'info',
+        message: `The file contains ${di.diagramCount} diagrams (e.g. collapsed sub-processes drawn on their own). Switch between them with the diagram selector.`,
       });
-      readonly = true;
     }
     for (const dangling of [...di.dangling, ...di.duplicates]) {
       issues.push({

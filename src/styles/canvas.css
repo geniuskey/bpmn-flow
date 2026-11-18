@@ -388,3 +388,13 @@
   stroke-width: 3px;
   stroke-linecap: round;
 }
+.bf-conversation {
+  stroke-width: 1.75px;
+}
+.bf-call-conversation {
+  stroke-width: 3.5px;
+}
+.bf-connection.bf-conversation-link {
+  stroke-width: 4px;
+  stroke: var(--bf-shape-stroke);
+}

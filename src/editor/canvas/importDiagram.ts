@@ -65,98 +65,121 @@ export function importDiagram(
 ): CanvasImportResult {
   const result: CanvasImportResult = { shapes: 0, connections: 0, warnings: [] };
   const di = indexDi(definitions);
-  const planeElement = getRef(di.plane, 'bpmnElement');
-
-  if (!di.plane || !planeElement) {
+  if (!di.plane || !getRef(di.plane, 'bpmnElement')) {
     result.warnings.push('No diagram to display.');
     return result;
   }
 
-  const root = elementFactory.createRoot({
-    // Generic id: the root's business object changes when a process becomes a collaboration.
-    id: '__root',
-    businessObject: planeElement,
-    di: di.plane,
-  }) as BpmnRoot;
-  canvas.setRootElement(root);
-
-  const participantByProcess = new Map<ModdleElement, Element>();
-
-  const parentFor = (bo: ModdleElement): Element => {
-    if (is(bo, 'bpmn:Participant')) return root;
-    // Content of an expanded sub-process is parented to the sub-process shape.
-    for (let p = bo.$parent; p; p = p.$parent) {
-      if (is(p, 'bpmn:SubProcess') && p.id) {
-        const container = elementRegistry.get(p.id) as Element | undefined;
-        if (container) return container;
-      }
-      if (is(p, 'bpmn:Process')) break;
+  // Every BPMN diagram becomes its own diagram-js root; the first one is shown.
+  let first: BpmnRoot | undefined;
+  di.planes.forEach((plane, index) => {
+    const planeElement = getRef(plane, 'bpmnElement');
+    if (!planeElement) {
+      result.warnings.push(`Skipped diagram ${plane.id ?? index}: it has no BPMN element.`);
+      return;
     }
-    const process = owningProcess(bo);
-    return (process && participantByProcess.get(process)) || root;
-  };
-
-  const planeElements = getMany(di.plane, 'planeElement');
-  const shapes = planeElements
-    .filter((p) => is(p, 'bpmndi:BPMNShape'))
-    .map((diShape, index) => ({ diShape, index, bo: getRef(diShape, 'bpmnElement') }))
-    .filter((s): s is { diShape: ModdleElement; index: number; bo: ModdleElement } => !!s.bo)
-    .sort((a, b) => shapeOrder(a.bo) - shapeOrder(b.bo) || a.index - b.index);
-
-  for (const { diShape, bo } of shapes) {
-    const id = bo.id;
-    if (!id || elementRegistry.get(id)) {
-      result.warnings.push(`Skipped duplicate diagram shape for ${id ?? '(no id)'}.`);
-      continue;
+    const root = elementFactory.createRoot({
+      // Generic id: the root's business object changes when a process becomes a collaboration.
+      id: index === 0 ? '__root' : `__root_${plane.id ?? index}`,
+      businessObject: planeElement,
+      di: plane,
+    }) as BpmnRoot;
+    if (index === 0) {
+      canvas.setRootElement(root);
+      first = root;
+    } else {
+      canvas.addRootElement(root);
     }
-    const bounds = readBounds(diShape) ?? { x: 0, y: 0, width: 100, height: 80 };
-    const shape = elementFactory.createShape({
-      id,
-      type: bo.$type,
-      businessObject: bo,
-      di: diShape,
-      unsupported: !isSupportedShape(bo),
-      ...bounds,
-    }) as BpmnShape;
-    const host = is(bo, 'bpmn:BoundaryEvent')
-      ? (elementRegistry.get(getRef(bo, 'attachedToRef')?.id ?? '') as BpmnShape | undefined)
-      : undefined;
-    if (host) {
-      shape.host = host;
-      host.attachers.push(shape);
-    }
-    canvas.addShape(shape, host?.parent ?? parentFor(bo));
-    result.shapes++;
+    importPlane(root, plane);
+  });
+  if (first) canvas.setRootElement(first);
 
-    if (is(bo, 'bpmn:Participant')) {
-      const process = getRef(bo, 'processRef');
-      if (process) participantByProcess.set(process, shape);
-    }
+  function rootOfElement(el: Element | undefined): Element | undefined {
+    let p = el;
+    while (p?.parent) p = p.parent;
+    return p;
   }
 
-  for (const diEdge of planeElements.filter((p) => is(p, 'bpmndi:BPMNEdge'))) {
-    const bo = getRef(diEdge, 'bpmnElement');
-    const id = bo?.id;
-    if (!bo || !id || elementRegistry.get(id)) {
-      result.warnings.push(`Skipped diagram edge ${diEdge.id ?? ''}.`);
-      continue;
+  function importPlane(root: BpmnRoot, plane: ModdleElement): void {
+    const participantByProcess = new Map<ModdleElement, Element>();
+
+    const parentFor = (bo: ModdleElement): Element => {
+      if (is(bo, 'bpmn:Participant')) return root;
+      // Content of an expanded sub-process drawn in this diagram is parented to it.
+      for (let p = bo.$parent; p; p = p.$parent) {
+        if (p === root.businessObject) return root;
+        if (is(p, 'bpmn:SubProcess') && p.id) {
+          const container = elementRegistry.get(p.id) as Element | undefined;
+          if (container && rootOfElement(container) === root) return container;
+        }
+        if (is(p, 'bpmn:Process')) break;
+      }
+      const process = owningProcess(bo);
+      return (process && participantByProcess.get(process)) || root;
+    };
+
+    const planeElements = getMany(plane, 'planeElement');
+    const shapes = planeElements
+      .filter((p) => is(p, 'bpmndi:BPMNShape'))
+      .map((diShape, index) => ({ diShape, index, bo: getRef(diShape, 'bpmnElement') }))
+      .filter((s): s is { diShape: ModdleElement; index: number; bo: ModdleElement } => !!s.bo)
+      .sort((a, b) => shapeOrder(a.bo) - shapeOrder(b.bo) || a.index - b.index);
+
+    for (const { diShape, bo } of shapes) {
+      const id = bo.id;
+      if (!id || elementRegistry.get(id)) {
+        result.warnings.push(`Skipped duplicate diagram shape for ${id ?? '(no id)'}.`);
+        continue;
+      }
+      const bounds = readBounds(diShape) ?? { x: 0, y: 0, width: 100, height: 80 };
+      const shape = elementFactory.createShape({
+        id,
+        type: bo.$type,
+        businessObject: bo,
+        di: diShape,
+        unsupported: !isSupportedShape(bo),
+        ...bounds,
+      }) as BpmnShape;
+      const host = is(bo, 'bpmn:BoundaryEvent')
+        ? (elementRegistry.get(getRef(bo, 'attachedToRef')?.id ?? '') as BpmnShape | undefined)
+        : undefined;
+      if (host) {
+        shape.host = host;
+        host.attachers.push(shape);
+      }
+      canvas.addShape(shape, host?.parent ?? parentFor(bo));
+      result.shapes++;
+
+      if (is(bo, 'bpmn:Participant')) {
+        const process = getRef(bo, 'processRef');
+        if (process) participantByProcess.set(process, shape);
+      }
     }
-    const ends = connectionEnds(bo);
-    const source = elementRegistry.get(ends.source?.id ?? '') as Element | undefined;
-    const target = elementRegistry.get(ends.target?.id ?? '') as Element | undefined;
-    const connection = elementFactory.createConnection({
-      id,
-      type: bo.$type,
-      businessObject: bo,
-      di: diEdge,
-      unsupported: !isEditableConnection(bo),
-      waypoints: readWaypoints(diEdge),
-      source,
-      target,
-    });
-    const parent = is(bo, 'bpmn:SequenceFlow') ? (source?.parent ?? root) : root;
-    canvas.addConnection(connection, parent);
-    result.connections++;
+
+    for (const diEdge of planeElements.filter((p) => is(p, 'bpmndi:BPMNEdge'))) {
+      const bo = getRef(diEdge, 'bpmnElement');
+      const id = bo?.id;
+      if (!bo || !id || elementRegistry.get(id)) {
+        result.warnings.push(`Skipped diagram edge ${diEdge.id ?? ''}.`);
+        continue;
+      }
+      const ends = connectionEnds(bo);
+      const source = elementRegistry.get(ends.source?.id ?? '') as Element | undefined;
+      const target = elementRegistry.get(ends.target?.id ?? '') as Element | undefined;
+      const connection = elementFactory.createConnection({
+        id,
+        type: bo.$type,
+        businessObject: bo,
+        di: diEdge,
+        unsupported: !isEditableConnection(bo),
+        waypoints: readWaypoints(diEdge),
+        source,
+        target,
+      });
+      const parent = is(bo, 'bpmn:SequenceFlow') ? (source?.parent ?? root) : root;
+      canvas.addConnection(connection, parent);
+      result.connections++;
+    }
   }
 
   return result;

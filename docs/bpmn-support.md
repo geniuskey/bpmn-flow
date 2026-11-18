@@ -22,6 +22,7 @@ The source of truth is `src/bpmn/model/elements.ts` (what counts as supported) a
 | Group (+ Category / CategoryValue)                                                                      | ✅ (dash-dot frame)                                                                               | palette                                                                                                                      | rename (category value), resize, delete                                                                                                                                                         |
 | Process                                                                                                 | ✅ (canvas root)                                                                                  | new document                                                                                                                 | rename, description                                                                                                                                                                             |
 | Collaboration / Participant (pool)                                                                      | ✅                                                                                                | palette (the first pool converts a process diagram to a collaboration and wraps its content)                                 | move (with content), resize, rename, delete                                                                                                                                                     |
+| Conversation, Sub-Conversation, Call Conversation, Conversation Link                                    | ✅ (hexagon; call conversation thick; sub-conversation [+]; thick links)                          | palette (in a collaboration); connect tool between a pool and a conversation                                                 | move, rename, change type, delete                                                                                                                                                               |
 | LaneSet / Lane                                                                                          | ✅                                                                                                | “Add lane below” on a pool or lane                                                                                           | resize (bottom edge; pool follows), rename, delete when empty; nodes move between lanes — `flowNodeRef` follows position                                                                        |
 | Documentation, extension elements, vendor attributes                                                    | inspector                                                                                         | —                                                                                                                            | description editable; extensions preserved verbatim                                                                                                                                             |
 | Root-level Message, Signal, Error, Escalation, DataStore, Category, ItemDefinition, Interface, Resource | not shown                                                                                         | created when an event references a name / a group is added                                                                   | preserved                                                                                                                                                                                       |
@@ -48,6 +49,12 @@ The source of truth is `src/bpmn/model/elements.ts` (what counts as supported) a
 
 Every edit is one undoable step, including compound ones (append, paste, auto layout).
 
-Opened read-only (shown as placeholders): conversation and choreography diagrams
-— BPMN defines them as diagram types of their own, next to process and
-collaboration diagrams — and files with more than one diagram.
+Files with several diagrams (e.g. collapsed sub-processes drawn in their own
+diagram, as Camunda Modeler 5 writes them) are editable: switch diagrams with the
+selector in the header or “Open sub-process diagram” on a collapsed sub-process.
+Deleting an element removes its DI from every diagram (and a sub-process's own
+diagram); type changes re-point all of them.
+
+Opened read-only (shown as placeholders): choreography diagrams, which BPMN
+defines as a diagram type of its own next to process, collaboration and
+conversation diagrams.

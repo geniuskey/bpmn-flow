@@ -99,7 +99,9 @@ export function containerAt(
 ): Element | undefined {
   const inside = (s: Shape) =>
     contains(s, box.x, box.y) && contains(s, box.x + box.width, box.y + box.height);
-  let best: Element | undefined = is(bo(root), 'bpmn:Process') ? root : undefined;
+  const rootBo = bo(root);
+  let best: Element | undefined =
+    is(rootBo, 'bpmn:Process') || is(rootBo, 'bpmn:SubProcess') ? root : undefined;
   const visit = (parent: Element) => {
     for (const child of childrenOf(parent)) {
       if (exclude.has(child) || !isContainerShape(child) || !inside(child as Shape)) continue;

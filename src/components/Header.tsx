@@ -75,6 +75,7 @@ export function Header() {
             aria-label="Unsaved changes"
           />
         )}
+        <DiagramSelector />
         {doc && readOnly && (
           <Badge variant="warning" title="Editing is disabled to protect data in this file">
             <Lock className="size-3" /> Read-only
@@ -287,5 +288,30 @@ function SettingsMenu() {
         </>
       )}
     </div>
+  );
+}
+
+/** Switches between the BPMN diagrams of a document (e.g. collapsed sub-process content). */
+function DiagramSelector() {
+  const controller = useEditorStore((s) => s.controller);
+  // Re-read on model changes and diagram switches.
+  useEditorStore((s) => s.snapshot.revision);
+  const active = useEditorStore((s) => s.snapshot.activeDiagram);
+  const diagrams = controller?.getDiagrams() ?? [];
+  if (diagrams.length < 2) return null;
+  return (
+    <select
+      aria-label="Diagram"
+      title="Diagram"
+      className="h-7 max-w-48 rounded-md border bg-background px-1.5 text-xs"
+      value={active}
+      onChange={(e) => controller?.showDiagram(e.target.value)}
+    >
+      {diagrams.map((d) => (
+        <option key={d.rootId} value={d.rootId}>
+          {d.rootId === '__root' ? d.name : `↳ ${d.name}`}
+        </option>
+      ))}
+    </select>
   );
 }

@@ -38,7 +38,9 @@ function containerOf(parent: Element, lanes: Shape[]): LayoutContainer {
 }
 
 export function extractLayoutContainers(root: Element): LayoutContainer[] {
-  if (is(bo(root), 'bpmn:Process')) return [containerOf(root, [])];
+  if (is(bo(root), 'bpmn:Process') || is(bo(root), 'bpmn:SubProcess')) {
+    return [containerOf(root, [])];
+  }
   return childrenOf(root)
     .filter((c) => is(bo(c), 'bpmn:Participant'))
     .sort((a, b) => (a as Shape).y - (b as Shape).y)

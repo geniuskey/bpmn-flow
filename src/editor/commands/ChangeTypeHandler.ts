@@ -5,7 +5,9 @@
  */
 import type { Element } from 'diagram-js/lib/model/Types';
 import type { BpmnModdleInstance, ModdleElement } from '@/bpmn/model/moddle';
-import { getMany, is } from '@/bpmn/model/moddle';
+import { getMany, getRef, is } from '@/bpmn/model/moddle';
+import { diReferencing } from '@/bpmn/di/di';
+import type Canvas from 'diagram-js/lib/core/Canvas';
 import { bo, type BpmnShape } from '../model';
 import { ChangeLog } from '../modeling/ChangeLog';
 import { allLanes } from '../modeling/semantic';
@@ -25,6 +27,7 @@ export const TYPE_FAMILIES: string[][] = [
     'bpmn:CallActivity',
   ],
   ['bpmn:SubProcess', 'bpmn:Transaction', 'bpmn:AdHocSubProcess'],
+  ['bpmn:Conversation', 'bpmn:SubConversation', 'bpmn:CallConversation'],
   [
     'bpmn:ExclusiveGateway',
     'bpmn:ParallelGateway',
@@ -47,8 +50,12 @@ interface Context {
 }
 
 export default class ChangeTypeHandler {
-  static $inject = ['moddle'];
-  constructor(private readonly moddle: BpmnModdleInstance) {}
+  static $inject = ['moddle', 'bpmnDefinitions', 'canvas'];
+  constructor(
+    private readonly moddle: BpmnModdleInstance,
+    private readonly definitions: ModdleElement,
+    private readonly canvas: Canvas,
+  ) {}
 
   execute(context: Context): Element[] {
     const shape = context.element as BpmnShape;
@@ -75,7 +82,9 @@ export default class ChangeTypeHandler {
     }
 
     const container = old.$parent!;
-    const list = container.get('flowElements') as ModdleElement[];
+    const list = container.get(
+      is(old, 'bpmn:ConversationNode') ? 'conversations' : 'flowElements',
+    ) as ModdleElement[];
     const index = list.indexOf(old);
     log.remove(list, old);
     log.insert(list, next, index);
@@ -90,7 +99,23 @@ export default class ChangeTypeHandler {
         log.insert(refs, next, i);
       }
     }
-    log.set(shape.di, 'bpmnElement', next);
+    // Re-point DI in every diagram, including a drill-down plane of a sub-process.
+    const refs = diReferencing(this.definitions, old);
+    for (const { di } of refs.planeElements) log.set(di, 'bpmnElement', next);
+    for (const diagram of refs.diagrams) {
+      const plane = getRef(diagram, 'plane')!;
+      log.set(plane, 'bpmnElement', next);
+      const root = this.canvas
+        .getRootElements()
+        .find((r) => (r as { di?: ModdleElement }).di === plane) as
+        { businessObject: ModdleElement } | undefined;
+      if (root) {
+        log.apply(
+          () => (root.businessObject = next),
+          () => (root.businessObject = old),
+        );
+      }
+    }
     if (is(next, 'bpmn:ExclusiveGateway')) log.set(shape.di, 'isMarkerVisible', true);
     const oldType = shape.type;
     log.apply(

@@ -26,9 +26,10 @@ describe('round-trip: Original → Import → Edit → Export → Re-import', ()
     const expected = snapshotModel(doc.definitions);
 
     // Edit 1: rename the first task-like element.
-    const [taskId, taskShape] = [...di.shapes.entries()].find(
-      ([, s]) => (readBounds(s)?.width ?? 0) === 100,
-    )!;
+    // A task-sized shape if there is one, otherwise the first named shape.
+    const [taskId, taskShape] =
+      [...di.shapes.entries()].find(([, s]) => (readBounds(s)?.width ?? 0) === 100) ??
+      [...di.shapes.entries()][0]!;
     const task = doc.definitions.$parent ?? null; // definitions has no parent
     expect(task).toBeNull();
     const taskEl = taskShape.get('bpmnElement') as { set(k: string, v: unknown): void };

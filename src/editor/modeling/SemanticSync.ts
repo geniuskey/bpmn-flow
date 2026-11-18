@@ -28,8 +28,18 @@ function isArtifact(el: ModdleElement): boolean {
   return is(el, 'bpmn:TextAnnotation') || is(el, 'bpmn:Group') || is(el, 'bpmn:Association');
 }
 
-function listProperty(el: ModdleElement): 'artifacts' | 'flowElements' {
+function listProperty(el: ModdleElement): 'artifacts' | 'flowElements' | 'conversations' {
+  if (is(el, 'bpmn:ConversationNode')) return 'conversations';
   return isArtifact(el) ? 'artifacts' : 'flowElements';
+}
+
+/** The collaboration on the diagram root, required for collaboration-level content. */
+function collaborationOf(root: Element): ModdleElement {
+  const b = bo(root);
+  if (!b || !is(b, 'bpmn:Collaboration')) {
+    throw new Error('This element needs a collaboration (add a pool first).');
+  }
+  return b;
 }
 
 export default class SemanticSync extends CommandInterceptor {
@@ -110,6 +120,31 @@ export default class SemanticSync extends CommandInterceptor {
     if (di) log.remove(this.plane().get('planeElement') as ModdleElement[], di);
   }
 
+  /**
+   * Removes DI that other diagrams hold for a removed element and its content
+   * (e.g. the drill-down diagram of a deleted collapsed sub-process), so no
+   * diagram keeps pointing at something that is gone.
+   */
+  private removeForeignDi(removed: ModdleElement[], log: ChangeLog): void {
+    const gone = new Set<ModdleElement>();
+    for (const element of removed) walkContainment(element, (el) => gone.add(el));
+    const diagrams = this.definitions.get('diagrams') as ModdleElement[];
+    for (const diagram of [...diagrams]) {
+      const plane = getRef(diagram, 'plane');
+      if (!plane) continue;
+      const target = getRef(plane, 'bpmnElement');
+      if (target && gone.has(target)) {
+        log.remove(diagrams, diagram);
+        continue;
+      }
+      const planeElements = plane.get('planeElement') as ModdleElement[];
+      for (const di of [...planeElements]) {
+        const element = getRef(di, 'bpmnElement');
+        if (element && gone.has(element)) log.remove(planeElements, di);
+      }
+    }
+  }
+
   private insertInto(
     container: ModdleElement,
     property: string,
@@ -157,6 +192,8 @@ export default class SemanticSync extends CommandInterceptor {
         this.insertInto(process, 'laneSets', laneSet, log);
       }
       this.insertInto(laneSet, 'lanes', element, log);
+    } else if (is(element, 'bpmn:ConversationNode')) {
+      this.insertInto(collaborationOf(this.root()), 'conversations', element, log);
     } else if (is(element, 'bpmn:TextAnnotation') || is(element, 'bpmn:Group')) {
       const container = artifactContainerOf(shape.parent, this.root());
       if (!container) throw new Error('No container for the artifact.');
@@ -208,6 +245,9 @@ export default class SemanticSync extends CommandInterceptor {
       );
       if (process && !sharedByOther) {
         log.remove(this.definitions.get('rootElements') as ModdleElement[], process);
+        this.removeForeignDi([element, process], log);
+      } else {
+        this.removeForeignDi([element], log);
       }
       return;
     }
@@ -229,6 +269,7 @@ export default class SemanticSync extends CommandInterceptor {
         log.remove(lane.get('flowNodeRef') as ModdleElement[], element);
       }
     }
+    this.removeForeignDi([element], log);
   }
 
   private removeUnusedDataObject(reference: ModdleElement, log: ChangeLog): void {
@@ -269,7 +310,11 @@ export default class SemanticSync extends CommandInterceptor {
     const target = connection.target && bo(connection.target);
     if (!flow || !source || !target) return;
 
-    if (is(flow, 'bpmn:MessageFlow')) {
+    if (is(flow, 'bpmn:ConversationLink')) {
+      this.insertInto(collaborationOf(this.root()), 'conversationLinks', flow, log);
+      log.set(flow, 'sourceRef', source);
+      log.set(flow, 'targetRef', target);
+    } else if (is(flow, 'bpmn:MessageFlow')) {
       // Message flows live in the collaboration and have no incoming/outgoing refs.
       const collaboration = bo(this.root());
       if (!collaboration || !is(collaboration, 'bpmn:Collaboration')) {
@@ -317,9 +362,14 @@ export default class SemanticSync extends CommandInterceptor {
     if (!flow) return;
     this.removeDi(connection, log);
     const owner = flow.$parent;
+    this.removeForeignDi([flow], log);
 
     if (is(flow, 'bpmn:MessageFlow')) {
       if (owner) log.remove(owner.get('messageFlows') as ModdleElement[], flow);
+      return;
+    }
+    if (is(flow, 'bpmn:ConversationLink')) {
+      if (owner) log.remove(owner.get('conversationLinks') as ModdleElement[], flow);
       return;
     }
     if (is(flow, 'bpmn:Association')) {
@@ -359,7 +409,11 @@ export default class SemanticSync extends CommandInterceptor {
     if (!flow || !newSource || !newTarget) return;
     const oldSource = getRef(flow, 'sourceRef');
     const oldTarget = getRef(flow, 'targetRef');
-    if (is(flow, 'bpmn:MessageFlow') || is(flow, 'bpmn:Association')) {
+    if (
+      is(flow, 'bpmn:MessageFlow') ||
+      is(flow, 'bpmn:Association') ||
+      is(flow, 'bpmn:ConversationLink')
+    ) {
       log.set(flow, 'sourceRef', newSource);
       log.set(flow, 'targetRef', newTarget);
       return;

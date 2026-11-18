@@ -19,6 +19,7 @@ export const useEditorStore = create<EditorState>((set) => ({
     zoom: 1,
     readOnly: true,
     activeTool: 'select',
+    activeDiagram: '__root',
   },
   setController: (controller) => set({ controller }),
   setSnapshot: (snapshot) => set({ snapshot }),

@@ -70,6 +70,9 @@ def main() -> int:
                 # Element types SpiffWorkflow's core parser does not implement
                 # (complex gateway, business rule task without DMN, data stores
                 # without a registered implementation) are tool limitations.
+                if "No start event found" in message and "<bpmn:startEvent" not in f.read_text(encoding="utf-8"):
+                    print(f"NOTE  {f.name}: no process content to execute (e.g. a conversation diagram)")
+                    continue
                 if "no support implemented for this task type" in message or "has no implementation" in message:
                     print(f"LIMIT {f.name}: SpiffWorkflow does not implement an element used here ({message.strip()})")
                     continue

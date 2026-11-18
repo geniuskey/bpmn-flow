@@ -34,7 +34,15 @@ type Bounds = { x: number; y: number; width: number; height: number };
 export const MIN_ACTIVITY = { width: 60, height: 40 };
 export const MIN_LANE_HEIGHT = 60;
 
-const ARTIFACT_SHAPES = ['bpmn:TextAnnotation', 'bpmn:Group'];
+/** Shapes that stay on their diagram parent and never change process. */
+const ARTIFACT_SHAPES = [
+  'bpmn:TextAnnotation',
+  'bpmn:Group',
+  'bpmn:Conversation',
+  'bpmn:SubConversation',
+  'bpmn:CallConversation',
+];
+const CONVERSATION_SHAPES = ['bpmn:Conversation', 'bpmn:SubConversation', 'bpmn:CallConversation'];
 const DATA_SHAPES = ['bpmn:DataObjectReference', 'bpmn:DataStoreReference'];
 
 function isUnsupported(el: Element): boolean {
@@ -69,9 +77,14 @@ function rootFrom(el: Element): Element {
 export function canContain(target: Element | undefined, type: string): boolean {
   if (!target) return false;
   const targetBo = bo(target);
-  if (type === 'bpmn:Participant') return !target.parent; // pools live on the root
+  // Pools live on the root of a process or collaboration diagram (not of a sub-process diagram).
+  if (type === 'bpmn:Participant') {
+    return !target.parent && (is(targetBo, 'bpmn:Process') || is(targetBo, 'bpmn:Collaboration'));
+  }
   if (type === 'bpmn:Lane') return false; // lanes are added through `lane.add`
   if (type === 'bpmn:BoundaryEvent') return false; // attached to an activity instead
+  if (CONVERSATION_SHAPES.includes(type))
+    return !target.parent && is(targetBo, 'bpmn:Collaboration');
   if (ARTIFACT_SHAPES.includes(type)) {
     return (
       !target.parent ||
@@ -147,12 +160,24 @@ export function dataAssociationType(
   return null;
 }
 
+/** Conversation links connect a pool with a conversation node. */
+export function canLinkConversation(
+  source: Element | undefined,
+  target: Element | undefined,
+): boolean {
+  if (!source || !target || isUnsupported(source) || isUnsupported(target)) return false;
+  const conv = (el: Element) => CONVERSATION_SHAPES.includes(bo(el)?.$type ?? '');
+  const pool = (el: Element) => is(bo(el), 'bpmn:Participant');
+  return (conv(source) && pool(target)) || (pool(source) && conv(target));
+}
+
 export function connectionType(
   source: Element | undefined,
   target: Element | undefined,
 ): string | null {
   if (canConnect(source, target)) return 'bpmn:SequenceFlow';
   if (canMessageFlow(source, target)) return 'bpmn:MessageFlow';
+  if (canLinkConversation(source, target)) return 'bpmn:ConversationLink';
   if (canAssociate(source, target)) return 'bpmn:Association';
   return dataAssociationType(source, target);
 }
@@ -383,6 +408,7 @@ export default class BpmnFlowRules extends RuleProvider {
         if (!isEditableConnection(bo(ctx.connection))) return false;
         if (type === 'bpmn:MessageFlow') return canMessageFlow(ctx.source, ctx.target);
         if (type === 'bpmn:Association') return canAssociate(ctx.source, ctx.target);
+        if (type === 'bpmn:ConversationLink') return canLinkConversation(ctx.source, ctx.target);
         if (type === 'bpmn:SequenceFlow') return canConnect(ctx.source, ctx.target);
         return false; // data associations: delete and re-create
       },

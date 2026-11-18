@@ -1,4 +1,5 @@
 import {
+  Hexagon,
   CircleDashed,
   Database,
   File,
@@ -56,6 +57,7 @@ const CREATE: { type: string; label: string; icon: ComponentType<{ className?: s
   { type: 'bpmn:TextAnnotation', label: 'Text annotation', icon: MessageSquareText },
   { type: 'bpmn:Group', label: 'Group', icon: Group },
   { type: 'bpmn:Participant', label: 'Pool', icon: Rows3 },
+  { type: 'bpmn:Conversation', label: 'Conversation (in a collaboration)', icon: Hexagon },
 ];
 
 const DRAG_THRESHOLD = 4;
