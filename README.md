@@ -41,17 +41,17 @@ Samples: `?sample=mvp-elements`, `collaboration-lanes`, `analysis-issues`,
 
 ## Scripts
 
-| Command                           | Purpose                                                                                                            |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `npm run typecheck`               | TypeScript (strict)                                                                                                |
-| `npm run lint` / `npm run format` | ESLint / Prettier                                                                                                  |
-| `npm test`                        | Unit, round-trip and XSD tests (Vitest)                                                                            |
-| `npm run schemas`                 | Download the OMG BPMN 2.0 XSDs used by the XSD tests (not committed)                                               |
-| `npm run test:e2e`                | Browser tests (Playwright, Chromium) incl. performance                                                             |
-| `npm run build`                   | Static build in `dist/` (`BASE_PATH=/repo/` for GitHub Pages)                                                      |
-| `npm run interop`                 | External checks: read exports with SpiffWorkflow, pm4py and the Camunda BPMN Model API (see docs/compatibility.md) |
-| `npm run licenses`                | Dependency license audit (`-- --write` regenerates THIRD_PARTY_NOTICES.md)                                         |
-| `npm run verify`                  | typecheck + lint + test + build                                                                                    |
+| Command                           | Purpose                                                                                                                           |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run typecheck`               | TypeScript (strict)                                                                                                               |
+| `npm run lint` / `npm run format` | ESLint / Prettier                                                                                                                 |
+| `npm test`                        | Unit, round-trip and XSD tests (Vitest)                                                                                           |
+| `npm run schemas`                 | Download the OMG BPMN 2.0 XSDs used by the XSD tests (not committed)                                                              |
+| `npm run test:e2e`                | Browser tests (Playwright, Chromium) incl. performance                                                                            |
+| `npm run build`                   | Static build in `dist/` (`BASE_PATH=/repo/` for GitHub Pages)                                                                     |
+| `npm run interop`                 | External checks: SpiffWorkflow, pm4py, the Camunda BPMN Model API and the Camunda Modeler desktop app (see docs/compatibility.md) |
+| `npm run licenses`                | Dependency license audit (`-- --write` regenerates THIRD_PARTY_NOTICES.md)                                                        |
+| `npm run verify`                  | typecheck + lint + test + build                                                                                                   |
 
 Deployment: `.github/workflows/pages.yml` builds and publishes to GitHub Pages on
 pushes to `main` (enable Pages → “GitHub Actions” in the repository settings).

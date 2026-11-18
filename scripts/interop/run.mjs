@@ -51,4 +51,14 @@ if (process.env.CAMUNDA_CLASSPATH) {
 } else {
   console.log('Skipping Camunda check (CAMUNDA_CLASSPATH not set).');
 }
+// Camunda Modeler desktop app: set CAMUNDA_MODELER to its executable.
+if (process.env.CAMUNDA_MODELER) {
+  try {
+    execFileSync('node', ['scripts/interop/camunda_modeler_check.mjs', out], { stdio: 'inherit' });
+  } catch {
+    failed = true;
+  }
+} else {
+  console.log('Skipping Camunda Modeler check (CAMUNDA_MODELER not set).');
+}
 process.exitCode = failed ? 1 : 0;

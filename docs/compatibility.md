@@ -57,7 +57,7 @@ DI bounds/waypoints/labels, namespaces and extension content are preserved.
 - `tests/e2e/editor.spec.ts`: the same flow through the real UI in Chromium,
   including re-importing the exported file.
 
-## External tool checks (SpiffWorkflow, pm4py, Camunda)
+## External tool checks (SpiffWorkflow, pm4py, Camunda engine parser, Camunda Modeler)
 
 `npm run interop` exports every editable fixture (after an edit through the model
 API) plus the diagrams created through the UI in the E2E tests, and reads them
@@ -71,7 +71,12 @@ with three independent BPMN implementations (none is a project dependency):
   engine): read with schema validation, `validateModel`, and resolve every flow
   node, sequence flow and message flow. Set `CAMUNDA_CLASSPATH` (the
   `camunda-bpmn-model` and `camunda-xml-model` jars from Maven Central) and
-  `JAVA` (Java 17+).
+  `JAVA` (Java 17+);
+- **Camunda Modeler 5.53** (commercial vendor's desktop modeler, downloaded
+  separately): each file is opened in the real application (driven by Playwright
+  in Electron mode) and checked for import warnings and rendered elements. Set
+  `CAMUNDA_MODELER` to the application's executable. The first-start privacy
+  dialog is left untouched — nothing is consented to.
 
 Python tools live in a local `.venv-interop`
 (`python3 -m venv .venv-interop && .venv-interop/bin/pip install SpiffWorkflow pm4py`).
@@ -89,6 +94,16 @@ Result on 2026-11-18 (19 files: 11 edited fixtures, 8 diagrams built in the UI):
 | all-elements (every event/task/gateway type, data, artifacts)                                              | tool limit: no complex gateway, no business-rule task without DMN, data stores need a registered implementation | tool limit: no call activity / complex gateway  | ✅                                                            |
 | advanced-elements + E2E edit (transaction, ad-hoc, compensation, cancel, loops, I/O spec, potential owner) | parsed                                                                                                          | tool limit: no transaction / ad-hoc sub-process | tool limit: no ad-hoc sub-process type (with it replaced, ✅) |
 
+**Camunda Modeler 5.53 result (19 files):** 18 files open without any import
+warning and render all their diagram elements, with 0 errors and 0 warnings from
+Camunda's engine lint — including all files built through the BPMN Flow UI
+(created elements, pools/lanes with auto layout, message flows and cross-pool
+moves, boundary events/sub-processes/data/artifacts, loops/transactions/ad-hoc,
+multi-diagram drill-down, conversations). Tool limit: Camunda Modeler does not
+support choreography diagrams (it does not draw choreography tasks and reports
+participant bands shared by two tasks as “multiple DI elements” for the
+participant, although the file is valid against the OMG XSD).
+
 Every tool limit was confirmed by substituting only the named element types, after
 which the file is read successfully. Failures to _execute_ in Spiff come from
 expression languages or runtime configuration, not from the file format. The
@@ -99,12 +114,8 @@ editor had no time expression (now editable, and flagged by
 
 ## Known gaps
 
-- Desktop and SaaS modelers (Camunda Modeler, Signavio, ARIS, …) are not driven
-  automatically. Camunda Modeler opens files with bpmn-js, which the project's
-  license policy excludes from use (an attempt to run it in a sandbox for
-  verification was refused for that reason); Signavio and ARIS are proprietary
-  services that require accounts. Camunda's own engine parser is checked instead,
-  together with the OMG XSD — and BPMN Flow reads files with bpmn-moddle, the same
-  model library bpmn-js uses.
+- Camunda Modeler is checked as the commercial desktop modeler (the official
+  application, run unmodified; BPMN Flow itself does not use bpmn-js). Signavio and
+  ARIS are proprietary SaaS products that require accounts and are not tested.
 - Label bounds are moved with their shape but not resized after renaming.
 - Vendor color extensions (e.g. `bioc:fill`) are preserved but not rendered.
