@@ -81,7 +81,7 @@ with three independent BPMN implementations (none is a project dependency):
 Python tools live in a local `.venv-interop`
 (`python3 -m venv .venv-interop && .venv-interop/bin/pip install SpiffWorkflow pm4py`).
 
-Result on 2026-11-18 (latest run: 19 files, 12 edited fixtures and 7 diagrams built in the UI; the notation files were added later the same day and checked only with SpiffWorkflow and pm4py):
+Result on 2026-11-18 (latest run: 19 files, 12 edited fixtures and 7 diagrams built in the UI):
 
 | File                                                                                                                                                                    | SpiffWorkflow                                                                                                                                                                                           | pm4py                                           | Camunda Model API                                             |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------- |
@@ -93,14 +93,16 @@ Result on 2026-11-18 (latest run: 19 files, 12 edited fixtures and 7 diagrams bu
 | extensions, vendor-camunda-style, mvp-elements, collaboration-messages                                                                                                  | parsed (JUEL conditions are not Python; `id="Start"` collides with a Spiff-internal name)                                                                                                               | ✅                                              | ✅                                                            |
 | all-elements (every event/task/gateway type, data, artifacts)                                                                                                           | tool limit: no complex gateway, no business-rule task without DMN, data stores need a registered implementation                                                                                         | tool limit: no call activity / complex gateway  | ✅                                                            |
 | advanced-elements + E2E edit (transaction, ad-hoc, compensation, cancel, loops, I/O spec, potential owner)                                                              | parsed                                                                                                                                                                                                  | tool limit: no transaction / ad-hoc sub-process | tool limit: no ad-hoc sub-process type (with it replaced, ✅) |
-| notation + E2E edits (Multiple / Parallel Multiple events, event-based gateway variants, collections, black-box pool, message envelopes, process data inputs / outputs) | tool limit: Spiff resolves data associations only to data object / store references, not to process data inputs / outputs (BPMN allows any item-aware element); with those associations skipped, parsed | ✅                                              | not run                                                       |
+| notation + E2E edits (Multiple / Parallel Multiple events, event-based gateway variants, collections, black-box pool, message envelopes, process data inputs / outputs) | tool limit: Spiff resolves data associations only to data object / store references, not to process data inputs / outputs (BPMN allows any item-aware element); with those associations skipped, parsed | ✅                                              | ✅ (9 flow nodes, 8 sequence flows, 2 message flows)          |
 
 **Camunda Modeler 5.53 result (19 files):** 18 files open without any import
 warning and render all their diagram elements, with 0 errors and 0 warnings from
 Camunda's engine lint — including all files built through the BPMN Flow UI
 (created elements, pools/lanes with auto layout, message flows and cross-pool
 moves, boundary events/sub-processes/data/artifacts, loops/transactions/ad-hoc,
-multi-diagram drill-down, conversations). Tool limit: Camunda Modeler does not
+multi-diagram drill-down, conversations, and the notation sample with its UI
+edits: Multiple / Parallel Multiple events, event-based gateway variants,
+collections, black-box pool, message envelopes, process data inputs / outputs). Tool limit: Camunda Modeler does not
 support choreography diagrams (it does not draw choreography tasks and reports
 participant bands shared by two tasks as “multiple DI elements” for the
 participant, although the file is valid against the OMG XSD).
