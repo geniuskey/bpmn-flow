@@ -45,7 +45,33 @@ export interface GenericElement extends ModdleElement {
   $body?: string;
 }
 
-export type BpmnModdleInstance = InstanceType<typeof BpmnModdle>;
+/**
+ * The bpmn-moddle API surface BPMN Flow uses. Declared here (not derived from
+ * the `bpmn-moddle` module) so the published type declarations stand alone.
+ */
+export interface BpmnModdleInstance {
+  fromXML(
+    xml: string,
+    typeName?: string,
+    options?: Record<string, unknown>,
+  ): Promise<{
+    rootElement: ModdleElement;
+    references: unknown[];
+    warnings: {
+      message: string;
+      element?: unknown;
+      property?: unknown;
+      value?: unknown;
+      error?: Error;
+    }[];
+    elementsById: Record<string, ModdleElement>;
+  }>;
+  toXML(
+    element: ModdleElement,
+    options?: { format?: boolean; preamble?: boolean },
+  ): Promise<{ xml: string }>;
+  create(type: string, attrs?: Record<string, unknown>): ModdleElement;
+}
 
 export function createModdle(): BpmnModdleInstance {
   return new BpmnModdle();

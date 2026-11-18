@@ -13,17 +13,9 @@ import type BpmnFlowLayouter from './BpmnFlowLayouter';
 
 export const APPLY_LAYOUT = 'layout.apply';
 
-export interface Box {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+import type { Box, LayoutResult } from '../types';
 
-export interface LayoutResult {
-  /** Target bounds by element id (pools, lanes and flow nodes). */
-  shapes: Record<string, Box>;
-}
+export type { Box, LayoutResult };
 
 export class ApplyLayoutHandler {
   static $inject = ['modeling', 'elementRegistry', 'layouter'];

@@ -14,11 +14,9 @@ import { isEditableConnection, isEditableShapeElement } from '@/bpmn/model/eleme
 import { getMany, getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
 import type { BpmnRoot, BpmnShape } from '../model';
 
-export interface CanvasImportResult {
-  shapes: number;
-  connections: number;
-  warnings: string[];
-}
+import type { CanvasImportResult } from '../types';
+
+export type { CanvasImportResult };
 
 interface Services {
   canvas: Canvas;

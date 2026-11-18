@@ -27,20 +27,19 @@ import MoveCanvasModule from 'diagram-js/lib/navigation/movecanvas';
 import type { BpmnDocument } from '@/bpmn/document';
 import { exportBpmnXml } from '@/bpmn/document';
 import type { ModdleElement } from '@/bpmn/model/moddle';
-import { importDiagram, type CanvasImportResult } from './canvas/importDiagram';
+import { importDiagram } from './canvas/importDiagram';
 import {
   UPDATE_CONDITION,
   UPDATE_DOCUMENTATION,
   UPDATE_PROPERTIES,
-  type PropertyValue,
 } from './commands/UpdatePropertiesHandler';
 import { CHANGE_TYPE } from './commands/ChangeTypeHandler';
 import { SET_EVENT_DEFINITION } from './commands/EventDefinitionHandler';
-import { SET_LOOP, type LoopKind } from './commands/LoopHandler';
+import { SET_LOOP } from './commands/LoopHandler';
 import { SET_CHOREOGRAPHY_PARTICIPANT } from './commands/ChoreographyParticipantHandler';
-import { UPDATE_EVENT_DETAIL, type EventDetail } from './commands/EventDetailHandler';
+import { UPDATE_EVENT_DETAIL } from './commands/EventDetailHandler';
 import { ADD_LANE, SET_POOL_BLACK_BOX, blackBoxBlocker } from './commands/StructureHandlers';
-import { APPLY_LAYOUT, type LayoutResult } from './layout/ApplyLayoutHandler';
+import { APPLY_LAYOUT } from './layout/ApplyLayoutHandler';
 import { deletable } from './interaction/BpmnFlowRules';
 import type DirectEditing from './interaction/DirectEditing';
 import type Clipboard from './interaction/Clipboard';
@@ -50,9 +49,21 @@ import { bo, childrenOf, rootOf, type BpmnData } from './model';
 import { labelOf } from '@/bpmn/model/elements';
 import { getMany, getRef } from '@/bpmn/model/moddle';
 import { coreModule, EDITING_MODULES } from './modules';
-import type { DiagramInfo, EditorSnapshot, EditorTool, Listener } from './types';
+import type {
+  CanvasImportResult,
+  DiagramInfo,
+  EditorOptions,
+  EditorSnapshot,
+  EditorTool,
+  EventDetail,
+  LayoutResult,
+  Listener,
+  LoopKind,
+  PropertyValue,
+} from './types';
+import type { ELK } from 'elkjs/lib/elk-api';
 
-export type { DiagramInfo, EditorSnapshot, EditorTool } from './types';
+export type { DiagramInfo, EditorOptions, EditorSnapshot, EditorTool } from './types';
 
 export class EditorController {
   private diagram: Diagram | null = null;
@@ -73,8 +84,12 @@ export class EditorController {
   /** Undo-stack entry that was on top when the document was last exported (null: none). */
   private savedAction: unknown = null;
   private tool: EditorTool = 'select';
+  private elk: Promise<ELK> | null = null;
 
-  constructor(private readonly container: HTMLElement) {}
+  constructor(
+    protected readonly container: HTMLElement,
+    protected readonly options: EditorOptions = {},
+  ) {}
 
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
@@ -429,7 +444,15 @@ export class EditorController {
     ]);
     const containers = extractLayoutContainers(rootOf(canvas));
     if (!containers.some((c) => c.nodes.length)) return false;
-    const layout = await computeLayout(await createElk(), containers);
+    this.elk ??= createElk(this.options.elkWorker);
+    let elk: ELK;
+    try {
+      elk = await this.elk;
+    } catch (err) {
+      this.elk = null; // let a later attempt retry (e.g. the worker file failed to load)
+      throw err;
+    }
+    const layout = await computeLayout(elk, containers);
     this.applyLayout(layout);
     this.fit();
     return true;

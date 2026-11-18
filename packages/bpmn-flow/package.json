@@ -1,0 +1,70 @@
+{
+  "name": "@geniuskey/bpmn-flow",
+  "version": "0.1.0",
+  "description": "Embeddable BPMN 2.0 editor and analyzer: lossless XML import/export, process analysis, framework-agnostic canvas and a React component.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Euiyun Edwin Kim",
+  "homepage": "https://pages.euiyun.com/bpmn-flow/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/geniuskey/bpmn-flow.git",
+    "directory": "packages/bpmn-flow"
+  },
+  "bugs": "https://github.com/geniuskey/bpmn-flow/issues",
+  "keywords": [
+    "bpmn",
+    "bpmn-2.0",
+    "bpmn-editor",
+    "bpmn-modeler",
+    "process-modeling",
+    "process-analysis",
+    "diagram",
+    "react"
+  ],
+  "sideEffects": [
+    "*.css"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/types/sdk/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./editor": {
+      "types": "./dist/types/sdk/editor.d.ts",
+      "default": "./dist/editor.js"
+    },
+    "./react": {
+      "types": "./dist/types/sdk/react.d.ts",
+      "default": "./dist/react.js"
+    },
+    "./style.css": "./dist/style.css",
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/types/sdk/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE.md"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "dependencies": {
+    "bpmn-moddle": "^10.3.1",
+    "diagram-js": "^15.30.0",
+    "didi": "^12.0.0",
+    "elkjs": "^0.12.1",
+    "tiny-svg": "^4.1.4"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  }
+}

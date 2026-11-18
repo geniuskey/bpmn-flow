@@ -1,4 +1,9 @@
-/** Public types of the editor controller (what the React shell sees). */
+/**
+ * Public types of the editor controller (what the React shell and library
+ * users see). Kept free of diagram-js internals so the published declarations
+ * only depend on diagram-js' element types.
+ */
+import type { ModdleElement } from '@/bpmn/model/moddle';
 
 export interface DiagramInfo {
   rootId: string;
@@ -26,3 +31,46 @@ export interface EditorSnapshot {
 }
 
 export type Listener = (snapshot: EditorSnapshot) => void;
+
+/**
+ * Where the ELK worker script comes from: a URL, or a function that resolves
+ * one (so the worker file is only fetched when layout is first used).
+ */
+export type ElkWorkerSource = string | URL | (() => string | URL | Promise<string | URL>);
+
+export interface EditorOptions {
+  /**
+   * Source of the ELK worker script used by auto layout. Without it, layout
+   * runs ELK on the main thread (fine for small and medium diagrams).
+   */
+  elkWorker?: ElkWorkerSource;
+}
+
+export interface CanvasImportResult {
+  shapes: number;
+  connections: number;
+  warnings: string[];
+}
+
+export interface Box {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface LayoutResult {
+  /** Target bounds by element id (pools, lanes and flow nodes). */
+  shapes: Record<string, Box>;
+}
+
+export type LoopKind = 'none' | 'standard' | 'parallel' | 'sequential';
+
+export type TimerType = 'timeDuration' | 'timeDate' | 'timeCycle';
+
+export type EventDetail =
+  | { kind: 'timer'; timerType: TimerType; value: string }
+  | { kind: 'reference'; name: string }
+  | { kind: 'condition'; value: string };
+
+export type PropertyValue = string | number | boolean | ModdleElement | undefined;

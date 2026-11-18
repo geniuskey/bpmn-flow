@@ -12,7 +12,9 @@ export const UPDATE_PROPERTIES = 'element.updateProperties';
 export const UPDATE_DOCUMENTATION = 'element.updateDocumentation';
 export const UPDATE_CONDITION = 'element.updateCondition';
 
-export type PropertyValue = string | number | boolean | ModdleElement | undefined;
+import type { PropertyValue } from '../types';
+
+export type { PropertyValue };
 
 export interface UpdatePropertiesContext {
   element: Element;

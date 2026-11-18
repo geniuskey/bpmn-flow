@@ -32,6 +32,9 @@ BPMN Flow is a static single-page app. There is no backend.
 └────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+The editor, analysis and BPMN layers are also published as a library
+(`src/sdk`, see [library.md](library.md)); the application layer is not.
+
 Dependencies point downwards only. `src/bpmn` and `src/analysis` import neither
 React nor diagram-js, so they run in Node (unit tests) and could run in a Web Worker.
 

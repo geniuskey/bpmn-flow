@@ -12,7 +12,9 @@ import { ChangeLog } from '../modeling/ChangeLog';
 
 export const SET_LOOP = 'activity.setLoop';
 
-export type LoopKind = 'none' | 'standard' | 'parallel' | 'sequential';
+import type { LoopKind } from '../types';
+
+export type { LoopKind };
 
 export function loopKindOf(activity: ModdleElement): LoopKind {
   const loop = getRef(activity, 'loopCharacteristics');

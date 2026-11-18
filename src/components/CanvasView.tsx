@@ -23,7 +23,11 @@ export function CanvasView({ onReady }: { onReady: (controller: EditorController
     const host = hostRef.current;
     if (!host) return;
     setHostEl(host);
-    const ctrl = new EditorController(host);
+    const ctrl = new EditorController(host, {
+      // A separate, lazily fetched file: ELK (EPL-2.0) is shipped unmodified, and
+      // large layouts run off the main thread.
+      elkWorker: () => import('elkjs/lib/elk-worker.min.js?url').then((m) => m.default),
+    });
     const { setController, setSnapshot } = useEditorStore.getState();
     const unsubscribe = ctrl.subscribe(setSnapshot);
     const offError = ctrl.onCommandError((error) =>

@@ -31,6 +31,29 @@ understand.
 
 See [docs/bpmn-support.md](docs/bpmn-support.md) for the exact support matrix.
 
+## Use it as a library
+
+The editor and the BPMN core are published as
+[`@geniuskey/bpmn-flow`](packages/bpmn-flow/README.md) (MIT):
+
+```bash
+npm install @geniuskey/bpmn-flow
+```
+
+```ts
+import { analyze, loadBpmnDocument } from '@geniuskey/bpmn-flow'; // headless, Node or browser
+import { BpmnFlowEditor } from '@geniuskey/bpmn-flow/editor'; // any framework
+import { BpmnFlowCanvas } from '@geniuskey/bpmn-flow/react'; // React component
+import '@geniuskey/bpmn-flow/style.css';
+
+const editor = new BpmnFlowEditor(document.getElementById('canvas')!, { keyboard: true });
+await editor.importXml(xml);
+const out = await editor.exportXml();
+```
+
+See the [package README](packages/bpmn-flow/README.md) for the API and
+[docs/library.md](docs/library.md) for how the package is built and released.
+
 ## Getting started
 
 ```bash
@@ -51,6 +74,8 @@ Samples: `?sample=mvp-elements`, `collaboration-lanes`, `analysis-issues`,
 | `npm run schemas`                 | Download the OMG BPMN 2.0 XSDs used by the XSD tests (not committed)                                                              |
 | `npm run test:e2e`                | Browser tests (Playwright, Chromium) incl. performance                                                                            |
 | `npm run build`                   | Static build in `dist/` (`BASE_PATH=/repo/` for GitHub Pages)                                                                     |
+| `npm run build:lib`               | Library build in `packages/bpmn-flow/dist/`                                                                                       |
+| `npm run test:lib`                | Pack the library, install it into a fresh project and test it (Node, TypeScript, Vite, Chromium)                                  |
 | `npm run interop`                 | External checks: SpiffWorkflow, pm4py, the Camunda BPMN Model API and the Camunda Modeler desktop app (see docs/compatibility.md) |
 | `npm run licenses`                | Dependency license audit (`-- --write` regenerates THIRD_PARTY_NOTICES.md)                                                        |
 | `npm run verify`                  | typecheck + lint + test + build                                                                                                   |
@@ -79,9 +104,10 @@ pushes to `main` (enable Pages → “GitHub Actions” in the repository settin
 - [BPMN support matrix](docs/bpmn-support.md)
 - [Compatibility and data-loss policy](docs/compatibility.md)
 - [Process analysis](docs/analysis.md)
+- [Library package](docs/library.md)
 - [License review](docs/licenses.md) · [Third-party notices](THIRD_PARTY_NOTICES.md)
 
 ## License
 
-The project license for the BPMN Flow source has not been chosen yet. Third-party
-components keep their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+BPMN Flow is released under the [MIT License](LICENSE). Third-party components keep
+their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

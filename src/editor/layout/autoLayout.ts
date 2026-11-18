@@ -8,6 +8,7 @@
  */
 import type { ELK, ElkNode } from 'elkjs/lib/elk-api';
 import type { Box, LayoutResult } from './ApplyLayoutHandler';
+import type { ElkWorkerSource } from '../types';
 
 export interface LayoutNode {
   id: string;
@@ -172,23 +173,19 @@ export async function computeLayout(
   return { shapes };
 }
 
-let shared: Promise<ELK> | null = null;
-
 /**
- * ELK runs in a Web Worker in the browser so large layouts never block the UI.
- * Environments without workers (tests) use the bundled in-thread build.
+ * With a worker source, ELK runs in a Web Worker so large layouts never block
+ * the UI. Without one (or without `Worker`, e.g. in Node) the bundled in-thread
+ * build is used.
  */
-export function createElk(): Promise<ELK> {
-  shared ??= (async () => {
-    if (typeof Worker !== 'undefined') {
-      const [{ default: ELKApi }, { default: workerUrl }] = await Promise.all([
-        import('elkjs/lib/elk-api.js'),
-        import('elkjs/lib/elk-worker.min.js?url'),
-      ]);
-      return new ELKApi({ workerFactory: () => new Worker(workerUrl) });
-    }
-    const { default: ELKBundled } = await import('elkjs/lib/elk.bundled.js');
-    return new ELKBundled();
-  })();
-  return shared;
+export async function createElk(worker?: ElkWorkerSource): Promise<ELK> {
+  if (worker && typeof Worker !== 'undefined') {
+    const [{ default: ELKApi }, url] = await Promise.all([
+      import('elkjs/lib/elk-api.js'),
+      typeof worker === 'function' ? worker() : worker,
+    ]);
+    return new ELKApi({ workerFactory: () => new Worker(url) });
+  }
+  const { default: ELKBundled } = await import('elkjs/lib/elk.bundled.js');
+  return new ELKBundled();
 }

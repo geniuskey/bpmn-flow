@@ -20,13 +20,10 @@ import { ChangeLog } from '../modeling/ChangeLog';
 
 export const UPDATE_EVENT_DETAIL = 'event.updateDetail';
 
-export type TimerType = 'timeDuration' | 'timeDate' | 'timeCycle';
-export const TIMER_TYPES: TimerType[] = ['timeDuration', 'timeDate', 'timeCycle'];
+import type { EventDetail, TimerType } from '../types';
 
-export type EventDetail =
-  | { kind: 'timer'; timerType: TimerType; value: string }
-  | { kind: 'reference'; name: string }
-  | { kind: 'condition'; value: string };
+export type { EventDetail, TimerType };
+export const TIMER_TYPES: TimerType[] = ['timeDuration', 'timeDate', 'timeCycle'];
 
 /** Definition type → [reference property, referenced root element type]. */
 export const REFERENCES: Record<string, [string, string]> = {

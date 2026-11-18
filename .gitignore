@@ -9,3 +9,6 @@ tests/schema/*.xsd
 tests/interop-out
 .venv-interop
 *.class
+packages/bpmn-flow/dist
+packages/bpmn-flow/LICENSE
+*.tgz

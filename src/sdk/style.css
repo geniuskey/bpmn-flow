@@ -1,0 +1,7 @@
+/*
+ * Stylesheet of the @geniuskey/bpmn-flow editor: diagram-js base styles,
+ * UI tokens for the canvas and the BPMN Flow shape styles.
+ */
+@import 'diagram-js/assets/diagram-js.css';
+@import './tokens.css';
+@import '../styles/canvas.css';

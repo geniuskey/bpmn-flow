@@ -5,3 +5,4 @@ tests/fixtures
 playwright-report
 test-results
 THIRD_PARTY_NOTICES.md
+packages/bpmn-flow/dist

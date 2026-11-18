@@ -4,13 +4,15 @@
   "version": "0.1.0",
   "description": "Modern BPMN Process Editor & Analyzer",
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "engines": {
     "node": ">=20.19"
   },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:lib": "node scripts/build-lib.mjs",
+    "test:lib": "node scripts/lib-smoke.mjs",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",
