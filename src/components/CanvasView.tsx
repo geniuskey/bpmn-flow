@@ -5,6 +5,7 @@ import { EditorController } from '@/editor/EditorController';
 import { ContextMenu } from './ContextMenu';
 import { useEditorStore } from '@/stores/editorStore';
 import { useUiStore } from '@/stores/uiStore';
+import { useDocumentStore } from '@/stores/documentStore';
 
 /**
  * Hosts the diagram-js canvas. The controller is created once; React never
@@ -25,10 +26,18 @@ export function CanvasView({ onReady }: { onReady: (controller: EditorController
     const ctrl = new EditorController(host);
     const { setController, setSnapshot } = useEditorStore.getState();
     const unsubscribe = ctrl.subscribe(setSnapshot);
+    const offError = ctrl.onCommandError((error) =>
+      useDocumentStore.getState().notify({
+        kind: 'error',
+        title: 'That edit failed and was rolled back.',
+        details: [error instanceof Error ? error.message : String(error)],
+      }),
+    );
     setController(ctrl);
     onReady(ctrl);
     return () => {
       unsubscribe();
+      offError();
       setController(null);
       ctrl.destroy();
     };

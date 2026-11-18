@@ -27,6 +27,7 @@ const PREFIX: Record<string, string> = {
 
 function prefixFor(type: string): string {
   if (PREFIX[type]) return PREFIX[type];
+  if (/EventDefinition$/.test(type)) return type.replace(/^bpmn:/, '');
   if (/Event$/.test(type)) return 'Event';
   if (/Gateway$/.test(type)) return 'Gateway';
   return 'Activity';

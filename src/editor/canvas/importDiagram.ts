@@ -151,10 +151,8 @@ export function importDiagram(
       const host = is(bo, 'bpmn:BoundaryEvent')
         ? (elementRegistry.get(getRef(bo, 'attachedToRef')?.id ?? '') as BpmnShape | undefined)
         : undefined;
-      if (host) {
-        shape.host = host;
-        host.attachers.push(shape);
-      }
+      // `host` is a bidirectional reference: setting it also adds to `host.attachers`.
+      if (host) shape.host = host;
       canvas.addShape(shape, host?.parent ?? parentFor(bo));
       result.shapes++;
 

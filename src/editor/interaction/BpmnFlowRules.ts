@@ -150,22 +150,35 @@ export function canAttach(shapes: Element[], target: Element | undefined): boole
   return shapes.length === 1 && is(bo(shapes[0]!), 'bpmn:BoundaryEvent') && isActivity(target);
 }
 
-export function canConnect(source: Element | undefined, target: Element | undefined): boolean {
-  if (!editableNode(source) || !editableNode(target) || source === target) return false;
+/**
+ * Whether a sequence flow may start at `source`. End events, link throw events
+ * (they jump to their catch event), compensation boundary events and
+ * compensation activities (both reached through associations) have no outgoing
+ * sequence flows.
+ */
+export function canBeFlowSource(source: Element | undefined): source is Shape {
+  if (!editableNode(source)) return false;
   const s = bo(source)!;
-  const t = bo(target)!;
-  if (is(s, 'bpmn:EndEvent') || is(t, 'bpmn:StartEvent') || is(t, 'bpmn:BoundaryEvent')) {
+  if (is(s, 'bpmn:EndEvent')) return false;
+  if (is(s, 'bpmn:Activity') && s.get('isForCompensation')) return false;
+  const def = getMany(s, 'eventDefinitions')[0];
+  if (is(s, 'bpmn:IntermediateThrowEvent') && def && is(def, 'bpmn:LinkEventDefinition')) {
     return false;
   }
-  const sourceDef = getMany(s, 'eventDefinitions')[0];
-  if (
-    is(s, 'bpmn:IntermediateThrowEvent') &&
-    sourceDef &&
-    is(sourceDef, 'bpmn:LinkEventDefinition')
-  ) {
-    return false; // a link throw event jumps to its catch event
-  }
-  return !!processOf(source.parent) && processOf(source.parent) === processOf(target.parent);
+  if (is(s, 'bpmn:BoundaryEvent') && def && is(def, 'bpmn:CompensateEventDefinition')) return false;
+  return !!processOf(source.parent);
+}
+
+export function canConnect(source: Element | undefined, target: Element | undefined): boolean {
+  if (!canBeFlowSource(source) || !editableNode(target) || source === target) return false;
+  const t = bo(target)!;
+  if (is(t, 'bpmn:StartEvent') || is(t, 'bpmn:BoundaryEvent')) return false;
+  return processOf(source.parent) === processOf(target.parent);
+}
+
+/** Whether "append <type>" may add a node after `source` in its container. */
+export function canAppend(source: Element | undefined, type: string): boolean {
+  return canBeFlowSource(source) && canContain(source.parent, type);
 }
 
 /** Message flows connect different pools (or nodes in them); gateways do not send messages. */

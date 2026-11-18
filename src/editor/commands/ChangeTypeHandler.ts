@@ -5,12 +5,11 @@
  */
 import type { Element } from 'diagram-js/lib/model/Types';
 import type { BpmnModdleInstance, ModdleElement } from '@/bpmn/model/moddle';
-import { getMany, getRef, is } from '@/bpmn/model/moddle';
+import { containedChildren, getRef, is, walkContainment } from '@/bpmn/model/moddle';
 import { diReferencing } from '@/bpmn/di/di';
 import type Canvas from 'diagram-js/lib/core/Canvas';
 import { bo, type BpmnShape } from '../model';
 import { ChangeLog } from '../modeling/ChangeLog';
-import { allLanes } from '../modeling/semantic';
 
 export const CHANGE_TYPE = 'element.changeType';
 
@@ -49,6 +48,36 @@ interface Context {
   log?: ChangeLog;
 }
 
+/**
+ * Makes every reference to `old` in the definitions point to `next`: sequence
+ * flows, boundary attachments, message flows, associations, lane membership,
+ * compensation and DI. Generic so that no reference kind can be missed.
+ */
+function repointReferences(
+  definitions: ModdleElement,
+  old: ModdleElement,
+  next: ModdleElement,
+  log: ChangeLog,
+): void {
+  walkContainment(definitions, (el) => {
+    if (el === old || !el.$descriptor) return;
+    const record = el as unknown as Record<string, unknown>;
+    for (const prop of el.$descriptor.properties) {
+      if (!prop.isReference) continue;
+      const value = record[prop.name];
+      if (Array.isArray(value)) {
+        const i = value.indexOf(old);
+        if (i >= 0) {
+          log.remove(value, old);
+          log.insert(value, next, i);
+        }
+      } else if (value === old) {
+        log.set(el, prop.name, next);
+      }
+    }
+  });
+}
+
 export default class ChangeTypeHandler {
   static $inject = ['moddle', 'bpmnDefinitions', 'canvas'];
   constructor(
@@ -76,9 +105,11 @@ export default class ChangeTypeHandler {
       next.set(prop.name, Array.isArray(value) ? value.slice() : value);
     }
     for (const [k, v] of Object.entries(old.$attrs ?? {})) next.$attrs[k] = v;
-    // Contained children (documentation, extension elements) move to the new object.
-    for (const child of [...getMany(old, 'documentation'), old.get('extensionElements')]) {
-      if (child && typeof child === 'object') (child as ModdleElement).$parent = next;
+    // Every contained child (documentation, extensions, sub-process content, data
+    // associations, I/O specification, loop characteristics, ...) moves to the new
+    // object, so later edits that go through `$parent` find it there.
+    for (const child of containedChildren(next)) {
+      if (child.$parent === old) log.setParent(child, next);
     }
 
     const container = old.$parent!;
@@ -89,22 +120,11 @@ export default class ChangeTypeHandler {
     log.remove(list, old);
     log.insert(list, next, index);
     log.setParent(next, container);
-    for (const flow of getMany(old, 'incoming')) log.set(flow, 'targetRef', next);
-    for (const flow of getMany(old, 'outgoing')) log.set(flow, 'sourceRef', next);
-    for (const lane of allLanes(container)) {
-      const refs = lane.get('flowNodeRef') as ModdleElement[];
-      const i = refs.indexOf(old);
-      if (i >= 0) {
-        log.remove(refs, old);
-        log.insert(refs, next, i);
-      }
-    }
+    repointReferences(this.definitions, old, next, log);
     // Re-point DI in every diagram, including a drill-down plane of a sub-process.
-    const refs = diReferencing(this.definitions, old);
-    for (const { di } of refs.planeElements) log.set(di, 'bpmnElement', next);
-    for (const diagram of refs.diagrams) {
+    // (`repointReferences` already updated the DI's `bpmnElement`.)
+    for (const diagram of diReferencing(this.definitions, next).diagrams) {
       const plane = getRef(diagram, 'plane')!;
-      log.set(plane, 'bpmnElement', next);
       const root = this.canvas
         .getRootElements()
         .find((r) => (r as { di?: ModdleElement }).di === plane) as
@@ -126,9 +146,6 @@ export default class ChangeTypeHandler {
       () => {
         shape.businessObject = old;
         shape.type = oldType;
-        for (const child of [...getMany(old, 'documentation'), old.get('extensionElements')]) {
-          if (child && typeof child === 'object') (child as ModdleElement).$parent = old;
-        }
       },
     );
     context.log = log;

@@ -18,7 +18,7 @@ import { bo } from '../model';
 import type BpmnElementFactory from '../modeling/BpmnElementFactory';
 import { ADD_LANE } from '../commands/StructureHandlers';
 import type CommandStack from 'diagram-js/lib/command/CommandStack';
-import { deletable } from './BpmnFlowRules';
+import { canAppend, deletable } from './BpmnFlowRules';
 import type DirectEditing from './DirectEditing';
 import { ICONS } from './icons';
 import { findFreePosition } from './placement';
@@ -85,29 +85,25 @@ export default class BpmnContextPadProvider {
     if (!b) return entries;
     const shape = element as Shape;
 
-    if (
-      isEditableFlowNode(b) &&
-      !is(b, 'bpmn:EndEvent') &&
-      !(element as { unsupported?: boolean }).unsupported
-    ) {
-      entries['append.task'] = entry(
-        ICONS.task,
-        'Append task',
-        () => this.append(shape, 'bpmn:Task'),
-        'append',
-      );
-      entries['append.gateway'] = entry(
-        ICONS.gateway,
-        'Append exclusive gateway',
-        () => this.append(shape, 'bpmn:ExclusiveGateway'),
-        'append',
-      );
-      entries['append.end'] = entry(
-        ICONS.endEvent,
-        'Append end event',
-        () => this.append(shape, 'bpmn:EndEvent'),
-        'append',
-      );
+    const unsupported = !!(element as { unsupported?: boolean }).unsupported;
+    const appendable: [string, string, string][] = [
+      ['append.task', 'bpmn:Task', 'Append task'],
+      ['append.gateway', 'bpmn:ExclusiveGateway', 'Append exclusive gateway'],
+      ['append.end', 'bpmn:EndEvent', 'Append end event'],
+    ];
+    const ICON_FOR: Record<string, string> = {
+      'bpmn:Task': ICONS.task,
+      'bpmn:ExclusiveGateway': ICONS.gateway,
+      'bpmn:EndEvent': ICONS.endEvent,
+    };
+    // Only what the modeling rules allow: e.g. no task inside a choreography, no
+    // sequence flow out of a link throw or compensation event.
+    for (const [key, type, title] of appendable) {
+      if (canAppend(element, type)) {
+        entries[key] = entry(ICON_FOR[type]!, title, () => this.append(shape, type), 'append');
+      }
+    }
+    if (isEditableFlowNode(b) && !is(b, 'bpmn:EndEvent') && !unsupported) {
       entries.connect = entry(
         ICONS.connect,
         'Connect to… (drag to target)',

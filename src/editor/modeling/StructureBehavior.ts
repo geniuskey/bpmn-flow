@@ -5,6 +5,7 @@
  *   the existing content
  * - resizing a pool keeps its lanes aligned; resizing a lane grows/shrinks the pool
  * - deleting a lane closes the gap
+ * - a pool or expanded sub-process grows to fit a shape created outside it (append, paste)
  * - lane membership (`flowNodeRef`) follows node positions after every change
  */
 import CommandInterceptor from 'diagram-js/lib/command/CommandInterceptor';
@@ -16,12 +17,21 @@ import type { Connection, Element, Shape } from 'diagram-js/lib/model/Types';
 import { is } from '@/bpmn/model/moddle';
 import { bo, childrenOf, rootOf } from '../model';
 import { POOL_BAND, ROOT_TO_COLLABORATION, UPDATE_LANES } from '../commands/StructureHandlers';
-import { center, containerAt, isFlowNodeShape, lanesOf, participantOf } from './semantic';
+import {
+  center,
+  containerAt,
+  isExpandedContainer,
+  isFlowNodeShape,
+  lanesOf,
+  participantOf,
+} from './semantic';
 
 type Bounds = { x: number; y: number; width: number; height: number };
 type Hints = { lanesHandled?: boolean; wrapProcess?: boolean };
 
 const WRAP_PADDING = 50;
+/** Space kept between a container's edge and content it grows for. */
+const GROW_PADDING = 30;
 
 export default class StructureBehavior extends CommandInterceptor {
   static override $inject = ['eventBus', 'canvas', 'modeling', 'commandStack'];
@@ -103,6 +113,7 @@ export default class StructureBehavior extends CommandInterceptor {
 
     this.postExecute('shape.create', (e: { context: { shape: Shape; hints?: Hints } }) => {
       if (e.context.hints?.wrapProcess) this.wrapContent(e.context.shape);
+      else this.growToFit(e.context.shape);
     });
 
     this.postExecute(
@@ -172,6 +183,41 @@ export default class StructureBehavior extends CommandInterceptor {
       if ((el as Connection).waypoints)
         this.modeling.moveConnection(el as Connection, { x: 0, y: 0 }, participant);
       else this.modeling.moveShape(el as Shape, { x: 0, y: 0 }, participant);
+    }
+  }
+
+  /**
+   * Grows the pool or expanded sub-process that a new shape (appended, pasted)
+   * belongs to, and its enclosing containers, so the shape is drawn inside it.
+   */
+  private growToFit(shape: Shape): void {
+    if (is(bo(shape), 'bpmn:Participant') || is(bo(shape), 'bpmn:Lane')) return;
+    let inner: Bounds = shape;
+    let container = shape.parent as Shape | undefined;
+    while (
+      container?.parent &&
+      (is(bo(container), 'bpmn:Participant') || isExpandedContainer(container))
+    ) {
+      const left = is(bo(container), 'bpmn:Participant') ? POOL_BAND + GROW_PADDING : GROW_PADDING;
+      const x = Math.min(container.x, inner.x - left);
+      const y = Math.min(container.y, inner.y - GROW_PADDING);
+      const right = Math.max(container.x + container.width, inner.x + inner.width + GROW_PADDING);
+      const bottom = Math.max(
+        container.y + container.height,
+        inner.y + inner.height + GROW_PADDING,
+      );
+      const next = { x, y, width: right - x, height: bottom - y };
+      if (
+        next.x === container.x &&
+        next.y === container.y &&
+        next.width === container.width &&
+        next.height === container.height
+      ) {
+        return;
+      }
+      this.modeling.resizeShape(container, next);
+      inner = container;
+      container = container.parent as Shape | undefined;
     }
   }
 

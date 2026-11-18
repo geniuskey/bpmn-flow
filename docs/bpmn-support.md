@@ -52,6 +52,12 @@ The source of truth is `src/bpmn/model/elements.ts` (what counts as supported) a
 
 Every edit is one undoable step, including compound ones (append, paste, auto layout).
 
+Copy / paste / duplicate carry the semantics of flow nodes and the sequence flows
+between them: event definitions (with their message, signal, ... references), loop
+markers, conditions, default flows, documentation and attributes. Not carried: the
+content of sub-processes, data associations, and boundary events (they are left
+out of the copy). Cut deletes exactly what it copied.
+
 Files with several diagrams (e.g. collapsed sub-processes drawn in their own
 diagram, as Camunda Modeler 5 writes them) are editable: switch diagrams with the
 selector in the header or “Open sub-process diagram” on a collapsed sub-process.

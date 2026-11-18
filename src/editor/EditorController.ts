@@ -73,10 +73,11 @@ import {
   UpdateLanesHandler,
 } from './commands/StructureHandlers';
 import { APPLY_LAYOUT, ApplyLayoutHandler, type LayoutResult } from './layout/ApplyLayoutHandler';
-import BpmnFlowRules, { canMoveShape, deletable } from './interaction/BpmnFlowRules';
+import BpmnFlowRules, { deletable } from './interaction/BpmnFlowRules';
 import BpmnContextPadProvider from './interaction/ContextPadProvider';
 import DirectEditing from './interaction/DirectEditing';
 import Clipboard from './interaction/Clipboard';
+import { guardCommandStack } from './commands/guardCommandStack';
 import ClickSelectsBehavior from './interaction/SelectionBehavior';
 import ConnectTool from './interaction/ConnectTool';
 import BpmnElementFactory from './modeling/BpmnElementFactory';
@@ -183,6 +184,7 @@ export class EditorController {
   private diagram: Diagram | null = null;
   private document: BpmnDocument | null = null;
   private listeners = new Set<Listener>();
+  private errorListeners = new Set<(error: unknown) => void>();
   private snapshot: EditorSnapshot = {
     selection: [],
     canUndo: false,
@@ -204,6 +206,12 @@ export class EditorController {
     this.listeners.add(listener);
     listener(this.snapshot);
     return () => this.listeners.delete(listener);
+  }
+
+  /** Called when an edit failed and was rolled back (see guardCommandStack). */
+  onCommandError(listener: (error: unknown) => void): () => void {
+    this.errorListeners.add(listener);
+    return () => this.errorListeners.delete(listener);
   }
 
   getSnapshot(): EditorSnapshot {
@@ -264,6 +272,11 @@ export class EditorController {
       this.update({ selection: e.newSelection.map((el) => el.id) });
     });
     eventBus.on('commandStack.changed', () => this.refreshStack());
+    if (!readOnly) {
+      guardCommandStack(diagram.get<CommandStack>('commandStack'), eventBus, (error) => {
+        for (const l of this.errorListeners) l(error);
+      });
+    }
     eventBus.on('bpmnflow.showDiagram', (e: { rootId: string }) => this.showDiagram(e.rootId));
     eventBus.on('tool-manager.update', (e: { tool: string | null }) => {
       if (this.get<ConnectTool>('connectTool')?.isActive()) return;
@@ -429,16 +442,17 @@ export class EditorController {
   }
 
   cut(): number {
-    const n = this.copy();
-    if (n) this.deleteSelection();
-    return n;
+    return this.get<Clipboard>('bpmnClipboard')?.cut() ?? 0;
   }
 
   nudge(dx: number, dy: number): void {
     const modeling = this.get<Modeling>('modeling');
     const shapes = this.selected().filter((e) => !(e as Connection).waypoints);
     const delta = { x: dx, y: dy };
-    if (!modeling || !shapes.length || !shapes.every((s) => canMoveShape(s, delta))) return;
+    // The same rule as a mouse drag: it also checks container changes (sequence
+    // flows cannot cross into a sub-process, data objects keep their scope, ...).
+    const rules = this.get<Rules>('rules');
+    if (!modeling || !shapes.length || !rules?.allowed('elements.move', { shapes, delta })) return;
     modeling.moveElements(shapes as Shape[], delta);
   }
 
@@ -691,5 +705,6 @@ export class EditorController {
     this.diagram?.destroy();
     this.diagram = null;
     this.listeners.clear();
+    this.errorListeners.clear();
   }
 }

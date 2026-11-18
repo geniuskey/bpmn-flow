@@ -53,8 +53,16 @@ The `bpmn:Definitions` moddle tree is the only document model.
   `ChangeLog` stored in the command context and replayed backwards on `reverted`,
   so undo restores the exact previous model (array positions included).
 - `StructureBehavior` adds compound behavior (wrap content into the first pool,
-  keep lanes aligned with their pool, recompute lane membership) through nested
-  commands, so each user action is still one undo step.
+  keep lanes aligned with their pool, grow a pool or expanded sub-process to fit a
+  shape created outside it, recompute lane membership) through nested commands, so
+  each user action is still one undo step.
+- Keyboard moves and context-pad appends ask the same rules as mouse edits
+  (`elements.move`, `canAppend`); there is no second code path that skips them.
+- `guardCommandStack` makes a failing command recoverable: it reverts the steps the
+  command had completed, clears diagram-js' stuck in-progress state and reports the
+  error, instead of leaving every later edit merged into the broken command.
+- `element.changeType` re-parents every contained child and re-points every
+  reference to the replaced object (generic walk over the definitions).
 - `BpmnElementFactory` creates the business object and DI for every element that
   diagram-js features create (palette, append, paste), with ids from `BpmnIds`.
 - Semantic edits from the inspector are commands too (`element.updateProperties`,
