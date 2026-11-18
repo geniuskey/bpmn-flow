@@ -1,0 +1,7 @@
+dist
+node_modules
+package-lock.json
+tests/fixtures
+playwright-report
+test-results
+THIRD_PARTY_NOTICES.md

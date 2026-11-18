@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_collab" targetNamespace="http://example.com/bpmn-flow/fixtures">
+  <bpmn:collaboration id="Collab_1">
+    <bpmn:participant id="Pool_support" name="Support" processRef="Process_support" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_support" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_1">
+      <bpmn:lane id="Lane_agent" name="Agent">
+        <bpmn:flowNodeRef>Start_ticket</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Triage</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_expert" name="Expert">
+        <bpmn:flowNodeRef>Solve</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_ticket</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="Start_ticket" name="Ticket opened">
+      <bpmn:outgoing>T1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Triage" name="Triage ticket">
+      <bpmn:incoming>T1</bpmn:incoming>
+      <bpmn:outgoing>T2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Solve" name="Solve problem">
+      <bpmn:incoming>T2</bpmn:incoming>
+      <bpmn:outgoing>T3</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="End_ticket" name="Ticket closed">
+      <bpmn:incoming>T3</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="T1" sourceRef="Start_ticket" targetRef="Triage" />
+    <bpmn:sequenceFlow id="T2" sourceRef="Triage" targetRef="Solve" />
+    <bpmn:sequenceFlow id="T3" sourceRef="Solve" targetRef="End_ticket" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_collab">
+    <bpmndi:BPMNPlane id="Plane_collab" bpmnElement="Collab_1">
+      <bpmndi:BPMNShape id="Pool_support_di" bpmnElement="Pool_support" isHorizontal="true">
+        <dc:Bounds x="120" y="60" width="640" height="300" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_agent_di" bpmnElement="Lane_agent" isHorizontal="true">
+        <dc:Bounds x="150" y="60" width="610" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_expert_di" bpmnElement="Lane_expert" isHorizontal="true">
+        <dc:Bounds x="150" y="210" width="610" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_ticket_di" bpmnElement="Start_ticket">
+        <dc:Bounds x="212" y="117" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="197" y="160" width="66" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Triage_di" bpmnElement="Triage">
+        <dc:Bounds x="300" y="95" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Solve_di" bpmnElement="Solve">
+        <dc:Bounds x="460" y="245" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_ticket_di" bpmnElement="End_ticket">
+        <dc:Bounds x="632" y="267" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="618" y="310" width="64" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="T1_di" bpmnElement="T1">
+        <di:waypoint x="248" y="135" /><di:waypoint x="300" y="135" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="T2_di" bpmnElement="T2">
+        <di:waypoint x="400" y="135" /><di:waypoint x="430" y="135" /><di:waypoint x="430" y="285" /><di:waypoint x="460" y="285" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="T3_di" bpmnElement="T3">
+        <di:waypoint x="560" y="285" /><di:waypoint x="632" y="285" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

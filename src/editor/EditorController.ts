@@ -1,0 +1,580 @@
+/**
+ * The integration layer between React and diagram-js.
+ *
+ * React owns the application shell; diagram-js owns the canvas DOM. React talks
+ * to the canvas only through this controller, and the controller reports back
+ * through a small, serializable `EditorSnapshot`, so the canvas never re-renders
+ * because of React state and React never re-renders on every canvas event.
+ */
+import Diagram from 'diagram-js';
+import type Canvas from 'diagram-js/lib/core/Canvas';
+import type ElementFactory from 'diagram-js/lib/core/ElementFactory';
+import type ElementRegistry from 'diagram-js/lib/core/ElementRegistry';
+import type EventBus from 'diagram-js/lib/core/EventBus';
+import type CommandStack from 'diagram-js/lib/command/CommandStack';
+import type Selection from 'diagram-js/lib/features/selection/Selection';
+import type Modeling from 'diagram-js/lib/features/modeling/Modeling';
+import type Create from 'diagram-js/lib/features/create/Create';
+import type Rules from 'diagram-js/lib/features/rules/Rules';
+import type { Connection, Element, Shape } from 'diagram-js/lib/model/Types';
+import type { ModuleDeclaration } from 'didi';
+import SelectionModule from 'diagram-js/lib/features/selection';
+import OutlineModule from 'diagram-js/lib/features/outline';
+import MoveModule from 'diagram-js/lib/features/move';
+import ModelingModule from 'diagram-js/lib/features/modeling';
+import LassoToolModule from 'diagram-js/lib/features/lasso-tool';
+import HandToolModule from 'diagram-js/lib/features/hand-tool';
+import AutoScrollModule from 'diagram-js/lib/features/auto-scroll';
+import CreateModule from 'diagram-js/lib/features/create';
+import ConnectModule from 'diagram-js/lib/features/connect';
+import ConnectionPreviewModule from 'diagram-js/lib/features/connection-preview';
+import BendpointsModule from 'diagram-js/lib/features/bendpoints';
+import ResizeModule from 'diagram-js/lib/features/resize';
+import AttachSupportModule from 'diagram-js/lib/features/attach-support';
+import GridSnappingModule from 'diagram-js/lib/features/grid-snapping';
+import ContextPadModule from 'diagram-js/lib/features/context-pad';
+import ZoomScrollModule from 'diagram-js/lib/navigation/zoomscroll';
+import MoveCanvasModule from 'diagram-js/lib/navigation/movecanvas';
+import type { BpmnDocument } from '@/bpmn/document';
+import { exportBpmnXml } from '@/bpmn/document';
+import type { ModdleElement } from '@/bpmn/model/moddle';
+import { importDiagram, type CanvasImportResult } from './canvas/importDiagram';
+import BpmnFlowRenderer from './renderer/BpmnFlowRenderer';
+import BpmnFlowLayouter from './layout/BpmnFlowLayouter';
+import DiSync from './commands/DiSync';
+import {
+  UPDATE_CONDITION,
+  UPDATE_DOCUMENTATION,
+  UPDATE_PROPERTIES,
+  UpdateConditionHandler,
+  UpdateDocumentationHandler,
+  UpdatePropertiesHandler,
+  type PropertyValue,
+} from './commands/UpdatePropertiesHandler';
+import ChangeTypeHandler, { CHANGE_TYPE } from './commands/ChangeTypeHandler';
+import EventDefinitionHandler, { SET_EVENT_DEFINITION } from './commands/EventDefinitionHandler';
+import LoopHandler, { SET_LOOP, type LoopKind } from './commands/LoopHandler';
+import EventDetailHandler, {
+  UPDATE_EVENT_DETAIL,
+  type EventDetail,
+} from './commands/EventDetailHandler';
+import {
+  ADD_LANE,
+  AddLaneHandler,
+  ROOT_TO_COLLABORATION,
+  RootToCollaborationHandler,
+  UPDATE_LANES,
+  UpdateLanesHandler,
+} from './commands/StructureHandlers';
+import { APPLY_LAYOUT, ApplyLayoutHandler, type LayoutResult } from './layout/ApplyLayoutHandler';
+import BpmnFlowRules, { canMoveShape, deletable } from './interaction/BpmnFlowRules';
+import BpmnContextPadProvider from './interaction/ContextPadProvider';
+import DirectEditing from './interaction/DirectEditing';
+import Clipboard from './interaction/Clipboard';
+import ClickSelectsBehavior from './interaction/SelectionBehavior';
+import ConnectTool from './interaction/ConnectTool';
+import BpmnElementFactory from './modeling/BpmnElementFactory';
+import BpmnIds from './modeling/BpmnIds';
+import SemanticSync from './modeling/SemanticSync';
+import StructureBehavior from './modeling/StructureBehavior';
+import { bo, childrenOf, rootOf } from './model';
+
+export type EditorTool = 'select' | 'pan' | 'lasso' | 'connect';
+
+export interface EditorSnapshot {
+  selection: string[];
+  canUndo: boolean;
+  canRedo: boolean;
+  /** Increments on every model change (execute / undo / redo). */
+  revision: number;
+  /** True when the model changed since it was opened or last exported. */
+  dirty: boolean;
+  zoom: number;
+  readOnly: boolean;
+  /** Tool currently active inside diagram-js (tools end themselves, e.g. after one connection). */
+  activeTool: EditorTool;
+}
+
+type Listener = (snapshot: EditorSnapshot) => void;
+
+class BpmnFlowCommands {
+  static $inject = ['commandStack'];
+  constructor(commandStack: CommandStack) {
+    commandStack.registerHandler(UPDATE_PROPERTIES, UpdatePropertiesHandler);
+    commandStack.registerHandler(UPDATE_DOCUMENTATION, UpdateDocumentationHandler);
+    commandStack.registerHandler(UPDATE_CONDITION, UpdateConditionHandler);
+    commandStack.registerHandler(CHANGE_TYPE, ChangeTypeHandler);
+    commandStack.registerHandler(SET_EVENT_DEFINITION, EventDefinitionHandler);
+    commandStack.registerHandler(SET_LOOP, LoopHandler);
+    commandStack.registerHandler(UPDATE_EVENT_DETAIL, EventDetailHandler);
+    commandStack.registerHandler(ROOT_TO_COLLABORATION, RootToCollaborationHandler);
+    commandStack.registerHandler(UPDATE_LANES, UpdateLanesHandler);
+    commandStack.registerHandler(ADD_LANE, AddLaneHandler);
+    commandStack.registerHandler(APPLY_LAYOUT, ApplyLayoutHandler);
+  }
+}
+
+const coreModule: ModuleDeclaration = {
+  __init__: ['bpmnFlowRenderer', 'clickSelectsBehavior'],
+  bpmnFlowRenderer: ['type', BpmnFlowRenderer],
+  clickSelectsBehavior: ['type', ClickSelectsBehavior],
+};
+
+const editingModule: ModuleDeclaration = {
+  __init__: [
+    'diSync',
+    'semanticSync',
+    'structureBehavior',
+    'bpmnFlowRules',
+    'bpmnFlowCommands',
+    'bpmnContextPadProvider',
+    'directEditing',
+    'connectTool',
+  ],
+  elementFactory: ['type', BpmnElementFactory],
+  bpmnIds: ['type', BpmnIds],
+  layouter: ['type', BpmnFlowLayouter],
+  diSync: ['type', DiSync],
+  semanticSync: ['type', SemanticSync],
+  structureBehavior: ['type', StructureBehavior],
+  bpmnFlowRules: ['type', BpmnFlowRules],
+  bpmnFlowCommands: ['type', BpmnFlowCommands],
+  bpmnContextPadProvider: ['type', BpmnContextPadProvider],
+  directEditing: ['type', DirectEditing],
+  bpmnClipboard: ['type', Clipboard],
+  connectTool: ['type', ConnectTool],
+};
+
+const EDITING_MODULES: ModuleDeclaration[] = [
+  ModelingModule,
+  MoveModule,
+  AutoScrollModule,
+  CreateModule,
+  ConnectModule,
+  ConnectionPreviewModule,
+  BendpointsModule,
+  ResizeModule,
+  AttachSupportModule,
+  GridSnappingModule,
+  ContextPadModule,
+  editingModule,
+];
+
+export class EditorController {
+  private diagram: Diagram | null = null;
+  private document: BpmnDocument | null = null;
+  private listeners = new Set<Listener>();
+  private snapshot: EditorSnapshot = {
+    selection: [],
+    canUndo: false,
+    canRedo: false,
+    revision: 0,
+    dirty: false,
+    zoom: 1,
+    readOnly: true,
+    activeTool: 'select',
+  };
+  private savedStackIndex = -1;
+  private tool: EditorTool = 'select';
+
+  constructor(private readonly container: HTMLElement) {}
+
+  subscribe(listener: Listener): () => void {
+    this.listeners.add(listener);
+    listener(this.snapshot);
+    return () => this.listeners.delete(listener);
+  }
+
+  getSnapshot(): EditorSnapshot {
+    return this.snapshot;
+  }
+
+  getDocument(): BpmnDocument | null {
+    return this.document;
+  }
+
+  /** Replaces the displayed document. The previous diagram is only destroyed once the new one imported. */
+  open(doc: BpmnDocument): CanvasImportResult {
+    const readOnly = doc.report.mode === 'readonly';
+    const host = document.createElement('div');
+    host.className = 'bf-canvas-host';
+    const modules: ModuleDeclaration[] = [
+      SelectionModule,
+      OutlineModule,
+      ZoomScrollModule,
+      MoveCanvasModule,
+      HandToolModule,
+      LassoToolModule,
+      coreModule,
+      { moddle: ['value', doc.moddle], bpmnDefinitions: ['value', doc.definitions] },
+    ];
+    if (!readOnly) modules.push(...EDITING_MODULES);
+
+    const diagram = new Diagram({ canvas: { container: host }, modules });
+    let result: CanvasImportResult;
+    try {
+      result = importDiagram(
+        {
+          canvas: diagram.get<Canvas>('canvas'),
+          elementFactory: diagram.get<ElementFactory>('elementFactory'),
+          elementRegistry: diagram.get<ElementRegistry>('elementRegistry'),
+        },
+        doc.definitions,
+      );
+    } catch (err) {
+      diagram.destroy();
+      throw err;
+    }
+
+    this.diagram?.destroy();
+    this.container.replaceChildren(host);
+    this.diagram = diagram;
+    this.document = doc;
+    this.savedStackIndex = -1;
+    this.wireEvents(diagram, readOnly);
+    this.setTool(this.tool);
+    this.fit();
+    return result;
+  }
+
+  private wireEvents(diagram: Diagram, readOnly: boolean): void {
+    const eventBus = diagram.get<EventBus>('eventBus');
+    eventBus.on('selection.changed', (e: { newSelection: Element[] }) => {
+      this.update({ selection: e.newSelection.map((el) => el.id) });
+    });
+    eventBus.on('commandStack.changed', () => this.refreshStack());
+    eventBus.on('tool-manager.update', (e: { tool: string | null }) => {
+      if (this.get<ConnectTool>('connectTool')?.isActive()) return;
+      const map: Record<string, EditorTool> = { hand: 'pan', lasso: 'lasso' };
+      this.update({ activeTool: (e.tool && map[e.tool]) || 'select' });
+    });
+    eventBus.on('canvas.viewbox.changed', (e: { viewbox: { scale: number } }) => {
+      this.update({ zoom: e.viewbox.scale });
+    });
+    this.update({
+      selection: [],
+      canUndo: false,
+      canRedo: false,
+      dirty: false,
+      readOnly,
+      revision: this.snapshot.revision + 1,
+    });
+  }
+
+  private stack(): CommandStack | null {
+    if (!this.diagram || this.snapshot.readOnly) return null;
+    return this.diagram.get<CommandStack>('commandStack', false) ?? null;
+  }
+
+  private stackIndex(): number {
+    const stack = this.stack() as unknown as { _stackIdx?: number } | null;
+    return stack?._stackIdx ?? -1;
+  }
+
+  private refreshStack(): void {
+    const stack = this.stack();
+    this.update({
+      canUndo: !!stack?.canUndo(),
+      canRedo: !!stack?.canRedo(),
+      dirty: this.stackIndex() !== this.savedStackIndex,
+      revision: this.snapshot.revision + 1,
+    });
+  }
+
+  private update(patch: Partial<EditorSnapshot>): void {
+    this.snapshot = { ...this.snapshot, ...patch };
+    for (const l of this.listeners) l(this.snapshot);
+  }
+
+  undo(): void {
+    this.stack()?.undo();
+  }
+
+  redo(): void {
+    this.stack()?.redo();
+  }
+
+  zoomBy(factor: number): void {
+    if (!this.diagram) return;
+    const canvas = this.diagram.get<Canvas>('canvas');
+    const scale = Math.min(4, Math.max(0.2, canvas.zoom() * factor));
+    canvas.zoom(scale, 'auto' as never);
+  }
+
+  resetZoom(): void {
+    this.diagram?.get<Canvas>('canvas').zoom(1);
+  }
+
+  fit(): void {
+    if (!this.diagram) return;
+    const canvas = this.diagram.get<Canvas>('canvas');
+    const registry = this.diagram.get<ElementRegistry>('elementRegistry');
+    if (registry.getAll().length <= 1) return;
+    canvas.zoom('fit-viewport', 'auto' as never);
+    // diagram-js never upscales beyond 100%; add breathing room only when the diagram was shrunk.
+    const scale = canvas.zoom();
+    if (scale < 1) canvas.zoom(scale * 0.94, 'auto' as never);
+  }
+
+  setTool(tool: EditorTool): void {
+    this.tool = tool;
+    if (!this.diagram) return;
+    const dragging = this.get<{ cancel(): void }>('dragging');
+    dragging?.cancel();
+    const connectTool = this.get<ConnectTool>('connectTool');
+    connectTool?.setActive(tool === 'connect' && !this.snapshot.readOnly);
+    if (tool === 'connect') {
+      this.update({ activeTool: connectTool ? 'connect' : 'select' });
+      return;
+    }
+    if (tool === 'select') return;
+    // diagram-js tools start from a pointer event; synthesize one at the canvas center.
+    const rect = this.container.getBoundingClientRect();
+    const event = new MouseEvent('mousemove', {
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2,
+    });
+    if (tool === 'pan') {
+      this.get<{ activateHand(e: MouseEvent, autoActivate?: boolean): void }>(
+        'handTool',
+      )?.activateHand(event, true);
+    } else if (tool === 'lasso') {
+      this.get<{ activateSelection(e: MouseEvent, autoActivate?: boolean): void }>(
+        'lassoTool',
+      )?.activateSelection(event, true);
+    }
+  }
+
+  private get<T>(name: string): T | null {
+    return (this.diagram?.get<T>(name, false) as T | undefined) ?? null;
+  }
+
+  setSnapToGrid(active: boolean): void {
+    this.get<{ setActive(a: boolean): void }>('gridSnapping')?.setActive(active);
+  }
+
+  getRootId(): string | null {
+    return this.get<Canvas>('canvas')?.getRootElement().id ?? null;
+  }
+
+  /** Starts placing a new element (palette click or drag). */
+  startCreate(event: MouseEvent | PointerEvent, type: string): void {
+    const create = this.get<Create>('create');
+    const factory = this.get<ElementFactory>('elementFactory');
+    if (!create || !factory) return;
+    create.start(event as MouseEvent, factory.createShape({ type }));
+  }
+
+  canCreateIn(type: string): boolean {
+    const rules = this.get<Rules>('rules');
+    const canvas = this.get<Canvas>('canvas');
+    if (!rules || !canvas) return false;
+    const root = rootOf(canvas);
+    if (type === 'bpmn:Participant') return true;
+    if (bo(root)?.$type === 'bpmn:Process') return true;
+    return childrenOf(root).some((c) => bo(c)?.$type === 'bpmn:Participant');
+  }
+
+  private selected(): Element[] {
+    return (this.get<Selection>('selection')?.get() as Element[] | undefined) ?? [];
+  }
+
+  deleteSelection(): number {
+    const modeling = this.get<Modeling>('modeling');
+    if (!modeling) return 0;
+    const elements = deletable(this.selected());
+    if (elements.length) modeling.removeElements(elements);
+    return elements.length;
+  }
+
+  copy(): number {
+    return this.get<Clipboard>('bpmnClipboard')?.copy() ?? 0;
+  }
+
+  paste(): number {
+    return this.get<Clipboard>('bpmnClipboard')?.paste().length ?? 0;
+  }
+
+  duplicate(): number {
+    return this.get<Clipboard>('bpmnClipboard')?.duplicate().length ?? 0;
+  }
+
+  cut(): number {
+    const n = this.copy();
+    if (n) this.deleteSelection();
+    return n;
+  }
+
+  nudge(dx: number, dy: number): void {
+    const modeling = this.get<Modeling>('modeling');
+    const shapes = this.selected().filter((e) => !(e as Connection).waypoints);
+    const delta = { x: dx, y: dy };
+    if (!modeling || !shapes.length || !shapes.every((s) => canMoveShape(s, delta))) return;
+    modeling.moveElements(shapes as Shape[], delta);
+  }
+
+  renameSelection(): boolean {
+    const [element] = this.selected();
+    const editing = this.get<DirectEditing>('directEditing');
+    if (!element || !editing?.canEdit(element)) return false;
+    editing.activate(element);
+    return true;
+  }
+
+  isEditingText(): boolean {
+    return !!this.get<DirectEditing>('directEditing')?.isActive();
+  }
+
+  private exec(command: string, context: Record<string, unknown>): void {
+    const stack = this.stack();
+    if (stack) stack.execute(command, context);
+  }
+
+  updateDocumentation(id: string, text: string): void {
+    const element = this.getElement(id);
+    if (element) this.exec(UPDATE_DOCUMENTATION, { element, text });
+  }
+
+  updateCondition(id: string, body: string): void {
+    const element = this.getElement(id);
+    if (element) this.exec(UPDATE_CONDITION, { element, body });
+  }
+
+  changeType(id: string, newType: string): void {
+    const element = this.getElement(id);
+    if (element) this.exec(CHANGE_TYPE, { element, newType });
+  }
+
+  setEventDefinition(id: string, definitionType: string | undefined): void {
+    const element = this.getElement(id);
+    if (element) this.exec(SET_EVENT_DEFINITION, { element, definitionType });
+  }
+
+  updateEventDetail(id: string, detail: EventDetail): void {
+    const element = this.getElement(id);
+    if (element) this.exec(UPDATE_EVENT_DETAIL, { element, detail });
+  }
+
+  setLoop(id: string, loop: LoopKind): void {
+    const element = this.getElement(id);
+    if (element) this.exec(SET_LOOP, { element, loop });
+  }
+
+  setDefaultFlow(gatewayId: string, flow: ModdleElement | undefined): void {
+    const element = this.getElement(gatewayId);
+    if (element) this.exec(UPDATE_PROPERTIES, { element, properties: { default: flow } });
+  }
+
+  addLane(targetId: string): void {
+    const target = this.getElement(targetId);
+    if (target) this.exec(ADD_LANE, { target });
+  }
+
+  applyLayout(layout: LayoutResult): void {
+    this.exec(APPLY_LAYOUT, { layout });
+  }
+
+  /** Runs ELK auto layout on the whole diagram as one undoable step. */
+  async autoLayout(): Promise<boolean> {
+    const canvas = this.get<Canvas>('canvas');
+    if (!canvas || this.snapshot.readOnly) return false;
+    const [{ computeLayout, createElk }, { extractLayoutContainers }] = await Promise.all([
+      import('./layout/autoLayout'),
+      import('./layout/extract'),
+    ]);
+    const containers = extractLayoutContainers(rootOf(canvas));
+    if (!containers.some((c) => c.nodes.length)) return false;
+    const layout = await computeLayout(await createElk(), containers);
+    this.applyLayout(layout);
+    this.fit();
+    return true;
+  }
+
+  /** Root-level graph of the current diagram for auto layout. */
+  getElements(): Element[] {
+    return (this.get<ElementRegistry>('elementRegistry')?.getAll() ?? []) as Element[];
+  }
+
+  /** Maps BPMN ids (including process ids) to diagram element ids. */
+  resolveIds(ids: string[]): string[] {
+    const registry = this.get<ElementRegistry>('elementRegistry');
+    if (!registry) return [];
+    const out: string[] = [];
+    for (const id of ids) {
+      if (registry.get(id)) {
+        out.push(id);
+        continue;
+      }
+      const owner = registry.find((e) => {
+        const b = bo(e as Element);
+        return (
+          !!b && (b.id === id || (b.get?.('processRef') as ModdleElement | undefined)?.id === id)
+        );
+      });
+      if (owner) out.push(owner.id);
+    }
+    return [...new Set(out)];
+  }
+
+  /** Selects and highlights the elements of an analysis finding. */
+  reveal(ids: string[]): void {
+    const resolved = this.resolveIds(ids);
+    const canvas = this.get<Canvas>('canvas');
+    const selectable = resolved.filter((id) => this.getElement(id)?.parent);
+    this.select(selectable, false);
+    this.highlight(resolved);
+    const elements = selectable.map((id) => this.getElement(id)!).filter(Boolean);
+    if (canvas && elements.length) canvas.scrollToElement(elements[0]!, 120);
+  }
+
+  highlight(ids: string[]): void {
+    const canvas = this.get<Canvas>('canvas');
+    const registry = this.get<ElementRegistry>('elementRegistry');
+    if (!canvas || !registry) return;
+    for (const el of registry.getAll()) canvas.removeMarker(el.id, 'bf-highlight');
+    for (const id of ids) if (registry.get(id)) canvas.addMarker(id, 'bf-highlight');
+  }
+
+  select(ids: string[], scroll = true): void {
+    if (!this.diagram) return;
+    const registry = this.diagram.get<ElementRegistry>('elementRegistry');
+    const elements = ids.map((id) => registry.get(id)).filter((e): e is Element => !!e);
+    this.diagram.get<Selection>('selection').select(elements);
+    if (scroll && elements.length) {
+      this.diagram.get<Canvas>('canvas').scrollToElement(elements[0]!, 80);
+    }
+  }
+
+  selectAll(): void {
+    if (!this.diagram) return;
+    const canvas = this.diagram.get<Canvas>('canvas');
+    const registry = this.diagram.get<ElementRegistry>('elementRegistry');
+    const root = canvas.getRootElement();
+    this.diagram
+      .get<Selection>('selection')
+      .select(registry.filter((e) => e !== root && !!e.parent));
+  }
+
+  getElement(id: string): Element | undefined {
+    return this.diagram?.get<ElementRegistry>('elementRegistry').get(id) as Element | undefined;
+  }
+
+  updateProperties(id: string, properties: Record<string, PropertyValue>): void {
+    const element = this.getElement(id);
+    if (element) this.exec(UPDATE_PROPERTIES, { element, properties });
+  }
+
+  async exportXml(): Promise<string> {
+    if (!this.document) throw new Error('No document is open.');
+    const xml = await exportBpmnXml(this.document);
+    this.savedStackIndex = this.stackIndex();
+    this.refreshStack();
+    return xml;
+  }
+
+  destroy(): void {
+    this.diagram?.destroy();
+    this.diagram = null;
+    this.listeners.clear();
+  }
+}

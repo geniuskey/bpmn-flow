@@ -1,0 +1,390 @@
+/*
+ * Canvas styling for BPMN Flow shapes. Classes are emitted by
+ * src/editor/renderer/BpmnFlowRenderer.ts. All colors come from tokens so light
+ * and dark themes switch without re-rendering.
+ */
+:root {
+  --bf-shape-fill: oklch(1 0 0);
+  --bf-shape-stroke: oklch(0.36 0.03 265);
+  --bf-event-start: oklch(0.6 0.15 155);
+  --bf-event-end: oklch(0.58 0.2 25);
+  --bf-gateway: oklch(0.7 0.15 70);
+  --bf-gateway-fill: oklch(0.99 0.015 85);
+  --bf-activity-fill: oklch(1 0 0);
+  --bf-pool-fill: oklch(0.985 0.003 260);
+  --bf-pool-band: oklch(0.96 0.006 262);
+  --bf-label: oklch(0.27 0.02 265);
+  --bf-muted: oklch(0.6 0.02 262);
+  --bf-connection: oklch(0.45 0.02 265);
+  --bf-unsupported: oklch(0.62 0.03 262);
+  --bf-shadow: drop-shadow(0 1px 1.5px oklch(0.2 0.02 265 / 0.12));
+}
+
+.dark {
+  --bf-shape-fill: oklch(0.22 0.01 265);
+  --bf-shape-stroke: oklch(0.78 0.02 262);
+  --bf-event-start: oklch(0.72 0.15 155);
+  --bf-event-end: oklch(0.7 0.18 25);
+  --bf-gateway: oklch(0.8 0.14 75);
+  --bf-gateway-fill: oklch(0.24 0.02 75);
+  --bf-activity-fill: oklch(0.23 0.012 265);
+  --bf-pool-fill: oklch(0.19 0.008 265);
+  --bf-pool-band: oklch(0.215 0.01 265);
+  --bf-label: oklch(0.92 0.006 260);
+  --bf-muted: oklch(0.62 0.015 262);
+  --bf-connection: oklch(0.72 0.015 262);
+  --bf-unsupported: oklch(0.55 0.02 262);
+  --bf-shadow: drop-shadow(0 1px 2px oklch(0 0 0 / 0.5));
+}
+
+.bf-canvas-host {
+  position: absolute;
+  inset: 0;
+  /* diagram-js theme variables */
+  --canvas-fill-color: transparent;
+  --accent-color: var(--primary);
+  --element-selected-outline-stroke-color: var(--primary);
+  --element-selected-outline-secondary-stroke-color: color-mix(
+    in oklch,
+    var(--primary) 45%,
+    transparent
+  );
+  --lasso-fill-color: color-mix(in oklch, var(--primary) 12%, transparent);
+  --lasso-stroke-color: var(--primary);
+  --element-dragger-color: var(--primary);
+}
+
+.bf-canvas-host .djs-container {
+  background-color: var(--canvas);
+  background-image: radial-gradient(var(--canvas-grid) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.bf-shape {
+  fill: var(--bf-shape-fill);
+  stroke: var(--bf-shape-stroke);
+  stroke-width: 1.5px;
+}
+
+.bf-activity {
+  fill: var(--bf-activity-fill);
+  filter: var(--bf-shadow);
+}
+
+.bf-event {
+  fill: var(--bf-shape-fill);
+}
+.bf-start-event {
+  stroke: var(--bf-event-start);
+  stroke-width: 2px;
+  fill: color-mix(in oklch, var(--bf-event-start) 8%, var(--bf-shape-fill));
+}
+.bf-end-event {
+  stroke: var(--bf-event-end);
+  stroke-width: 4px;
+  fill: color-mix(in oklch, var(--bf-event-end) 8%, var(--bf-shape-fill));
+}
+
+.bf-gateway {
+  stroke: var(--bf-gateway);
+  stroke-width: 2px;
+  fill: var(--bf-gateway-fill);
+}
+.bf-marker {
+  fill: none;
+  stroke: var(--bf-gateway);
+  stroke-width: 3.5px;
+  stroke-linecap: round;
+}
+
+.bf-participant {
+  fill: var(--bf-pool-fill);
+  stroke-width: 1.25px;
+}
+.bf-lane {
+  fill: transparent;
+  stroke-width: 1px;
+  stroke: color-mix(in oklch, var(--bf-shape-stroke) 55%, transparent);
+}
+.bf-pool-divider {
+  fill: none;
+  stroke: color-mix(in oklch, var(--bf-shape-stroke) 55%, transparent);
+  stroke-width: 1px;
+}
+.bf-pool-label {
+  font-weight: 600;
+}
+
+.bf-icon-stroke {
+  fill: none;
+  stroke: var(--bf-muted);
+  stroke-width: 1.4px;
+}
+.bf-icon-teeth {
+  fill: none;
+  stroke: var(--bf-muted);
+  stroke-width: 2.6px;
+}
+
+.bf-label {
+  fill: var(--bf-label);
+  stroke: none;
+  pointer-events: none;
+  user-select: none;
+}
+.bf-external-label,
+.bf-flow-label {
+  font-size: 11.5px;
+}
+.bf-flow-label {
+  fill: var(--bf-muted);
+}
+
+.bf-connection {
+  fill: none;
+  stroke: var(--bf-connection);
+  stroke-width: 1.5px;
+  stroke-linejoin: round;
+}
+.bf-arrow {
+  fill: var(--bf-connection);
+  stroke: var(--bf-connection);
+  stroke-width: 1px;
+  stroke-linejoin: round;
+}
+.bf-connection-marker {
+  fill: none;
+  stroke: var(--bf-connection);
+  stroke-width: 1.5px;
+}
+.bf-conditional-marker {
+  fill: var(--bf-shape-fill);
+  stroke: var(--bf-connection);
+  stroke-width: 1.25px;
+}
+
+/* Unsupported elements: visibly not part of the editable model. */
+.bf-unsupported {
+  stroke: var(--bf-unsupported);
+  stroke-dasharray: 5 3;
+  fill: color-mix(in oklch, var(--bf-unsupported) 8%, var(--bf-shape-fill));
+  filter: none;
+}
+.bf-connection.bf-unsupported {
+  fill: none;
+}
+.bf-caption {
+  fill: var(--bf-unsupported);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  pointer-events: none;
+}
+
+/* Analysis highlight (selected finding). */
+.djs-element.bf-highlight .djs-visual > :first-child {
+  stroke: var(--destructive) !important;
+  stroke-width: 3px !important;
+}
+
+/* Keyboard focus on the canvas: subtle inset ring instead of the default outline. */
+.bf-canvas-host .djs-container svg:focus {
+  outline: none;
+}
+.bf-canvas-host .djs-container svg:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--primary) 50%, transparent);
+  outline-offset: -2px;
+}
+
+/* Contextual toolbar (diagram-js context pad). */
+.bf-canvas-host .djs-context-pad {
+  display: none;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 16px oklch(0 0 0 / 0.12);
+  width: max-content !important;
+  flex-direction: column;
+}
+.bf-canvas-host .djs-context-pad.open {
+  display: flex;
+}
+.bf-canvas-host .djs-context-pad .group {
+  display: flex;
+  gap: 2px;
+}
+.bf-canvas-host .djs-context-pad .entry {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  border-radius: 6px;
+  color: var(--muted-foreground);
+  background: transparent;
+  box-shadow: none;
+  cursor: default;
+}
+.bf-canvas-host .djs-context-pad .entry:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+.bf-canvas-host .djs-context-pad .entry svg {
+  pointer-events: none;
+}
+
+/* Inline rename */
+.bf-direct-editing {
+  position: absolute;
+  z-index: 20;
+  min-height: 24px;
+  padding: 4px 6px;
+  border: 1.5px solid var(--primary);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  line-height: 1.25;
+  text-align: center;
+  resize: none;
+  outline: none;
+  box-shadow: 0 4px 16px oklch(0 0 0 / 0.15);
+}
+
+/* Bendpoints, resize handles and connection previews */
+.bf-canvas-host .djs-bendpoint .djs-visual circle,
+.bf-canvas-host .djs-segment-dragger .djs-visual {
+  fill: var(--primary);
+  stroke: var(--card);
+}
+.bf-canvas-host .djs-resizer-visual {
+  fill: var(--card) !important;
+  stroke: var(--primary) !important;
+}
+.bf-canvas-host .djs-connection-preview .djs-visual path,
+.bf-canvas-host .djs-dragger .bf-connection {
+  stroke: var(--primary);
+}
+
+.bf-connect-tool .djs-shape {
+  cursor: crosshair;
+}
+
+/* Message flows: dashed, hollow start circle, hollow arrow head. */
+.bf-connection.bf-message-flow {
+  stroke-dasharray: 7 4;
+}
+.bf-message-start,
+.bf-message-arrow {
+  fill: var(--bf-shape-fill);
+  stroke: var(--bf-connection);
+  stroke-width: 1.25px;
+}
+
+/* Event definition markers */
+.bf-event-marker {
+  fill: none;
+  stroke: var(--bf-shape-stroke);
+  stroke-width: 1.4px;
+  stroke-linejoin: round;
+}
+.bf-event-marker-filled {
+  fill: var(--bf-shape-stroke);
+  stroke: var(--bf-shape-stroke);
+  stroke-width: 1.4px;
+}
+.bf-event-marker-inverse {
+  fill: none;
+  stroke: var(--bf-shape-fill);
+  stroke-width: 1.4px;
+}
+
+/* Additional element families */
+.bf-call-activity {
+  stroke-width: 3.5px;
+}
+.bf-subprocess {
+  fill: color-mix(in oklch, var(--bf-activity-fill) 70%, transparent);
+  filter: none;
+}
+.bf-event-subprocess {
+  stroke-dasharray: 2 3;
+}
+.bf-intermediate-event {
+  stroke: var(--bf-gateway);
+  stroke-width: 1.5px;
+  fill: var(--bf-shape-fill);
+}
+.bf-intermediate-inner {
+  fill: none;
+  stroke: var(--bf-gateway);
+  stroke-width: 1.25px;
+}
+.bf-non-interrupting {
+  stroke-dasharray: 4 3;
+}
+.bf-marker-thin {
+  fill: none;
+  stroke: var(--bf-gateway);
+  stroke-width: 1.4px;
+}
+.bf-icon-filled {
+  fill: var(--bf-muted);
+  stroke: var(--bf-muted);
+  stroke-width: 1.2px;
+}
+.bf-icon-inverse {
+  fill: none;
+  stroke: var(--bf-shape-fill);
+  stroke-width: 1.2px;
+}
+.bf-annotation {
+  fill: none;
+  stroke: var(--bf-muted);
+  stroke-width: 1.5px;
+}
+.bf-annotation-hit {
+  fill: transparent;
+  stroke: none;
+}
+.bf-group {
+  fill: none;
+  stroke: var(--bf-muted);
+  stroke-width: 1.5px;
+  stroke-dasharray: 8 4 2 4;
+}
+.bf-group-label {
+  font-weight: 600;
+}
+.bf-data {
+  fill: var(--bf-shape-fill);
+  stroke: var(--bf-shape-stroke);
+  stroke-width: 1.4px;
+}
+.bf-data-fold {
+  fill: none;
+  stroke: var(--bf-shape-stroke);
+  stroke-width: 1.2px;
+}
+.bf-connection.bf-association {
+  stroke-dasharray: 2 4;
+  stroke-linecap: round;
+}
+.bf-open-arrow {
+  fill: none;
+  stroke: var(--bf-connection);
+  stroke-width: 1.25px;
+}
+.bf-transaction-inner {
+  fill: none;
+  stroke: var(--bf-shape-stroke);
+  stroke-width: 1.25px;
+}
+.bf-cancel-marker,
+.bf-cancel-marker-filled {
+  fill: none;
+  stroke: var(--bf-shape-stroke);
+  stroke-width: 3px;
+  stroke-linecap: round;
+}

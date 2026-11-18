@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_msg" targetNamespace="http://example.com/bpmn-flow/fixtures">
+  <bpmn:message id="Msg_order" name="Order" />
+  <bpmn:collaboration id="Collab_msg">
+    <bpmn:participant id="Pool_customer" name="Customer" processRef="Process_customer" />
+    <bpmn:participant id="Pool_shop" name="Shop" processRef="Process_shop" />
+    <bpmn:messageFlow id="MF_order" name="order" sourceRef="Send" targetRef="Receive" messageRef="Msg_order" />
+    <bpmn:messageFlow id="MF_invoice" name="invoice" sourceRef="Ship" targetRef="Pool_customer" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_customer" isExecutable="false">
+    <bpmn:startEvent id="Weekly" name="Every Monday">
+      <bpmn:outgoing>c1</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="Timer_1">
+        <bpmn:timeCycle xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="bpmn:tFormalExpression">R/P1W</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+    <bpmn:task id="Send" name="Place order">
+      <bpmn:incoming>c1</bpmn:incoming>
+      <bpmn:outgoing>c2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="Placed" name="Order placed">
+      <bpmn:incoming>c2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="c1" sourceRef="Weekly" targetRef="Send" />
+    <bpmn:sequenceFlow id="c2" sourceRef="Send" targetRef="Placed" />
+  </bpmn:process>
+  <bpmn:process id="Process_shop" isExecutable="false">
+    <bpmn:startEvent id="Receive" name="Order received">
+      <bpmn:outgoing>s1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MED_1" messageRef="Msg_order" />
+    </bpmn:startEvent>
+    <bpmn:task id="Ship" name="Ship goods">
+      <bpmn:incoming>s1</bpmn:incoming>
+      <bpmn:outgoing>s2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="Done" name="Done">
+      <bpmn:incoming>s2</bpmn:incoming>
+      <bpmn:terminateEventDefinition id="Term_1" />
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="s1" sourceRef="Receive" targetRef="Ship" />
+    <bpmn:sequenceFlow id="s2" sourceRef="Ship" targetRef="Done" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_msg">
+    <bpmndi:BPMNPlane id="Plane_msg" bpmnElement="Collab_msg">
+      <bpmndi:BPMNShape id="Pool_customer_di" bpmnElement="Pool_customer" isHorizontal="true">
+        <dc:Bounds x="120" y="60" width="600" height="180" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pool_shop_di" bpmnElement="Pool_shop" isHorizontal="true">
+        <dc:Bounds x="120" y="320" width="600" height="180" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Weekly_di" bpmnElement="Weekly"><dc:Bounds x="192" y="132" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Send_di" bpmnElement="Send"><dc:Bounds x="290" y="110" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Placed_di" bpmnElement="Placed"><dc:Bounds x="462" y="132" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Receive_di" bpmnElement="Receive"><dc:Bounds x="322" y="392" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Ship_di" bpmnElement="Ship"><dc:Bounds x="430" y="370" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Done_di" bpmnElement="Done"><dc:Bounds x="602" y="392" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="c1_di" bpmnElement="c1"><di:waypoint x="228" y="150" /><di:waypoint x="290" y="150" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c2_di" bpmnElement="c2"><di:waypoint x="390" y="150" /><di:waypoint x="462" y="150" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s1_di" bpmnElement="s1"><di:waypoint x="358" y="410" /><di:waypoint x="430" y="410" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s2_di" bpmnElement="s2"><di:waypoint x="530" y="410" /><di:waypoint x="602" y="410" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_order_di" bpmnElement="MF_order"><di:waypoint x="340" y="190" /><di:waypoint x="340" y="392" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_invoice_di" bpmnElement="MF_invoice"><di:waypoint x="480" y="370" /><di:waypoint x="480" y="240" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

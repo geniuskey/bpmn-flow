@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_adv" targetNamespace="http://example.com/bpmn-flow/fixtures">
+  <bpmn:process id="Process_adv" name="Booking" isExecutable="false">
+    <bpmn:startEvent id="Start">
+      <bpmn:outgoing>a1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Collect" name="Collect requests">
+      <bpmn:incoming>a1</bpmn:incoming>
+      <bpmn:outgoing>a2</bpmn:outgoing>
+      <bpmn:ioSpecification id="IO_1">
+        <bpmn:dataInput id="DI_1" name="customer" />
+        <bpmn:dataOutput id="DO_out" name="requests" />
+        <bpmn:inputSet id="IS_1"><bpmn:dataInputRefs>DI_1</bpmn:dataInputRefs></bpmn:inputSet>
+        <bpmn:outputSet id="OS_1"><bpmn:dataOutputRefs>DO_out</bpmn:dataOutputRefs></bpmn:outputSet>
+      </bpmn:ioSpecification>
+      <bpmn:potentialOwner id="Owner_1">
+        <bpmn:resourceAssignmentExpression id="RAE_1">
+          <bpmn:formalExpression>sales</bpmn:formalExpression>
+        </bpmn:resourceAssignmentExpression>
+      </bpmn:potentialOwner>
+      <bpmn:standardLoopCharacteristics id="Loop_1" testBefore="false" />
+    </bpmn:userTask>
+    <bpmn:transaction id="Book" name="Book trip">
+      <bpmn:incoming>a2</bpmn:incoming>
+      <bpmn:outgoing>a3</bpmn:outgoing>
+      <bpmn:startEvent id="TS">
+        <bpmn:outgoing>t1</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:serviceTask id="Flight" name="Book flight">
+        <bpmn:incoming>t1</bpmn:incoming>
+        <bpmn:outgoing>t2</bpmn:outgoing>
+        <bpmn:multiInstanceLoopCharacteristics id="MI_1" isSequential="true">
+          <bpmn:loopCardinality xsi:type="bpmn:tFormalExpression">3</bpmn:loopCardinality>
+        </bpmn:multiInstanceLoopCharacteristics>
+      </bpmn:serviceTask>
+      <bpmn:boundaryEvent id="Comp" attachedToRef="Flight">
+        <bpmn:compensateEventDefinition id="CED_1" />
+      </bpmn:boundaryEvent>
+      <bpmn:serviceTask id="Cancel_flight" name="Cancel flight" isForCompensation="true" />
+      <bpmn:endEvent id="TE">
+        <bpmn:incoming>t2</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="t1" sourceRef="TS" targetRef="Flight" />
+      <bpmn:sequenceFlow id="t2" sourceRef="Flight" targetRef="TE" />
+      <bpmn:association id="CompAssoc" associationDirection="One" sourceRef="Comp" targetRef="Cancel_flight" />
+    </bpmn:transaction>
+    <bpmn:boundaryEvent id="Cancelled" attachedToRef="Book">
+      <bpmn:outgoing>a4</bpmn:outgoing>
+      <bpmn:cancelEventDefinition id="CancelED_1" />
+    </bpmn:boundaryEvent>
+    <bpmn:adHocSubProcess id="Extras" name="Extras">
+      <bpmn:incoming>a3</bpmn:incoming>
+      <bpmn:outgoing>a5</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics id="MI_2" />
+      <bpmn:task id="Hotel" name="Hotel" />
+      <bpmn:task id="Car" name="Car" />
+    </bpmn:adHocSubProcess>
+    <bpmn:endEvent id="Booked" name="Booked">
+      <bpmn:incoming>a5</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="Aborted" name="Aborted">
+      <bpmn:incoming>a4</bpmn:incoming>
+      <bpmn:compensateEventDefinition id="CED_2" />
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="a1" sourceRef="Start" targetRef="Collect" />
+    <bpmn:sequenceFlow id="a2" sourceRef="Collect" targetRef="Book" />
+    <bpmn:sequenceFlow id="a3" sourceRef="Book" targetRef="Extras" />
+    <bpmn:sequenceFlow id="a4" sourceRef="Cancelled" targetRef="Aborted" />
+    <bpmn:sequenceFlow id="a5" sourceRef="Extras" targetRef="Booked" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_adv">
+    <bpmndi:BPMNPlane id="Plane_adv" bpmnElement="Process_adv">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="152" y="182" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Collect_di" bpmnElement="Collect"><dc:Bounds x="240" y="160" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Book_di" bpmnElement="Book" isExpanded="true"><dc:Bounds x="400" y="80" width="400" height="300" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TS_di" bpmnElement="TS"><dc:Bounds x="432" y="152" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Flight_di" bpmnElement="Flight"><dc:Bounds x="520" y="130" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Comp_di" bpmnElement="Comp"><dc:Bounds x="552" y="192" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Cancel_flight_di" bpmnElement="Cancel_flight"><dc:Bounds x="650" y="260" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TE_di" bpmnElement="TE"><dc:Bounds x="702" y="152" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Cancelled_di" bpmnElement="Cancelled"><dc:Bounds x="582" y="362" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Extras_di" bpmnElement="Extras" isExpanded="true"><dc:Bounds x="860" y="130" width="260" height="140" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Hotel_di" bpmnElement="Hotel"><dc:Bounds x="880" y="160" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Car_di" bpmnElement="Car"><dc:Bounds x="1000" y="160" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Booked_di" bpmnElement="Booked"><dc:Bounds x="1182" y="182" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Aborted_di" bpmnElement="Aborted"><dc:Bounds x="582" y="442" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="a1_di" bpmnElement="a1"><di:waypoint x="188" y="200" /><di:waypoint x="240" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a2_di" bpmnElement="a2"><di:waypoint x="340" y="200" /><di:waypoint x="400" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a3_di" bpmnElement="a3"><di:waypoint x="800" y="200" /><di:waypoint x="860" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a4_di" bpmnElement="a4"><di:waypoint x="600" y="398" /><di:waypoint x="600" y="442" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a5_di" bpmnElement="a5"><di:waypoint x="1120" y="200" /><di:waypoint x="1182" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="t1_di" bpmnElement="t1"><di:waypoint x="468" y="170" /><di:waypoint x="520" y="170" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="t2_di" bpmnElement="t2"><di:waypoint x="620" y="170" /><di:waypoint x="702" y="170" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="CompAssoc_di" bpmnElement="CompAssoc"><di:waypoint x="570" y="228" /><di:waypoint x="570" y="300" /><di:waypoint x="650" y="300" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:acme="http://example.com/schema/acme" xmlns:vendor="http://example.com/schema/vendor" id="Definitions_ext" targetNamespace="http://example.com/bpmn-flow/fixtures" acme:schemaVersion="3">
+  <bpmn:process id="Process_ext" isExecutable="true" vendor:historyTimeToLive="P30D">
+    <bpmn:extensionElements>
+      <acme:properties>
+        <acme:property name="owner" value="finance" />
+        <acme:property name="sla">48h</acme:property>
+      </acme:properties>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start_ext" name="Start" vendor:initiator="requester">
+      <bpmn:outgoing>E1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Call_api" name="Call API" vendor:type="http-connector" vendor:retries="3">
+      <bpmn:extensionElements>
+        <vendor:ioMapping>
+          <vendor:input source="=order.id" target="orderId" />
+          <vendor:output source="=response.status" target="status" />
+        </vendor:ioMapping>
+        <acme:note><![CDATA[Uses <internal> gateway & retries]]></acme:note>
+      </bpmn:extensionElements>
+      <bpmn:incoming>E1</bpmn:incoming>
+      <bpmn:outgoing>E2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_ext" name="End">
+      <bpmn:incoming>E2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="E1" sourceRef="Start_ext" targetRef="Call_api" acme:weight="0.7" />
+    <bpmn:sequenceFlow id="E2" sourceRef="Call_api" targetRef="End_ext" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_ext">
+    <bpmndi:BPMNPlane id="Plane_ext" bpmnElement="Process_ext">
+      <bpmndi:BPMNShape id="Start_ext_di" bpmnElement="Start_ext">
+        <dc:Bounds x="152" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Call_api_di" bpmnElement="Call_api" acme:color="#ff0000">
+        <dc:Bounds x="240" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_ext_di" bpmnElement="End_ext">
+        <dc:Bounds x="392" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="E1_di" bpmnElement="E1">
+        <di:waypoint x="188" y="120" /><di:waypoint x="240" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E2_di" bpmnElement="E2">
+        <di:waypoint x="340" y="120" /><di:waypoint x="392" y="120" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_unsup" targetNamespace="http://example.com/bpmn-flow/fixtures">
+  <bpmn:message id="Message_1" name="Invoice" />
+  <bpmn:collaboration id="Collab_unsup">
+    <bpmn:participant id="Buyer" name="Buyer" processRef="Process_buyer" />
+    <bpmn:participant id="Seller" name="Seller" />
+    <bpmn:conversation id="Conv_1" name="Invoicing" />
+    <bpmn:conversationLink id="CL_1" sourceRef="Buyer" targetRef="Conv_1" />
+    <bpmn:conversationLink id="CL_2" sourceRef="Conv_1" targetRef="Seller" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_buyer" isExecutable="false">
+    <bpmn:startEvent id="Start_msg" name="Invoice received">
+      <bpmn:outgoing>U1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:endEvent id="End_unsup">
+      <bpmn:incoming>U1</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="U1" sourceRef="Start_msg" targetRef="End_unsup" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_unsup">
+    <bpmndi:BPMNPlane id="Plane_unsup" bpmnElement="Collab_unsup">
+      <bpmndi:BPMNShape id="Buyer_di" bpmnElement="Buyer" isHorizontal="true"><dc:Bounds x="100" y="60" width="500" height="160" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Seller_di" bpmnElement="Seller" isHorizontal="true"><dc:Bounds x="100" y="380" width="500" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_msg_di" bpmnElement="Start_msg"><dc:Bounds x="182" y="122" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_unsup_di" bpmnElement="End_unsup"><dc:Bounds x="432" y="122" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Conv_1_di" bpmnElement="Conv_1"><dc:Bounds x="325" y="275" width="50" height="43" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="U1_di" bpmnElement="U1"><di:waypoint x="218" y="140" /><di:waypoint x="432" y="140" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="CL_1_di" bpmnElement="CL_1"><di:waypoint x="350" y="220" /><di:waypoint x="350" y="275" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="CL_2_di" bpmnElement="CL_2"><di:waypoint x="350" y="318" /><di:waypoint x="350" y="380" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

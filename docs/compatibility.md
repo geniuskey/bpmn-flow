@@ -1,0 +1,105 @@
+# Compatibility and data-loss policy
+
+BPMN Flow targets **BPMN 2.0.2 XML** (namespace `http://www.omg.org/spec/BPMN/20100524/MODEL`)
+with BPMN DI. We do not claim compatibility with every BPMN file. Instead, every
+file is checked when it is opened, and the editor refuses to do anything it cannot
+prove is lossless.
+
+## When a file is opened
+
+| Condition                                                                                                          | Mode      | Re-export           | Why                                                              |
+| ------------------------------------------------------------------------------------------------------------------ | --------- | ------------------- | ---------------------------------------------------------------- |
+| bpmn-moddle reports a warning (unknown element outside `extensionElements`, unresolved reference, duplicate id, …) | read-only | **blocked**         | moddle drops that content; re-exporting would silently delete it |
+| Serialize → re-parse does not reproduce the identical canonical model                                              | read-only | **blocked**         | preservation cannot be proven                                    |
+| Unsupported diagram elements (see bpmn-support.md)                                                                 | read-only | allowed (unchanged) | editing around unknown semantics could break them                |
+| No BPMN DI / more than one diagram / dangling or duplicate DI                                                      | read-only | allowed (unchanged) |                                                                  |
+| Missing DI for a supported element                                                                                 | read-only | allowed (unchanged) | it could not be shown                                            |
+| Vendor attributes / extension elements                                                                             | editable  | allowed             | preserved and proven by the round-trip check                     |
+| Root-level Message, Signal, …                                                                                      | editable  | allowed             | not reachable by MVP edits                                       |
+
+"Download original" always returns the exact bytes that were opened.
+
+Findings are listed under **Analysis → Compatibility**; clicking one selects the element.
+
+## When a file is exported
+
+`exportBpmnXml` serializes the live moddle tree, re-parses the output and compares
+the canonical forms (`src/bpmn/model/canonical.ts`). If anything differs, the export
+is aborted with the differences listed. A successful export therefore guarantees that
+re-importing the file yields the same model.
+
+XML text identity is not a goal: attribute order, whitespace and namespace prefix
+order may change, `xsi:type` is compared through the element type, attributes
+written with their schema default value (e.g. `testBefore="false"`) may be omitted,
+and a `<formalExpression>` element may be written as the equivalent
+`<expression xsi:type="tFormalExpression">`, and namespace declarations that are no longer used by any element
+or attribute (for example `xmlns:di` after the last sequence flow is deleted) are
+omitted. Element ids, types, names, references, parent/child relations,
+DI bounds/waypoints/labels, namespaces and extension content are preserved.
+
+## Verification
+
+- `tests/roundtrip/xsd.test.ts` and the editing E2E tests validate exported XML
+  against the official OMG BPMN 2.0 XSD with `xmllint` (`npm run schemas` downloads
+  the schemas; the tests are skipped when they are not available).
+- Fixtures cover plain processes, all MVP elements, collaborations with lanes,
+  vendor extensions (custom namespaces, CDATA, extension attributes on DI), a
+  Camunda-style export (camunda/bioc/color extensions, `BPMNLabelStyle`), unsupported
+  elements, lossy content, missing DI and malformed XML.
+
+- `tests/roundtrip/roundtrip.test.ts`: Original → Import → Export → Re-import, and
+  Original → Import → Edit (rename, move with label, re-route) → Export → Re-import,
+  for every editable fixture, comparing `snapshotModel` (ids, types, names,
+  source/target, parents, DI bounds, labels, waypoints, namespaces, extensions,
+  documentation, lane membership).
+- `tests/unit/compatibility.test.ts`: classification of extension, unsupported,
+  lossy, DI-less and malformed files.
+- `tests/e2e/editor.spec.ts`: the same flow through the real UI in Chromium,
+  including re-importing the exported file.
+
+## External tool checks (SpiffWorkflow, pm4py, Camunda)
+
+`npm run interop` exports every editable fixture (after an edit through the model
+API) plus the diagrams created through the UI in the E2E tests, and reads them
+with three independent BPMN implementations (none is a project dependency):
+
+- [SpiffWorkflow](https://github.com/sartography/SpiffWorkflow) 3.1.2 (Python BPMN
+  engine, LGPL-3.0): parse, then try to run every process;
+- [pm4py](https://github.com/process-intelligence-solutions/pm4py) 2.7 (process
+  mining, AGPL-3.0): parse and convert to a Petri net;
+- **Camunda BPMN Model API 7.24** (Apache-2.0, the parser of the commercial Camunda 7
+  engine): read with schema validation, `validateModel`, and resolve every flow
+  node, sequence flow and message flow. Set `CAMUNDA_CLASSPATH` (the
+  `camunda-bpmn-model` and `camunda-xml-model` jars from Maven Central) and
+  `JAVA` (Java 17+).
+
+Python tools live in a local `.venv-interop`
+(`python3 -m venv .venv-interop && .venv-interop/bin/pip install SpiffWorkflow pm4py`).
+
+Result on 2026-11-18 (13 files: 8 edited fixtures, 5 diagrams built in the UI):
+
+| File                                                                                                       | SpiffWorkflow                                                                                                   | pm4py                                           | Camunda Model API                                             |
+| ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------- |
+| simple-process, collaboration-lanes (edited)                                                               | parsed, **ran to completion**                                                                                   | ✅ Petri net                                    | ✅                                                            |
+| E2E: elements created/connected/appended in the UI                                                         | parsed, **ran to completion**                                                                                   | ✅                                              | ✅                                                            |
+| E2E: pool + lanes created in the UI, auto layout                                                           | parsed, **ran to completion**                                                                                   | ✅                                              | ✅                                                            |
+| E2E: message flows, event types, cross-pool move                                                           | parsed                                                                                                          | ✅                                              | ✅ (3 message flows)                                          |
+| E2E: boundary event, sub-process, data, annotation, group                                                  | parsed                                                                                                          | ✅                                              | ✅                                                            |
+| extensions, vendor-camunda-style, mvp-elements, collaboration-messages                                     | parsed (JUEL conditions are not Python; `id="Start"` collides with a Spiff-internal name)                       | ✅                                              | ✅                                                            |
+| all-elements (every event/task/gateway type, data, artifacts)                                              | tool limit: no complex gateway, no business-rule task without DMN, data stores need a registered implementation | tool limit: no call activity / complex gateway  | ✅                                                            |
+| advanced-elements + E2E edit (transaction, ad-hoc, compensation, cancel, loops, I/O spec, potential owner) | parsed                                                                                                          | tool limit: no transaction / ad-hoc sub-process | tool limit: no ad-hoc sub-process type (with it replaced, ✅) |
+
+Every tool limit was confirmed by substituting only the named element types, after
+which the file is read successfully. Failures to _execute_ in Spiff come from
+expression languages or runtime configuration, not from the file format. The
+checks surfaced two real issues that were fixed: timer events created in the
+editor had no time expression (now editable, and flagged by
+`VAL-INCOMPLETE-EVENT`), and explicit default attribute values (e.g.
+`testBefore="false"`) made files open read-only.
+
+## Known gaps
+
+- Desktop modelers (Camunda Modeler, Signavio, ARIS, …) are not driven
+  automatically; Camunda's own parser is checked instead.
+- Label bounds are moved with their shape but not resized after renaming.
+- Vendor color extensions (e.g. `bioc:fill`) are preserved but not rendered.

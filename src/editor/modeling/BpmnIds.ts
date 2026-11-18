@@ -1,0 +1,50 @@
+/** Generates element ids that are unique within the open document. */
+import { walkContainment, type ModdleElement } from '@/bpmn/model/moddle';
+
+const PREFIX: Record<string, string> = {
+  'bpmn:SequenceFlow': 'Flow',
+  'bpmn:MessageFlow': 'MessageFlow',
+  'bpmn:Participant': 'Participant',
+  'bpmn:Lane': 'Lane',
+  'bpmn:LaneSet': 'LaneSet',
+  'bpmn:Process': 'Process',
+  'bpmn:Collaboration': 'Collaboration',
+  'bpmn:Documentation': 'Documentation',
+  'bpmn:FormalExpression': 'Expression',
+  'bpmn:MessageEventDefinition': 'MessageEventDefinition',
+  'bpmn:TimerEventDefinition': 'TimerEventDefinition',
+  'bpmn:TerminateEventDefinition': 'TerminateEventDefinition',
+};
+
+function prefixFor(type: string): string {
+  if (PREFIX[type]) return PREFIX[type];
+  if (/Event$/.test(type)) return 'Event';
+  if (/Gateway$/.test(type)) return 'Gateway';
+  return 'Activity';
+}
+
+export default class BpmnIds {
+  static $inject = ['bpmnDefinitions'];
+  private readonly used = new Set<string>();
+
+  constructor(definitions: ModdleElement) {
+    walkContainment(definitions, (el) => {
+      if (el.id) this.used.add(el.id);
+    });
+  }
+
+  next(type: string): string {
+    const prefix = prefixFor(type);
+    for (;;) {
+      const id = `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
+      if (!this.used.has(id)) {
+        this.used.add(id);
+        return id;
+      }
+    }
+  }
+
+  claim(id: string): void {
+    this.used.add(id);
+  }
+}

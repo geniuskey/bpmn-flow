@@ -1,0 +1,11 @@
+node_modules
+dist
+coverage
+playwright-report
+test-results
+*.local
+.DS_Store
+tests/schema/*.xsd
+tests/interop-out
+.venv-interop
+*.class

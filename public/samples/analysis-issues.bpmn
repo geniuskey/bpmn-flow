@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_issues" targetNamespace="http://example.com/bpmn-flow/fixtures">
+  <bpmn:process id="Process_issues" name="Problems" isExecutable="false">
+    <bpmn:startEvent id="S" name="Start">
+      <bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="A" name="Prepare">
+      <bpmn:incoming>f1</bpmn:incoming>
+      <bpmn:incoming>f5</bpmn:incoming>
+      <bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="G" name="Ok?">
+      <bpmn:incoming>f2</bpmn:incoming>
+      <bpmn:outgoing>f3</bpmn:outgoing>
+      <bpmn:outgoing>f4</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="B" name="Archive">
+      <bpmn:incoming>f3</bpmn:incoming>
+    </bpmn:task>
+    <bpmn:task id="C" name="Rework">
+      <bpmn:incoming>f4</bpmn:incoming>
+      <bpmn:outgoing>f5</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="D" name="Forgotten" />
+    <bpmn:task id="E">
+      <bpmn:outgoing>f6</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="End" name="Done">
+      <bpmn:incoming>f6</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="f1" sourceRef="S" targetRef="A" />
+    <bpmn:sequenceFlow id="f2" sourceRef="A" targetRef="G" />
+    <bpmn:sequenceFlow id="f3" sourceRef="G" targetRef="B" />
+    <bpmn:sequenceFlow id="f4" sourceRef="G" targetRef="C" />
+    <bpmn:sequenceFlow id="f5" sourceRef="C" targetRef="A" />
+    <bpmn:sequenceFlow id="f6" sourceRef="E" targetRef="End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_issues">
+    <bpmndi:BPMNPlane id="Plane_issues" bpmnElement="Process_issues">
+      <bpmndi:BPMNShape id="S_di" bpmnElement="S"><dc:Bounds x="152" y="102" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="A_di" bpmnElement="A"><dc:Bounds x="240" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="G_di" bpmnElement="G" isMarkerVisible="true"><dc:Bounds x="395" y="95" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="B_di" bpmnElement="B"><dc:Bounds x="500" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="C_di" bpmnElement="C"><dc:Bounds x="370" y="220" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="D_di" bpmnElement="D"><dc:Bounds x="240" y="360" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="E_di" bpmnElement="E"><dc:Bounds x="500" y="360" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="662" y="382" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="188" y="120" /><di:waypoint x="240" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="340" y="120" /><di:waypoint x="395" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><di:waypoint x="445" y="120" /><di:waypoint x="500" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><di:waypoint x="420" y="145" /><di:waypoint x="420" y="220" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5"><di:waypoint x="370" y="260" /><di:waypoint x="290" y="260" /><di:waypoint x="290" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f6_di" bpmnElement="f6"><di:waypoint x="600" y="400" /><di:waypoint x="662" y="400" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

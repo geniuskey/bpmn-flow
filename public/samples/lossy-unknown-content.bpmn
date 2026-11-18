@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:acme="http://example.com/schema/acme" id="Definitions_lossy" targetNamespace="http://example.com/bpmn-flow/fixtures">
+  <bpmn:process id="Process_lossy" isExecutable="false">
+    <bpmn:startEvent id="Start_lossy">
+      <bpmn:outgoing>L1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <acme:customStep id="Custom_1" />
+    <bpmn:endEvent id="End_lossy">
+      <bpmn:incoming>L1</bpmn:incoming>
+      <bpmn:incoming>Flow_that_does_not_exist</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="L1" sourceRef="Start_lossy" targetRef="End_lossy" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_lossy">
+    <bpmndi:BPMNPlane id="Plane_lossy" bpmnElement="Process_lossy">
+      <bpmndi:BPMNShape id="Start_lossy_di" bpmnElement="Start_lossy">
+        <dc:Bounds x="152" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_lossy_di" bpmnElement="End_lossy">
+        <dc:Bounds x="292" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="L1_di" bpmnElement="L1">
+        <di:waypoint x="188" y="120" /><di:waypoint x="292" y="120" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

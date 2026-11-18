@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_all" targetNamespace="http://example.com/bpmn-flow/fixtures">
+  <bpmn:signal id="Sig_go" name="Go" />
+  <bpmn:error id="Err_fail" name="Failure" errorCode="E1" />
+  <bpmn:escalation id="Esc_late" name="Late" escalationCode="L1" />
+  <bpmn:dataStore id="Store_archive" name="Archive DB" />
+  <bpmn:category id="Cat_1">
+    <bpmn:categoryValue id="CatVal_1" value="Preparation" />
+  </bpmn:category>
+  <bpmn:process id="Process_all" name="All elements" isExecutable="false">
+    <bpmn:startEvent id="S" name="Signal received">
+      <bpmn:outgoing>q1</bpmn:outgoing>
+      <bpmn:signalEventDefinition id="SED_1" signalRef="Sig_go" />
+    </bpmn:startEvent>
+    <bpmn:userTask id="Prepare" name="Prepare">
+      <bpmn:incoming>q1</bpmn:incoming>
+      <bpmn:outgoing>q2</bpmn:outgoing>
+      <bpmn:property id="Prop_ph" name="__targetRef_placeholder" />
+      <bpmn:dataInputAssociation id="DIA_1">
+        <bpmn:sourceRef>DOR_1</bpmn:sourceRef>
+        <bpmn:targetRef>Prop_ph</bpmn:targetRef>
+      </bpmn:dataInputAssociation>
+      <bpmn:dataOutputAssociation id="DOA_1">
+        <bpmn:targetRef>DSR_1</bpmn:targetRef>
+      </bpmn:dataOutputAssociation>
+    </bpmn:userTask>
+    <bpmn:boundaryEvent id="B_timer" name="2 days" cancelActivity="false" attachedToRef="Prepare">
+      <bpmn:outgoing>q9</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TED_b">
+        <bpmn:timeDuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="bpmn:tFormalExpression">P2D</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:inclusiveGateway id="Or" name="Which?">
+      <bpmn:incoming>q2</bpmn:incoming>
+      <bpmn:outgoing>q3</bpmn:outgoing>
+      <bpmn:outgoing>q4</bpmn:outgoing>
+    </bpmn:inclusiveGateway>
+    <bpmn:sendTask id="Send" name="Send">
+      <bpmn:incoming>q3</bpmn:incoming>
+      <bpmn:outgoing>q5</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:subProcess id="Sub" name="Review">
+      <bpmn:incoming>q4</bpmn:incoming>
+      <bpmn:outgoing>q6</bpmn:outgoing>
+      <bpmn:startEvent id="SubS">
+        <bpmn:outgoing>r1</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:scriptTask id="Script" name="Score">
+        <bpmn:incoming>r1</bpmn:incoming>
+        <bpmn:outgoing>r2</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:endEvent id="SubE">
+        <bpmn:incoming>r2</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="r1" sourceRef="SubS" targetRef="Script" />
+      <bpmn:sequenceFlow id="r2" sourceRef="Script" targetRef="SubE" />
+    </bpmn:subProcess>
+    <bpmn:boundaryEvent id="B_error" attachedToRef="Sub">
+      <bpmn:outgoing>q10</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="EED_b" errorRef="Err_fail" />
+    </bpmn:boundaryEvent>
+    <bpmn:complexGateway id="Join" name="Join">
+      <bpmn:incoming>q5</bpmn:incoming>
+      <bpmn:incoming>q6</bpmn:incoming>
+      <bpmn:outgoing>q7</bpmn:outgoing>
+    </bpmn:complexGateway>
+    <bpmn:intermediateThrowEvent id="Notify" name="Notify">
+      <bpmn:incoming>q7</bpmn:incoming>
+      <bpmn:outgoing>q8</bpmn:outgoing>
+      <bpmn:signalEventDefinition id="SED_2" signalRef="Sig_go" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:callActivity id="Call" name="Archive" calledElement="ArchiveProcess">
+      <bpmn:incoming>q8</bpmn:incoming>
+      <bpmn:outgoing>q11</bpmn:outgoing>
+    </bpmn:callActivity>
+    <bpmn:endEvent id="Done" name="Done">
+      <bpmn:incoming>q11</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:manualTask id="Remind" name="Remind">
+      <bpmn:incoming>q9</bpmn:incoming>
+      <bpmn:outgoing>q12</bpmn:outgoing>
+    </bpmn:manualTask>
+    <bpmn:endEvent id="Reminded" name="Reminded">
+      <bpmn:incoming>q12</bpmn:incoming>
+      <bpmn:escalationEventDefinition id="EsED_1" escalationRef="Esc_late" />
+    </bpmn:endEvent>
+    <bpmn:businessRuleTask id="Handle" name="Handle failure">
+      <bpmn:incoming>q10</bpmn:incoming>
+      <bpmn:outgoing>q13</bpmn:outgoing>
+    </bpmn:businessRuleTask>
+    <bpmn:endEvent id="Failed" name="Failed">
+      <bpmn:incoming>q13</bpmn:incoming>
+      <bpmn:errorEventDefinition id="EED_e" errorRef="Err_fail" />
+    </bpmn:endEvent>
+    <bpmn:dataObjectReference id="DOR_1" name="Request" dataObjectRef="DO_1" />
+    <bpmn:dataObject id="DO_1" />
+    <bpmn:dataStoreReference id="DSR_1" name="Archive DB" dataStoreRef="Store_archive" />
+    <bpmn:sequenceFlow id="q1" sourceRef="S" targetRef="Prepare" />
+    <bpmn:sequenceFlow id="q2" sourceRef="Prepare" targetRef="Or" />
+    <bpmn:sequenceFlow id="q3" sourceRef="Or" targetRef="Send">
+      <bpmn:conditionExpression xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="bpmn:tFormalExpression">notify</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="q4" sourceRef="Or" targetRef="Sub">
+      <bpmn:conditionExpression xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="bpmn:tFormalExpression">review</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="q5" sourceRef="Send" targetRef="Join" />
+    <bpmn:sequenceFlow id="q6" sourceRef="Sub" targetRef="Join" />
+    <bpmn:sequenceFlow id="q7" sourceRef="Join" targetRef="Notify" />
+    <bpmn:sequenceFlow id="q8" sourceRef="Notify" targetRef="Call" />
+    <bpmn:sequenceFlow id="q9" sourceRef="B_timer" targetRef="Remind" />
+    <bpmn:sequenceFlow id="q10" sourceRef="B_error" targetRef="Handle" />
+    <bpmn:sequenceFlow id="q11" sourceRef="Call" targetRef="Done" />
+    <bpmn:sequenceFlow id="q12" sourceRef="Remind" targetRef="Reminded" />
+    <bpmn:sequenceFlow id="q13" sourceRef="Handle" targetRef="Failed" />
+    <bpmn:textAnnotation id="Note">
+      <bpmn:text>Starts when the "Go" signal is broadcast</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Assoc_1" sourceRef="Note" targetRef="S" />
+    <bpmn:group id="Grp_1" categoryValueRef="CatVal_1" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_all">
+    <bpmndi:BPMNPlane id="Plane_all" bpmnElement="Process_all">
+      <bpmndi:BPMNShape id="Grp_1_di" bpmnElement="Grp_1"><dc:Bounds x="130" y="60" width="300" height="200" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_di" bpmnElement="S"><dc:Bounds x="162" y="142" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Prepare_di" bpmnElement="Prepare"><dc:Bounds x="250" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="B_timer_di" bpmnElement="B_timer"><dc:Bounds x="282" y="182" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Or_di" bpmnElement="Or"><dc:Bounds x="465" y="135" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Send_di" bpmnElement="Send"><dc:Bounds x="580" y="60" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_di" bpmnElement="Sub" isExpanded="true"><dc:Bounds x="560" y="180" width="340" height="170" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SubS_di" bpmnElement="SubS"><dc:Bounds x="592" y="247" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Script_di" bpmnElement="Script"><dc:Bounds x="680" y="225" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SubE_di" bpmnElement="SubE"><dc:Bounds x="832" y="247" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="B_error_di" bpmnElement="B_error"><dc:Bounds x="712" y="332" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Join_di" bpmnElement="Join"><dc:Bounds x="965" y="135" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Notify_di" bpmnElement="Notify"><dc:Bounds x="1062" y="142" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Call_di" bpmnElement="Call"><dc:Bounds x="1140" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Done_di" bpmnElement="Done"><dc:Bounds x="1292" y="142" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Remind_di" bpmnElement="Remind"><dc:Bounds x="250" y="280" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Reminded_di" bpmnElement="Reminded"><dc:Bounds x="402" y="302" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Handle_di" bpmnElement="Handle"><dc:Bounds x="680" y="400" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Failed_di" bpmnElement="Failed"><dc:Bounds x="832" y="422" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DOR_1_di" bpmnElement="DOR_1"><dc:Bounds x="182" y="390" width="36" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DSR_1_di" bpmnElement="DSR_1"><dc:Bounds x="465" y="390" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Note_di" bpmnElement="Note"><dc:Bounds x="140" y="10" width="200" height="40" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="q1_di" bpmnElement="q1"><di:waypoint x="198" y="160" /><di:waypoint x="250" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="q2_di" bpmnElement="q2"><di:waypoint x="350" y="160" /><di:waypoint x="465" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="q3_di" bpmnElement="q3"><di:waypoint x="490" y="135" /><di:waypoint x="490" y="100" /><di:waypoint x="580" y="100" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="q4_di" bpmnElement="q4"><di:waypoint x="490" y="185" /><di:waypoint x="490" y="265" /><di:waypoint x="560" y="265" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="q5_di" bpmnElement="q5"><di:waypoint x="680" y="100" /><di:waypoint x="990" y="100" /><di:waypoint x="990" y="135" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="q6_di" bpmnElement="q6"><di:waypoint x="900" y="265" /><di:waypoint x="990" y="265" /><di:waypoint x="990" y="185" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="q7_di" bpmnElement="q7"><di:waypoint x="1015" y="160" /><di:waypoint x="1062" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="q8_di" bpmnElement="q8"><di:waypoint x="1098" y="160" /><di:waypoint x="1140" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="q9_di" bpmnElement="q9"><di:waypoint x="300" y="218" /><di:waypoint x="300" y="280" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="q10_di" bpmnElement="q10"><di:waypoint x="730" y="368" /><di:waypoint x="730" y="400" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="q11_di" bpmnElement="q11"><di:waypoint x="1240" y="160" /><di:waypoint x="1292" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="q12_di" bpmnElement="q12"><di:waypoint x="350" y="320" /><di:waypoint x="402" y="320" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="q13_di" bpmnElement="q13"><di:waypoint x="780" y="440" /><di:waypoint x="832" y="440" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="r1_di" bpmnElement="r1"><di:waypoint x="628" y="265" /><di:waypoint x="680" y="265" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="r2_di" bpmnElement="r2"><di:waypoint x="780" y="265" /><di:waypoint x="832" y="265" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DIA_1_di" bpmnElement="DIA_1"><di:waypoint x="218" y="410" /><di:waypoint x="270" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DOA_1_di" bpmnElement="DOA_1"><di:waypoint x="340" y="200" /><di:waypoint x="470" y="395" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Assoc_1_di" bpmnElement="Assoc_1"><di:waypoint x="180" y="50" /><di:waypoint x="180" y="142" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
