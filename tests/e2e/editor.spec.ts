@@ -170,3 +170,37 @@ test('theme switch toggles dark mode', async ({ page }) => {
   await toggle.click(); // light -> dark
   await expect(page.locator('html')).toHaveClass(/dark/);
 });
+
+test('settings popover is not clipped by the header', async ({ page }) => {
+  await page.goto('/?sample=simple-process');
+  await page.getByRole('button', { name: 'Settings' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Settings' });
+  const snap = dialog.getByLabel('Snap to grid');
+  await expect(snap).toBeVisible();
+  // The control must be the topmost element at its position (not covered by the canvas).
+  const box = (await snap.boundingBox())!;
+  const header = (await page.locator('header').boundingBox())!;
+  expect(box.y).toBeGreaterThan(header.y + header.height);
+  const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
+  const hit = await page.evaluate<string | undefined>(
+    `document.elementFromPoint(${x}, ${y})?.getAttribute('aria-label')`,
+  );
+  expect(hit).toBe('Snap to grid');
+  await snap.click();
+  await expect(snap).not.toBeChecked();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+});
+
+test('context menu stays inside a small viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 500 });
+  await page.goto('/?sample=simple-process');
+  const canvas = (await page.getByTestId('canvas').boundingBox())!;
+  await page.mouse.click(canvas.x + canvas.width - 5, canvas.y + canvas.height - 5, {
+    button: 'right',
+  });
+  const menu = (await page.getByRole('menu', { name: 'Context menu' }).boundingBox())!;
+  expect(menu.x + menu.width).toBeLessThanOrEqual(800);
+  expect(menu.y + menu.height).toBeLessThanOrEqual(500);
+  expect(menu.y).toBeGreaterThanOrEqual(0);
+});

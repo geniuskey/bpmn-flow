@@ -19,7 +19,8 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { downloadOriginal, exportXml, newDocument, pickFile, runAutoLayout } from '@/app/actions';
 import { formatKeys, SHORTCUTS } from '@/app/shortcuts';
 import { Badge } from '@/components/ui/badge';
@@ -227,67 +228,101 @@ export function Header() {
 
 function SettingsMenu() {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const snapToGrid = useUiStore((s) => s.snapToGrid);
   const setSnapToGrid = useUiStore((s) => s.setSnapToGrid);
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
+
+  // The header scrolls horizontally (overflow clips), so the popover is portaled to
+  // <body> and anchored to the button with fixed coordinates.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const r = buttonRef.current?.getBoundingClientRect();
+      if (r) setPos({ top: r.bottom + 4, right: Math.max(8, window.innerWidth - r.right) });
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setOpen(false);
+      buttonRef.current?.focus();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [open]);
+
   return (
-    <div className="relative">
+    <>
       <Button
+        ref={buttonRef}
         size="icon"
         title="Settings"
         aria-label="Settings"
+        aria-haspopup="dialog"
         aria-expanded={open}
         variant={open ? 'active' : 'ghost'}
         onClick={() => setOpen((o) => !o)}
       >
         <Settings />
       </Button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onMouseDown={() => setOpen(false)} />
-          <div
-            role="dialog"
-            aria-label="Settings"
-            className="absolute right-0 z-50 mt-1 w-60 space-y-3 rounded-lg border bg-card p-3 shadow-xl"
-          >
-            <label className="flex items-center justify-between gap-2">
-              <span>Snap to grid</span>
-              <input
-                type="checkbox"
-                aria-label="Snap to grid"
-                checked={snapToGrid}
-                onChange={(e) => setSnapToGrid(e.target.checked)}
-              />
-            </label>
-            <label className="flex items-center justify-between gap-2">
-              <span>Theme</span>
-              <select
-                aria-label="Theme"
-                className="h-7 rounded-md border bg-background px-1.5"
-                value={theme}
-                onChange={(e) => setTheme(e.target.value as ThemePreference)}
-              >
-                <option value="system">System</option>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </select>
-            </label>
-            <div className="border-t pt-2 text-[11px] text-muted-foreground">
-              <a
-                className="text-primary hover:underline"
-                href={`${import.meta.env.BASE_URL}third-party-notices.txt`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open-source licenses
-              </a>
-              <span> · BPMN Flow {__APP_VERSION__}</span>
+      {open &&
+        pos &&
+        createPortal(
+          <>
+            <div className="fixed inset-0 z-40" onMouseDown={() => setOpen(false)} />
+            <div
+              role="dialog"
+              aria-label="Settings"
+              style={{ top: pos.top, right: pos.right }}
+              className="fixed z-50 max-h-[calc(100vh-4rem)] w-60 max-w-[calc(100vw-1rem)] space-y-3 overflow-y-auto rounded-lg border bg-card p-3 shadow-xl"
+            >
+              <label className="flex items-center justify-between gap-2">
+                <span>Snap to grid</span>
+                <input
+                  type="checkbox"
+                  aria-label="Snap to grid"
+                  checked={snapToGrid}
+                  onChange={(e) => setSnapToGrid(e.target.checked)}
+                />
+              </label>
+              <label className="flex items-center justify-between gap-2">
+                <span>Theme</span>
+                <select
+                  aria-label="Theme"
+                  className="h-7 rounded-md border bg-background px-1.5"
+                  value={theme}
+                  onChange={(e) => setTheme(e.target.value as ThemePreference)}
+                >
+                  <option value="system">System</option>
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
+              </label>
+              <div className="border-t pt-2 text-[11px] text-muted-foreground">
+                <a
+                  className="text-primary hover:underline"
+                  href={`${import.meta.env.BASE_URL}third-party-notices.txt`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open-source licenses
+                </a>
+                <span> · BPMN Flow {__APP_VERSION__}</span>
+              </div>
             </div>
-          </div>
-        </>
-      )}
-    </div>
+          </>,
+          document.body,
+        )}
+    </>
   );
 }
 

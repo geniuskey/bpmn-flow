@@ -65,7 +65,7 @@ export function App() {
                   else setAnalysisHeight(startSize.current - delta);
                 }}
               />
-              <div style={{ height: analysisHeight }} className="shrink-0 border-t">
+              <div style={{ height: analysisHeight }} className="max-h-[55%] shrink-0 border-t">
                 <AnalysisPanel />
               </div>
             </>
@@ -81,7 +81,7 @@ export function App() {
                 else setInspectorWidth(startSize.current - delta);
               }}
             />
-            <div style={{ width: inspectorWidth }} className="shrink-0 border-l">
+            <div style={{ width: inspectorWidth }} className="max-w-[45vw] shrink-0 border-l">
               <Inspector />
             </div>
           </>

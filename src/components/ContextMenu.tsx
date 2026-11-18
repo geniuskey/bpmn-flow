@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { COMMANDS, isEnabled, runCommand } from '@/app/commands';
 import { formatKeys } from '@/app/shortcuts';
 import { alternativeTypes } from '@/editor/commands/ChangeTypeHandler';
@@ -29,6 +29,17 @@ export function ContextMenu({ host }: { host: HTMLElement | null }) {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const selection = useEditorStore((s) => s.snapshot.selection);
   const controller = useEditorStore((s) => s.controller);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Keep the menu inside the viewport using its real size.
+  useLayoutEffect(() => {
+    const el = menuRef.current;
+    if (!menu || !el) return;
+    const m = 8;
+    const { width, height } = el.getBoundingClientRect();
+    el.style.left = `${Math.max(m, Math.min(menu.x, window.innerWidth - width - m))}px`;
+    el.style.top = `${Math.max(m, Math.min(menu.y, window.innerHeight - height - m))}px`;
+  }, [menu, selection]);
 
   useEffect(() => {
     if (!host) return;
@@ -60,7 +71,11 @@ export function ContextMenu({ host }: { host: HTMLElement | null }) {
     window.addEventListener('mousedown', close);
     window.addEventListener('keydown', close);
     window.addEventListener('wheel', close);
+    window.addEventListener('resize', close);
+    window.addEventListener('blur', close);
     return () => {
+      window.removeEventListener('resize', close);
+      window.removeEventListener('blur', close);
       window.removeEventListener('mousedown', close);
       window.removeEventListener('keydown', close);
       window.removeEventListener('wheel', close);
@@ -82,11 +97,9 @@ export function ContextMenu({ host }: { host: HTMLElement | null }) {
     <div
       role="menu"
       aria-label="Context menu"
-      className="fixed z-50 min-w-52 rounded-lg border bg-card p-1 shadow-xl"
-      style={{
-        left: Math.min(menu.x, window.innerWidth - 230),
-        top: Math.min(menu.y, window.innerHeight - 320),
-      }}
+      ref={menuRef}
+      className="fixed z-50 max-h-[calc(100vh-1rem)] min-w-52 overflow-y-auto rounded-lg border bg-card p-1 shadow-xl"
+      style={{ left: menu.x, top: menu.y }}
       onMouseDown={(e) => e.stopPropagation()}
     >
       {commands.map((c) => (
