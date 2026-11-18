@@ -1,4 +1,5 @@
-import type { Page } from '@playwright/test';
+/// <reference lib="dom" />
+import { expect, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
 export const el = (page: Page, id: string) => page.locator(`.djs-element[data-element-id="${id}"]`);
@@ -68,4 +69,32 @@ export function saveForInterop(name: string, xml: string): void {
   if (!dir) return;
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, name), xml);
+}
+
+/** Reads a session slot straight from IndexedDB. */
+export function storedSession(page: Page, slot: 'current' | 'previous' = 'current') {
+  return page.evaluate(
+    (key) =>
+      new Promise<{ xml: string; fileName: string } | null>((resolve, reject) => {
+        const open = indexedDB.open('bpmn-flow');
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const db = open.result;
+          if (!db.objectStoreNames.contains('session')) return resolve(null);
+          const get = db.transaction('session').objectStore('session').get(key);
+          get.onsuccess = () => resolve(get.result ?? null);
+          get.onerror = () => reject(get.error);
+        };
+      }),
+    slot,
+  );
+}
+
+/** Waits until the autosave in IndexedDB contains `text` (no fixed delay). */
+export async function expectStored(
+  page: Page,
+  text: string,
+  slot: 'current' | 'previous' = 'current',
+) {
+  await expect.poll(async () => (await storedSession(page, slot))?.xml ?? '').toContain(text);
 }

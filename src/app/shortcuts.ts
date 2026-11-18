@@ -57,6 +57,36 @@ function isTyping(target: EventTarget | null): boolean {
   return !!el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
 }
 
+/** Keys that a focused control (button, tab, menu item, …) handles itself. */
+const CONTROL_KEYS = new Set([
+  'Enter',
+  ' ',
+  'Backspace',
+  'Delete',
+  'ArrowLeft',
+  'ArrowRight',
+  'ArrowUp',
+  'ArrowDown',
+  'Home',
+  'End',
+  'Escape',
+]);
+
+const CONTROL_SELECTOR =
+  'button, a[href], summary, [role="button"], [role="tab"], [role="menuitem"], [role="option"], [role="checkbox"], [role="switch"], [role="slider"], [role="radio"]';
+
+/**
+ * Whether a key belongs to the focused UI rather than to the diagram: inside a
+ * dialog or menu no single-key shortcut applies, and a focused control keeps
+ * the keys it uses (Enter activates a button, arrows move between tabs, …).
+ */
+export function keyBelongsToFocus(target: EventTarget | null, key: string): boolean {
+  const el = target instanceof Element ? target : null;
+  if (!el || el.closest('.djs-container')) return false;
+  if (el.closest('[role="dialog"], [role="menu"]')) return true;
+  return CONTROL_KEYS.has(key) && !!el.closest(CONTROL_SELECTOR);
+}
+
 export function useKeyboardShortcuts(): void {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -99,6 +129,7 @@ export function useKeyboardShortcuts(): void {
       if (mod && key === 'd') return run('edit.duplicate');
       if (mod && e.shiftKey && key === 'l') return run('arrange.layout');
       if (mod || e.altKey) return;
+      if (keyBelongsToFocus(e.target, e.key)) return;
 
       if (e.key === 'Delete' || e.key === 'Backspace') return run('edit.delete');
       if (

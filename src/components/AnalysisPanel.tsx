@@ -214,11 +214,14 @@ function FindingRow({
   );
 }
 
+const findingKey = (f: Finding) => `${f.ruleId}:${f.elementIds.join(',')}:${f.message}`;
+
 function Findings({ select, testId }: { select: (f: Finding) => boolean; testId: string }) {
   const all = useAnalysis();
   const controller = useEditorStore((s) => s.controller);
   const [filter, setFilter] = useState<Severity | 'all'>('all');
-  const [active, setActive] = useState<number | null>(null);
+  // Keyed by content, not list position: edits re-run the analysis and reorder it.
+  const [active, setActive] = useState<string | null>(null);
   if (!all) return null;
   const findings = all.findings.filter(select);
   const counts: Record<Severity, number> = { error: 0, warning: 0, info: 0 };
@@ -256,11 +259,11 @@ function Findings({ select, testId }: { select: (f: Finding) => boolean; testId:
         <ul className="divide-y" data-testid={testId}>
           {list.map((f, i) => (
             <FindingRow
-              key={`${f.ruleId}:${f.elementIds.join(',')}:${i}`}
+              key={`${findingKey(f)}:${i}`}
               finding={f}
-              active={active === i}
+              active={active === findingKey(f)}
               onSelect={() => {
-                setActive(i);
+                setActive(findingKey(f));
                 controller?.reveal(f.elementIds);
               }}
             />
@@ -363,12 +366,37 @@ export function AnalysisPanel() {
       className="flex h-full min-h-0 flex-col bg-card"
       data-testid="analysis-panel"
     >
-      <div role="tablist" className="flex h-9 shrink-0 items-center gap-1 border-b px-2">
+      <div
+        role="tablist"
+        aria-label="Analysis views"
+        className="flex h-9 shrink-0 items-center gap-1 border-b px-2"
+        onKeyDown={(e) => {
+          // WAI-ARIA tabs: arrows / Home / End move to and activate another tab.
+          const i = TABS.findIndex((t) => t.id === tab);
+          const next =
+            e.key === 'ArrowRight'
+              ? (i + 1) % TABS.length
+              : e.key === 'ArrowLeft'
+                ? (i - 1 + TABS.length) % TABS.length
+                : e.key === 'Home'
+                  ? 0
+                  : e.key === 'End'
+                    ? TABS.length - 1
+                    : -1;
+          if (next < 0) return;
+          e.preventDefault();
+          setTab(TABS[next]!.id);
+          document.getElementById(`analysis-tab-${TABS[next]!.id}`)?.focus();
+        }}
+      >
         {TABS.map((t) => (
           <button
             key={t.id}
+            id={`analysis-tab-${t.id}`}
             role="tab"
             aria-selected={tab === t.id}
+            aria-controls="analysis-tabpanel"
+            tabIndex={tab === t.id ? 0 : -1}
             className={cn(
               'flex h-7 items-center gap-1.5 rounded-md px-2.5 font-medium',
               tab === t.id
@@ -392,7 +420,13 @@ export function AnalysisPanel() {
           </button>
         ))}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div
+        id="analysis-tabpanel"
+        role="tabpanel"
+        aria-labelledby={`analysis-tab-${tab}`}
+        tabIndex={0}
+        className="min-h-0 flex-1 overflow-y-auto"
+      >
         {tab === 'overview' && <Overview />}
         {tab === 'metrics' && <Metrics />}
         {tab === 'validation' && <Findings select={isValidation} testId="validation" />}

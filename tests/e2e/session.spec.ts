@@ -1,31 +1,7 @@
-/// <reference lib="dom" />
 /** Autosave, session backup and text-field commit behaviour (no lost edits). */
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { el, exportXml } from './helpers';
-
-/** Reads a session slot straight from IndexedDB. */
-function storedSession(page: Page, slot: 'current' | 'previous' = 'current') {
-  return page.evaluate(
-    (key) =>
-      new Promise<{ xml: string; fileName: string } | null>((resolve, reject) => {
-        const open = indexedDB.open('bpmn-flow');
-        open.onerror = () => reject(open.error);
-        open.onsuccess = () => {
-          const db = open.result;
-          if (!db.objectStoreNames.contains('session')) return resolve(null);
-          const get = db.transaction('session').objectStore('session').get(key);
-          get.onsuccess = () => resolve(get.result ?? null);
-          get.onerror = () => reject(get.error);
-        };
-      }),
-    slot,
-  );
-}
-
-async function expectStored(page: Page, text: string, slot: 'current' | 'previous' = 'current') {
-  await expect.poll(async () => (await storedSession(page, slot))?.xml ?? '').toContain(text);
-}
+import { el, expectStored, exportXml, storedSession } from './helpers';
 
 async function rename(page: Page, id: string, name: string) {
   await el(page, id).click();

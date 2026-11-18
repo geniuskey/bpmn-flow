@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { el } from './helpers';
+import { el, expectStored } from './helpers';
 
 test('findings are listed and clicking one selects and highlights the element', async ({
   page,
@@ -71,7 +71,7 @@ test('autosave restores the last document on the next visit', async ({ page }) =
   await el(page, 'Task_check').dblclick();
   await page.keyboard.type('Autosaved name');
   await page.keyboard.press('Enter');
-  await page.waitForTimeout(1600);
+  await expectStored(page, 'Autosaved name');
   await page.goto('/');
   await expect(page.getByTestId('document-title')).toContainText('simple-process.bpmn');
   await expect(el(page, 'Task_check')).toContainText('Autosaved name');

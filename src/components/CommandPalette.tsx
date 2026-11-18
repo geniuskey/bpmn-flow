@@ -1,5 +1,5 @@
 import { Search } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { COMMANDS, isEnabled, runCommand } from '@/app/commands';
 import { formatKeys } from '@/app/shortcuts';
 import { Kbd } from '@/components/ui/kbd';
@@ -12,14 +12,21 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
   const [active, setActive] = useState(0);
   const listRef = useRef<HTMLUListElement>(null);
   // Re-evaluate enablement whenever the editor state changes.
-  useEditorStore((s) => s.snapshot);
+  const snapshot = useEditorStore((s) => s.snapshot);
 
   const items = useMemo(() => {
+    void snapshot;
     const q = query.trim().toLowerCase();
     return COMMANDS.filter((c) => isEnabled(c)).filter(
       (c) => !q || `${c.group} ${c.label}`.toLowerCase().includes(q),
     );
-  }, [query]);
+  }, [query, snapshot]);
+  const activeId = items[active] ? `command-${items[active].id}` : undefined;
+
+  // Keep the highlighted option visible while moving with the arrow keys.
+  useEffect(() => {
+    if (activeId) document.getElementById(activeId)?.scrollIntoView({ block: 'nearest' });
+  }, [activeId]);
 
   const execute = (id: string) => {
     onClose();
@@ -33,6 +40,7 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
     >
       <div
         role="dialog"
+        aria-modal="true"
         aria-label="Command palette"
         className="w-[560px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border bg-card shadow-2xl"
         onMouseDown={(e) => e.stopPropagation()}
@@ -41,6 +49,11 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
           <Search className="size-4 text-muted-foreground" />
           <input
             autoFocus
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="command-list"
+            aria-activedescendant={activeId}
+            aria-autocomplete="list"
             aria-label="Search commands"
             className="h-11 flex-1 bg-transparent text-sm outline-none"
             placeholder="Type a command…"
@@ -66,13 +79,20 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
             }}
           />
         </div>
-        <ul ref={listRef} role="listbox" className="max-h-80 overflow-y-auto p-1">
+        <ul
+          ref={listRef}
+          id="command-list"
+          role="listbox"
+          aria-label="Commands"
+          className="max-h-80 overflow-y-auto p-1"
+        >
           {items.length === 0 && (
             <li className="px-3 py-6 text-center text-muted-foreground">No matching commands</li>
           )}
           {items.map((c, i) => (
             <li
               key={c.id}
+              id={`command-${c.id}`}
               role="option"
               aria-selected={i === active}
               className={cn(
