@@ -7,7 +7,8 @@
  *  - Unsupported diagram elements / multiple diagrams / incomplete DI → read-only.
  *  - Extension attributes and elements are allowed when the self round-trip proves they survive.
  */
-import { indexDi } from '../di/di';
+import { indexDi, invalidDi } from '../di/di';
+import type { DroppedMarkup } from '../import/markup';
 import {
   CONTAINER_TYPES,
   CONVERSATION_TYPES,
@@ -28,6 +29,7 @@ export type IssueSeverity = 'info' | 'warning' | 'error';
 
 export type CompatibilityCode =
   | 'PARSE_WARNING'
+  | 'DROPPED_MARKUP'
   | 'ROUNDTRIP_MISMATCH'
   | 'UNSUPPORTED_ELEMENT'
   | 'PRESERVED_ELEMENT'
@@ -87,6 +89,7 @@ export function assessCompatibility(
   definitions: ModdleElement,
   parseWarnings: readonly string[],
   roundTripDiffs: readonly string[],
+  droppedMarkup: DroppedMarkup = { comments: 0, processingInstructions: 0 },
 ): CompatibilityReport {
   const issues: CompatibilityIssue[] = [];
   let readonly = false;
@@ -94,6 +97,25 @@ export function assessCompatibility(
 
   for (const warning of parseWarnings) {
     issues.push({ code: 'PARSE_WARNING', severity: 'error', message: warning });
+    readonly = true;
+    exportAllowed = false;
+  }
+
+  // The parser discards comments and processing instructions, so the round-trip
+  // check cannot see that re-exporting would delete them.
+  const { comments, processingInstructions } = droppedMarkup;
+  if (comments || processingInstructions) {
+    const parts = [
+      comments ? `${comments} XML comment${comments > 1 ? 's' : ''}` : '',
+      processingInstructions
+        ? `${processingInstructions} processing instruction${processingInstructions > 1 ? 's' : ''}`
+        : '',
+    ].filter(Boolean);
+    issues.push({
+      code: 'DROPPED_MARKUP',
+      severity: 'error',
+      message: `The file contains ${parts.join(' and ')}, which re-exporting would remove.`,
+    });
     readonly = true;
     exportAllowed = false;
   }
@@ -130,6 +152,15 @@ export function assessCompatibility(
         severity: 'warning',
         message: `Diagram element ${dangling.id ?? '(no id)'} has a missing or duplicate bpmnElement reference.`,
         elementId: dangling.id,
+      });
+      readonly = true;
+    }
+    for (const { di: invalid, reason } of invalidDi(di)) {
+      issues.push({
+        code: 'INVALID_DI',
+        severity: 'warning',
+        message: `Diagram element ${invalid.id ?? '(no id)'}: ${reason}.`,
+        elementId: invalid.id,
       });
       readonly = true;
     }

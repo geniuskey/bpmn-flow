@@ -23,8 +23,37 @@ const isEnd = (t: string) => t === 'bpmn:EndEvent';
 /** Elements that legitimately start without incoming flows. */
 function isEntry(node: ModdleElement): boolean {
   return (
-    is(node, 'bpmn:StartEvent') || is(node, 'bpmn:BoundaryEvent') || isEventSubProcessContent(node)
+    is(node, 'bpmn:StartEvent') ||
+    is(node, 'bpmn:BoundaryEvent') ||
+    isEventSubProcess(node) ||
+    isEventSubProcessContent(node) ||
+    isCompensationActivity(node)
   );
+}
+
+/** An event sub-process is started by its start event's trigger, not by sequence flows. */
+function isEventSubProcess(node: ModdleElement): boolean {
+  return is(node, 'bpmn:SubProcess') && node.get('triggeredByEvent') === true;
+}
+
+/**
+ * Compensation is wired by an association from the compensation boundary event
+ * to the compensation activity; neither has sequence flows.
+ */
+function isCompensationActivity(node: ModdleElement): boolean {
+  return is(node, 'bpmn:Activity') && node.get('isForCompensation') === true;
+}
+
+function isCompensationBoundary(node: ModdleElement): boolean {
+  return (
+    is(node, 'bpmn:BoundaryEvent') &&
+    getMany(node, 'eventDefinitions').some((d) => is(d, 'bpmn:CompensateEventDefinition'))
+  );
+}
+
+/** Nodes that are correctly modeled without any sequence flow. */
+function standsAlone(node: ModdleElement): boolean {
+  return isEventSubProcess(node) || isCompensationActivity(node) || isCompensationBoundary(node);
 }
 
 function isEventSubProcessContent(node: ModdleElement): boolean {
@@ -54,7 +83,9 @@ export function processRules(graph: ProcessGraph): Finding[] {
   const starts = nodes.filter((n) => isStart(n.type)).map((n) => n.id);
   const ends = nodes.filter((n) => isEnd(n.type)).map((n) => n.id);
 
-  if (!starts.length) {
+  // Ad-hoc sub-processes run their activities in any order: no flow structure is required.
+  const adHoc = is(graph.process, 'bpmn:AdHocSubProcess');
+  if (!adHoc && !starts.length) {
     findings.push({
       severity: 'warning',
       ruleId: 'VAL-MISSING-START',
@@ -63,7 +94,7 @@ export function processRules(graph: ProcessGraph): Finding[] {
       recommendation: 'Add a start event so it is clear where the process begins.',
     });
   }
-  if (!ends.length) {
+  if (!adHoc && !ends.length) {
     findings.push({
       severity: 'warning',
       ruleId: 'VAL-MISSING-END',
@@ -75,6 +106,7 @@ export function processRules(graph: ProcessGraph): Finding[] {
 
   // Isolated: neither incoming nor outgoing flows.
   for (const n of nodes) {
+    if (adHoc || standsAlone(n.element)) continue;
     if (!graph.in.get(n.id)!.length && !graph.out.get(n.id)!.length && nodes.length > 1) {
       findings.push({
         severity: 'warning',
@@ -90,7 +122,7 @@ export function processRules(graph: ProcessGraph): Finding[] {
   );
 
   // Unreachable from any start event.
-  if (starts.length) {
+  if (!adHoc && starts.length) {
     const entries = nodes.filter((n) => isEntry(n.element)).map((n) => n.id);
     const reachable = reachableFrom(entries, graph.out);
     for (const n of nodes) {
@@ -108,6 +140,7 @@ export function processRules(graph: ProcessGraph): Finding[] {
 
   // Dead ends: no outgoing flow although not an end event.
   for (const n of nodes) {
+    if (adHoc || standsAlone(n.element)) continue;
     if (!graph.out.get(n.id)!.length && !isExit(n.element) && !isolated.has(n.id)) {
       findings.push({
         severity: 'warning',
@@ -120,7 +153,7 @@ export function processRules(graph: ProcessGraph): Finding[] {
   }
 
   // Nodes from which no end event can be reached (e.g. trapped in a loop).
-  if (ends.length) {
+  if (!adHoc && ends.length) {
     const canFinish = reachableFrom(ends, graph.in);
     for (const n of nodes) {
       if (!canFinish.has(n.id) && graph.out.get(n.id)!.length) {
@@ -234,48 +267,49 @@ export function processRules(graph: ProcessGraph): Finding[] {
   }
 
   // Event definitions that other tools cannot execute as they are.
-  for (const n of nodes) {
-    const def = getMany(n.element, 'eventDefinitions')[0];
-    if (!def) continue;
-    const timerSet = ['timeDuration', 'timeDate', 'timeCycle'].some((t) => getRef(def, t));
-    if (is(def, 'bpmn:TimerEventDefinition') && !timerSet) {
-      findings.push({
-        severity: 'warning',
-        ruleId: 'VAL-INCOMPLETE-EVENT',
-        message: `Timer of ${label(graph, n.id)} has no duration, date or cycle.`,
-        elementIds: [n.id],
-        recommendation: 'Set a timer expression (ISO 8601, e.g. PT2H) in the properties panel.',
-      });
+  // Every definition: a multiple event can combine e.g. a message and a timer.
+  for (const n of nodes)
+    for (const def of getMany(n.element, 'eventDefinitions')) {
+      const timerSet = ['timeDuration', 'timeDate', 'timeCycle'].some((t) => getRef(def, t));
+      if (is(def, 'bpmn:TimerEventDefinition') && !timerSet) {
+        findings.push({
+          severity: 'warning',
+          ruleId: 'VAL-INCOMPLETE-EVENT',
+          message: `Timer of ${label(graph, n.id)} has no duration, date or cycle.`,
+          elementIds: [n.id],
+          recommendation: 'Set a timer expression (ISO 8601, e.g. PT2H) in the properties panel.',
+        });
+      }
+      if (is(def, 'bpmn:ConditionalEventDefinition') && !getRef(def, 'condition')) {
+        findings.push({
+          severity: 'warning',
+          ruleId: 'VAL-INCOMPLETE-EVENT',
+          message: `Conditional event ${label(graph, n.id)} has no condition.`,
+          elementIds: [n.id],
+          recommendation: 'Enter the condition in the properties panel.',
+        });
+      }
+      const refProperty = (
+        {
+          'bpmn:MessageEventDefinition': 'messageRef',
+          'bpmn:SignalEventDefinition': 'signalRef',
+          'bpmn:ErrorEventDefinition': 'errorRef',
+          'bpmn:EscalationEventDefinition': 'escalationRef',
+        } as Record<string, string>
+      )[def.$type];
+      if (refProperty && !getRef(def, refProperty)) {
+        findings.push({
+          severity: 'info',
+          ruleId: 'STYLE-UNREFERENCED-EVENT',
+          message: `${label(graph, n.id)} does not name its ${humanizeType(def.$type)
+            .replace(/ Event Definition$/, '')
+            .toLowerCase()}.`,
+          elementIds: [n.id],
+          recommendation:
+            'Name it in the properties panel so throw and catch events can be matched.',
+        });
+      }
     }
-    if (is(def, 'bpmn:ConditionalEventDefinition') && !getRef(def, 'condition')) {
-      findings.push({
-        severity: 'warning',
-        ruleId: 'VAL-INCOMPLETE-EVENT',
-        message: `Conditional event ${label(graph, n.id)} has no condition.`,
-        elementIds: [n.id],
-        recommendation: 'Enter the condition in the properties panel.',
-      });
-    }
-    const refProperty = (
-      {
-        'bpmn:MessageEventDefinition': 'messageRef',
-        'bpmn:SignalEventDefinition': 'signalRef',
-        'bpmn:ErrorEventDefinition': 'errorRef',
-        'bpmn:EscalationEventDefinition': 'escalationRef',
-      } as Record<string, string>
-    )[def.$type];
-    if (refProperty && !getRef(def, refProperty)) {
-      findings.push({
-        severity: 'info',
-        ruleId: 'STYLE-UNREFERENCED-EVENT',
-        message: `${label(graph, n.id)} does not name its ${humanizeType(def.$type)
-          .replace(/ Event Definition$/, '')
-          .toLowerCase()}.`,
-        elementIds: [n.id],
-        recommendation: 'Name it in the properties panel so throw and catch events can be matched.',
-      });
-    }
-  }
 
   // Readability
   for (const n of nodes) {

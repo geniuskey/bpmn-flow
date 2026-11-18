@@ -167,3 +167,39 @@ test('a session that cannot be restored is kept, not overwritten', async ({ page
     .poll(async () => (await storedSession(page, 'previous'))?.fileName)
     .toBe('broken.bpmn');
 });
+
+test('a Latin-1 file opens correctly and "Download original" survives a restore', async ({
+  page,
+}) => {
+  await page.goto('/?sample=simple-process');
+  await expect(el(page, 'Task_check')).toBeVisible();
+  const text = (await readFile('public/samples/simple-process.bpmn', 'utf8'))
+    .replace(
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<?xml version="1.0" encoding="ISO-8859-1"?>',
+    )
+    .replace('Check order', 'Prüfen');
+  const bytes = Buffer.from(text, 'latin1');
+  const chooser = page.waitForEvent('filechooser');
+  await page.keyboard.press('ControlOrMeta+o');
+  await (
+    await chooser
+  ).setFiles({ name: 'latin1.bpmn', mimeType: 'application/xml', buffer: bytes });
+  await expect(page.getByTestId('document-title')).toContainText('latin1.bpmn');
+  await expect(el(page, 'Task_check')).toContainText('Prüfen');
+
+  await rename(page, 'Task_check', 'Edited');
+  await expectStored(page, 'Edited');
+  await page.goto('/');
+  await expect(el(page, 'Task_check')).toContainText('Edited');
+
+  await page.keyboard.press('ControlOrMeta+k');
+  await page
+    .getByRole('dialog', { name: 'Command palette' })
+    .getByLabel('Search commands')
+    .fill('original');
+  const download = page.waitForEvent('download');
+  await page.keyboard.press('Enter');
+  const original = await readFile(await (await download).path());
+  expect(original.equals(bytes)).toBe(true);
+});

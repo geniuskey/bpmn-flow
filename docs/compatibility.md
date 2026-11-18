@@ -7,17 +7,24 @@ prove is lossless.
 
 ## When a file is opened
 
-| Condition                                                                                                          | Mode      | Re-export           | Why                                                              |
-| ------------------------------------------------------------------------------------------------------------------ | --------- | ------------------- | ---------------------------------------------------------------- |
-| bpmn-moddle reports a warning (unknown element outside `extensionElements`, unresolved reference, duplicate id, …) | read-only | **blocked**         | moddle drops that content; re-exporting would silently delete it |
-| Serialize → re-parse does not reproduce the identical canonical model                                              | read-only | **blocked**         | preservation cannot be proven                                    |
-| Unsupported diagram elements (see bpmn-support.md)                                                                 | read-only | allowed (unchanged) | editing around unknown semantics could break them                |
-| No BPMN DI / more than one diagram / dangling or duplicate DI                                                      | read-only | allowed (unchanged) |                                                                  |
-| Missing DI for a supported element                                                                                 | read-only | allowed (unchanged) | it could not be shown                                            |
-| Vendor attributes / extension elements                                                                             | editable  | allowed             | preserved and proven by the round-trip check                     |
-| Root-level Message, Signal, …                                                                                      | editable  | allowed             | not reachable by MVP edits                                       |
+| Condition                                                                                                                                                                                         | Mode      | Re-export           | Why                                                                |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------- | ------------------------------------------------------------------ |
+| bpmn-moddle reports a warning (unknown element outside `extensionElements`, unresolved reference, duplicate id, …)                                                                                | read-only | **blocked**         | moddle drops that content; re-exporting would silently delete it   |
+| Serialize → re-parse does not reproduce the identical canonical model                                                                                                                             | read-only | **blocked**         | preservation cannot be proven                                      |
+| Unsupported diagram elements (see bpmn-support.md)                                                                                                                                                | read-only | allowed (unchanged) | editing around unknown semantics could break them                  |
+| XML comments or processing instructions (other than the XML declaration)                                                                                                                          | read-only | **blocked**         | the parser drops them, so the round-trip check cannot see the loss |
+| No BPMN DI, dangling or duplicate DI, or structurally invalid DI (diagram without BPMN element, shape without bounds, edge with < 2 waypoints, edge whose ends are not drawn in the same diagram) | read-only | allowed (unchanged) | it could not be displayed or edited correctly                      |
+| More than one diagram                                                                                                                                                                             | editable  | allowed             | switch diagrams with the selector in the header                    |
+| Missing DI for a supported element                                                                                                                                                                | read-only | allowed (unchanged) | it could not be shown                                              |
+| Vendor attributes / extension elements                                                                                                                                                            | editable  | allowed             | preserved and proven by the round-trip check                       |
+| Root-level Message, Signal, …                                                                                                                                                                     | editable  | allowed             | not reachable by MVP edits                                         |
 
-"Download original" always returns the exact bytes that were opened.
+"Download original" always returns the exact bytes that were opened, also after
+the document was restored from the autosave.
+
+Files are decoded with the encoding of their byte-order mark or XML declaration
+(UTF-8 by default, as in XML). Bytes that are not valid in that encoding are
+rejected with an error instead of being replaced; exports are always UTF-8.
 
 Findings are listed under **Analysis → Compatibility**; clicking one selects the element.
 

@@ -37,6 +37,14 @@ highlights the elements on the canvas.
 | `STYLE-UNREFERENCED-EVENT`              | info            | message/signal/error/escalation event without a named reference                                          |
 | `STYLE-UNNAMED-ACTIVITY`                | info            | activity without a name                                                                                  |
 
+Constructs that are correct without sequence flows are not reported by the
+connectivity rules (`GRAPH-*`, `VAL-MISSING-*`): a link throw event continues at
+its link catch event (paired by the definition's `target`/`source` or by name),
+event sub-processes are started by their trigger, compensation boundary events and
+compensation activities are connected by an association, and the content of an
+ad-hoc sub-process needs no flow structure. Event rules check every definition of
+a multiple event.
+
 Analysis runs synchronously after each change; a 3000-node process is analyzed in
 well under 100 ms (unit test), a 1000-task diagram in ~8 ms in the browser (E2E),
 so a Web Worker is not needed for analysis. Auto layout (ELK) does run in a worker.
@@ -63,6 +71,13 @@ Estimates are explicit, assumption-based calculations from that data:
 - alternative paths (exclusive joins, multiple incoming flows) produce a best
   case (fastest alternative) and a worst case (slowest alternative);
 - loops are counted once (back edges ignored and reported);
+- a sub-process takes its own time plus its content's elapsed time (estimated
+  recursively); an ad-hoc sub-process's activities are assumed to run all in
+  parallel (best case) or one after another (worst case);
+- a boundary event starts with its host: in the worst case it fires when the host
+  ends, in the best case at once. The best case is taken over the normal paths
+  only, not over paths that leave through a boundary event;
+- work, waiting and cost totals and the coverage include sub-process content;
 - missing durations count as 0 and are reported as coverage;
 - cost = Σ cost × frequency (frequency defaults to 1);
 - “Longest waiting times” lists the steps with the most entered waiting time.

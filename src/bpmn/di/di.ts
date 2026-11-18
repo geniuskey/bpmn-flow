@@ -35,6 +35,61 @@ export interface DiIndex {
   bands: ModdleElement[];
 }
 
+/** Ends of a connection; data associations keep one end implicitly in their parent activity. */
+export function connectionEnds(bo: ModdleElement): {
+  source?: ModdleElement;
+  target?: ModdleElement;
+} {
+  if (is(bo, 'bpmn:DataInputAssociation')) {
+    return { source: getMany(bo, 'sourceRef')[0], target: bo.$parent };
+  }
+  if (is(bo, 'bpmn:DataOutputAssociation')) {
+    return { source: bo.$parent, target: getRef(bo, 'targetRef') };
+  }
+  return { source: getRef(bo, 'sourceRef'), target: getRef(bo, 'targetRef') };
+}
+
+/**
+ * Structural DI problems that the editor cannot display or edit correctly:
+ * a diagram without a BPMN element, a shape without bounds, an edge with fewer
+ * than two waypoints, or an edge whose ends are not drawn in the same diagram.
+ */
+export function invalidDi(index: DiIndex): { di: ModdleElement; reason: string }[] {
+  const out: { di: ModdleElement; reason: string }[] = [];
+  for (const plane of index.planes) {
+    if (!getRef(plane, 'bpmnElement')) {
+      out.push({ di: plane, reason: 'diagram has no BPMN element' });
+      continue;
+    }
+    const drawn = new Set<string>();
+    const planeElements = getMany(plane, 'planeElement');
+    for (const di of planeElements) {
+      if (!is(di, 'bpmndi:BPMNShape')) continue;
+      const target = getRef(di, 'bpmnElement');
+      if (target?.id) drawn.add(target.id);
+      if (!getRef(di, 'bounds')) out.push({ di, reason: 'shape has no bounds' });
+      if (getRef(di, 'choreographyActivityShape') && !target) {
+        out.push({ di, reason: 'participant band has no participant' });
+      }
+    }
+    for (const di of planeElements) {
+      if (!is(di, 'bpmndi:BPMNEdge')) continue;
+      const bo = getRef(di, 'bpmnElement');
+      if (!bo) continue; // reported as dangling
+      if (getMany(di, 'waypoint').length < 2)
+        out.push({ di, reason: 'edge has fewer than 2 waypoints' });
+      const { source, target } = connectionEnds(bo);
+      for (const end of [source, target]) {
+        if (end?.id && !drawn.has(end.id)) {
+          out.push({ di, reason: `edge end ${end.id} is not drawn in the same diagram` });
+          break;
+        }
+      }
+    }
+  }
+  return out;
+}
+
 export function indexDi(definitions: ModdleElement): DiIndex {
   const diagrams = getMany(definitions, 'diagrams');
   const diagram = diagrams[0];

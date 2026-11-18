@@ -9,7 +9,7 @@ import type Canvas from 'diagram-js/lib/core/Canvas';
 import type ElementFactory from 'diagram-js/lib/core/ElementFactory';
 import type ElementRegistry from 'diagram-js/lib/core/ElementRegistry';
 import type { Element } from 'diagram-js/lib/model/Types';
-import { indexDi, readBounds, readWaypoints } from '@/bpmn/di/di';
+import { connectionEnds, indexDi, readBounds, readWaypoints } from '@/bpmn/di/di';
 import { isEditableConnection, isEditableShapeElement } from '@/bpmn/model/elements';
 import { getMany, getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
 import type { BpmnRoot, BpmnShape } from '../model';
@@ -46,17 +46,6 @@ function owningProcess(bo: ModdleElement): ModdleElement | undefined {
 
 function isSupportedShape(bo: ModdleElement): boolean {
   return isEditableShapeElement(bo) || is(bo, 'bpmn:Participant') || is(bo, 'bpmn:Lane');
-}
-
-/** Ends of a connection; data associations keep one end implicitly in their parent activity. */
-function connectionEnds(bo: ModdleElement): { source?: ModdleElement; target?: ModdleElement } {
-  if (is(bo, 'bpmn:DataInputAssociation')) {
-    return { source: getMany(bo, 'sourceRef')[0], target: bo.$parent };
-  }
-  if (is(bo, 'bpmn:DataOutputAssociation')) {
-    return { source: bo.$parent, target: getRef(bo, 'targetRef') };
-  }
-  return { source: getRef(bo, 'sourceRef'), target: getRef(bo, 'targetRef') };
 }
 
 export function importDiagram(

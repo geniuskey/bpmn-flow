@@ -5,6 +5,7 @@
 import { canonicalize, diffCanonical } from './model/canonical';
 import { createModdle, type BpmnModdleInstance, type ModdleElement } from './model/moddle';
 import { parseBpmnXml } from './import/parse';
+import { findDroppedMarkup } from './import/markup';
 import { assessCompatibility, type CompatibilityReport } from './validation/compatibility';
 
 export interface BpmnDocument {
@@ -12,8 +13,10 @@ export interface BpmnDocument {
   /** Live `bpmn:Definitions` — the single source of truth. */
   definitions: ModdleElement;
   report: CompatibilityReport;
-  /** The exact text that was imported. Always downloadable unchanged. */
+  /** The text of the file as it was opened (before any edit or autosave). */
   originalXml: string;
+  /** The exact bytes of the file as it was opened, when it came from a file. */
+  originalBytes?: Uint8Array;
   fileName: string;
 }
 
@@ -44,9 +47,14 @@ export async function verifyRoundTrip(
   return { xml, diffs };
 }
 
+/**
+ * `original` describes the file as the user first opened it, when `xml` is a
+ * later state of it (a restored autosave); "Download original" returns it.
+ */
 export async function loadBpmnDocument(
   xml: string,
   fileName = 'diagram.bpmn',
+  original: { xml?: string; bytes?: Uint8Array } = {},
 ): Promise<BpmnDocument> {
   const parsed = await parseBpmnXml(xml);
   let roundTripDiffs: string[];
@@ -55,12 +63,18 @@ export async function loadBpmnDocument(
   } catch (err) {
     roundTripDiffs = [`serialization failed: ${err instanceof Error ? err.message : String(err)}`];
   }
-  const report = assessCompatibility(parsed.definitions, parsed.warnings, roundTripDiffs);
+  const report = assessCompatibility(
+    parsed.definitions,
+    parsed.warnings,
+    roundTripDiffs,
+    findDroppedMarkup(xml),
+  );
   return {
     moddle: parsed.moddle,
     definitions: parsed.definitions,
     report,
-    originalXml: xml,
+    originalXml: original.xml ?? xml,
+    ...(original.bytes ? { originalBytes: original.bytes } : {}),
     fileName,
   };
 }

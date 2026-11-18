@@ -17,6 +17,9 @@ export interface SavedSession {
   fileName: string;
   documentId: string;
   savedAt: number;
+  /** The file as first opened, so "Download original" still works after a restore. */
+  originalXml?: string;
+  originalBytes?: Uint8Array;
 }
 
 interface FlowDB extends DBSchema {
@@ -28,24 +31,52 @@ interface FlowDB extends DBSchema {
   };
 }
 
+const DB_VERSION = 1;
+/** Storage calls that take longer (e.g. an upgrade blocked by another tab) fail soft. */
+const TIMEOUT_MS = 5000;
+
 let dbPromise: Promise<IDBPDatabase<FlowDB>> | null = null;
 
 function db(): Promise<IDBPDatabase<FlowDB>> {
-  dbPromise ??= openDB<FlowDB>('bpmn-flow', 1, {
-    upgrade(database) {
-      database.createObjectStore('session', { keyPath: 'id' });
-      const meta = database.createObjectStore('metadata', { keyPath: ['documentId', 'elementId'] });
-      meta.createIndex('byDocument', 'documentId');
+  dbPromise ??= openDB<FlowDB>('bpmn-flow', DB_VERSION, {
+    upgrade(database, oldVersion) {
+      // Each step creates what its version added, so later versions can extend this.
+      if (oldVersion < 1) {
+        database.createObjectStore('session', { keyPath: 'id' });
+        const meta = database.createObjectStore('metadata', {
+          keyPath: ['documentId', 'elementId'],
+        });
+        meta.createIndex('byDocument', 'documentId');
+      }
     },
+    // A newer version of the app opened in another tab: let it upgrade.
+    blocking() {
+      void dbPromise?.then((d) => d.close());
+      dbPromise = null;
+    },
+    // The browser closed the connection (e.g. storage cleared): reopen on next use.
+    terminated() {
+      dbPromise = null;
+    },
+  });
+  // A failed open is not cached, so a transient error does not disable storage for good.
+  dbPromise.catch(() => {
+    dbPromise = null;
   });
   return dbPromise;
 }
 
 async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), TIMEOUT_MS);
+  });
   try {
-    return await fn();
+    return await Promise.race([fn(), timeout]);
   } catch {
     return fallback;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

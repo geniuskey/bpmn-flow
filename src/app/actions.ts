@@ -5,12 +5,13 @@
 import { BpmnExportError, loadBpmnDocument } from '@/bpmn/document';
 import { BpmnImportError } from '@/bpmn/import/parse';
 import { newChoreographyXml, newDiagramXml } from '@/bpmn/model/newDiagram';
-import { downloadText } from '@/lib/download';
+import { downloadBytes, downloadText } from '@/lib/download';
+import { decodeXmlBytes } from '@/bpmn/import/encoding';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useEditorStore } from '@/stores/editorStore';
 import { useUiStore } from '@/stores/uiStore';
 import { useMetadataStore } from '@/stores/metadataStore';
-import { persistence } from '@/persistence/db';
+import { persistence, type SavedSession } from '@/persistence/db';
 import type { BpmnDocument } from '@/bpmn/document';
 import { exportBpmnXml } from '@/bpmn/document';
 
@@ -31,7 +32,12 @@ function controller() {
 export async function openXml(
   xml: string,
   fileName: string,
-  options: { confirmDiscard?: boolean; keepPrevious?: boolean } = {},
+  options: {
+    confirmDiscard?: boolean;
+    keepPrevious?: boolean;
+    /** The file as first opened, when `xml` is a later state of it (see loadBpmnDocument). */
+    original?: { xml?: string; bytes?: Uint8Array };
+  } = {},
 ): Promise<boolean> {
   const docs = useDocumentStore.getState();
   const ctrl = controller();
@@ -48,7 +54,7 @@ export async function openXml(
   try {
     // Persist the outgoing document's latest edits before it is replaced.
     await flushAutosave();
-    const doc = await loadBpmnDocument(xml, fileName);
+    const doc = await loadBpmnDocument(xml, fileName, options.original);
     const result = ctrl.open(doc);
     docs.setDocument(doc);
     void useMetadataStore.getState().load(documentIdOf(doc));
@@ -89,14 +95,25 @@ export async function openXml(
 }
 
 export async function openFile(file: File): Promise<boolean> {
+  let bytes: Uint8Array;
   let text: string;
   try {
-    text = await file.text();
+    bytes = new Uint8Array(await file.arrayBuffer());
   } catch {
     useDocumentStore.getState().notify({ kind: 'error', title: `Could not read “${file.name}”.` });
     return false;
   }
-  return openXml(text, file.name);
+  try {
+    text = decodeXmlBytes(bytes);
+  } catch (err) {
+    const title = err instanceof Error ? err.message : 'Could not decode the file.';
+    const details = err instanceof BpmnImportError && err.details ? [err.details] : undefined;
+    useDocumentStore
+      .getState()
+      .notify({ kind: 'error', title: `Could not open “${file.name}”: ${title}`, details });
+    return false;
+  }
+  return openXml(text, file.name, { original: { bytes } });
 }
 
 export function pickFile(): void {
@@ -144,7 +161,9 @@ export async function exportXml(): Promise<void> {
 
 export function downloadOriginal(): void {
   const doc = useDocumentStore.getState().doc;
-  if (doc) downloadText(doc.originalXml, exportName(doc.fileName));
+  if (!doc) return;
+  if (doc.originalBytes) downloadBytes(doc.originalBytes, exportName(doc.fileName));
+  else downloadText(doc.originalXml, exportName(doc.fileName));
 }
 
 export async function runAutoLayout(): Promise<void> {
@@ -188,13 +207,34 @@ export function saveSession(): Promise<boolean> {
         return false; // keep the previous autosave rather than storing something unverified
       }
     }
-    return persistence.saveSession({
+    const saved = await persistence.saveSession({
       xml,
       fileName: doc.fileName,
       documentId: documentIdOf(doc),
       savedAt: Date.now(),
+      originalXml: doc.originalXml,
+      ...(doc.originalBytes ? { originalBytes: doc.originalBytes } : {}),
     });
+    reportAutosave(saved);
+    return saved;
   });
+}
+
+let autosaveFailing = false;
+
+/** Tells the user once when local saving stops working, and when it works again. */
+function reportAutosave(ok: boolean): void {
+  if (ok === !autosaveFailing) return;
+  autosaveFailing = !ok;
+  useDocumentStore.getState().notify(
+    ok
+      ? { kind: 'success', title: 'Autosave works again.' }
+      : {
+          kind: 'warning',
+          title: 'Autosave is not working: changes are not stored in this browser.',
+          details: ['Export the diagram to keep your work (storage may be full or disabled).'],
+        },
+  );
 }
 
 const AUTOSAVE_DELAY_MS = 1000;
@@ -224,6 +264,10 @@ export function hasUnsavedSession(): boolean {
   return autosaveTimer !== null || queuedSaves > 0;
 }
 
+function originalOf(session: SavedSession): { xml?: string; bytes?: Uint8Array } {
+  return { xml: session.originalXml, bytes: session.originalBytes };
+}
+
 /**
  * Re-opens the autosaved document from a previous visit, if any. 'failed'
  * means a session exists but could not be opened; it is left in place.
@@ -234,6 +278,7 @@ export async function restoreSession(): Promise<'restored' | 'none' | 'failed'> 
   const ok = await openXml(session.xml, session.fileName, {
     confirmDiscard: false,
     keepPrevious: false,
+    original: originalOf(session),
   });
   if (!ok) return 'failed';
   useDocumentStore.getState().notify({
@@ -250,7 +295,7 @@ export async function restorePreviousSession(): Promise<boolean> {
     useDocumentStore.getState().notify({ kind: 'info', title: 'There is no previous autosave.' });
     return false;
   }
-  const ok = await openXml(previous.xml, previous.fileName);
+  const ok = await openXml(previous.xml, previous.fileName, { original: originalOf(previous) });
   if (ok) {
     useDocumentStore.getState().notify({
       kind: 'info',

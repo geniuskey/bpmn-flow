@@ -86,7 +86,44 @@ export function buildProcessGraph(process: ModdleElement): ProcessGraph {
       graph.in.get(target)!.push(source);
     }
   }
+  linkEvents(graph);
   return graph;
+}
+
+function linkDefinition(el: ModdleElement): ModdleElement | undefined {
+  return getMany(el, 'eventDefinitions').find((d) => is(d, 'bpmn:LinkEventDefinition'));
+}
+
+/**
+ * A link throw event continues at its link catch event ("off-page connector").
+ * They are paired by the definition's `target`/`source` references or, as most
+ * tools do, by name (the definition's, else the event's). The pair is added to
+ * the adjacency (not to `edges`, which are real sequence flows).
+ */
+function linkEvents(graph: ProcessGraph): void {
+  const nodes = [...graph.nodes.values()];
+  const catches = nodes.filter(
+    (n) => is(n.element, 'bpmn:IntermediateCatchEvent') && linkDefinition(n.element),
+  );
+  const nameOf = (n: GraphNode) => linkDefinition(n.element)?.name ?? n.name;
+  for (const thrower of nodes) {
+    if (!is(thrower.element, 'bpmn:IntermediateThrowEvent')) continue;
+    const def = linkDefinition(thrower.element);
+    if (!def) continue;
+    const target = getRef(def, 'target');
+    const name = nameOf(thrower);
+    for (const c of catches) {
+      const cdef = linkDefinition(c.element)!;
+      const paired =
+        target === cdef ||
+        getMany(cdef, 'source').includes(def) ||
+        (!target && !!name && nameOf(c) === name);
+      if (paired) {
+        graph.out.get(thrower.id)!.push(c.id);
+        graph.in.get(c.id)!.push(thrower.id);
+      }
+    }
+  }
 }
 
 export function processesOf(definitions: ModdleElement): ModdleElement[] {
