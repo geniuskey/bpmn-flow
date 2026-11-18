@@ -35,6 +35,23 @@ BPMN Flow is a static single-page app. There is no backend.
 Dependencies point downwards only. `src/bpmn` and `src/analysis` import neither
 React nor diagram-js, so they run in Node (unit tests) and could run in a Web Worker.
 
+Where the larger pieces live:
+
+- `src/editor/EditorController.ts` is the facade the React shell talks to;
+  `modules.ts` wires the diagram-js modules and command handlers, `types.ts` holds
+  the public types (`EditorSnapshot`, `EditorTool`, `DiagramInfo`).
+- `src/editor/renderer/BpmnFlowRenderer.ts` dispatches per element kind to
+  `shapes.ts` (events, choreography activities, pools), `markers.ts` (gateway,
+  event and activity markers, task icons) and `text.ts` (labels); `svg.ts` has the
+  SVG helpers.
+- `src/editor/modeling/SemanticSync.ts` only registers the command hooks; the BPMN
+  changes are in `shapeSync.ts` and `connectionSync.ts`, which share the services
+  and DI/containment helpers of `semanticModel.ts`.
+- `src/components/Inspector.tsx` picks the panel; the sections are in
+  `src/components/inspector/` (`ElementDetails`, `kindFields`, `eventFields`,
+  `participantFields`, `MetadataSection`, `DocumentDetails`, shared `fields` and
+  `shared` helpers).
+
 ## Single source of truth
 
 The `bpmn:Definitions` moddle tree is the only document model.

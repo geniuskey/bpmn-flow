@@ -9,7 +9,7 @@ import { bo } from '../model';
 import type BpmnElementFactory from '../modeling/BpmnElementFactory';
 import { ChangeLog } from '../modeling/ChangeLog';
 import { bandsOf } from '../modeling/choreography';
-import { choreographyOf } from '../modeling/SemanticSync';
+import { choreographyOf } from '../modeling/semanticModel';
 
 export const SET_CHOREOGRAPHY_PARTICIPANT = 'choreography.setParticipant';
 

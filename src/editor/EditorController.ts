@@ -20,165 +20,39 @@ import type { Connection, Element, Shape } from 'diagram-js/lib/model/Types';
 import type { ModuleDeclaration } from 'didi';
 import SelectionModule from 'diagram-js/lib/features/selection';
 import OutlineModule from 'diagram-js/lib/features/outline';
-import MoveModule from 'diagram-js/lib/features/move';
-import ModelingModule from 'diagram-js/lib/features/modeling';
 import LassoToolModule from 'diagram-js/lib/features/lasso-tool';
 import HandToolModule from 'diagram-js/lib/features/hand-tool';
-import AutoScrollModule from 'diagram-js/lib/features/auto-scroll';
-import CreateModule from 'diagram-js/lib/features/create';
-import ConnectModule from 'diagram-js/lib/features/connect';
-import ConnectionPreviewModule from 'diagram-js/lib/features/connection-preview';
-import BendpointsModule from 'diagram-js/lib/features/bendpoints';
-import ResizeModule from 'diagram-js/lib/features/resize';
-import AttachSupportModule from 'diagram-js/lib/features/attach-support';
-import GridSnappingModule from 'diagram-js/lib/features/grid-snapping';
-import ContextPadModule from 'diagram-js/lib/features/context-pad';
 import ZoomScrollModule from 'diagram-js/lib/navigation/zoomscroll';
 import MoveCanvasModule from 'diagram-js/lib/navigation/movecanvas';
 import type { BpmnDocument } from '@/bpmn/document';
 import { exportBpmnXml } from '@/bpmn/document';
 import type { ModdleElement } from '@/bpmn/model/moddle';
 import { importDiagram, type CanvasImportResult } from './canvas/importDiagram';
-import BpmnFlowRenderer from './renderer/BpmnFlowRenderer';
-import BpmnFlowLayouter from './layout/BpmnFlowLayouter';
-import DiSync from './commands/DiSync';
 import {
   UPDATE_CONDITION,
   UPDATE_DOCUMENTATION,
   UPDATE_PROPERTIES,
-  UpdateConditionHandler,
-  UpdateDocumentationHandler,
-  UpdatePropertiesHandler,
   type PropertyValue,
 } from './commands/UpdatePropertiesHandler';
-import ChangeTypeHandler, { CHANGE_TYPE } from './commands/ChangeTypeHandler';
-import EventDefinitionHandler, { SET_EVENT_DEFINITION } from './commands/EventDefinitionHandler';
-import LoopHandler, { SET_LOOP, type LoopKind } from './commands/LoopHandler';
-import ChoreographyParticipantHandler, {
-  SET_CHOREOGRAPHY_PARTICIPANT,
-} from './commands/ChoreographyParticipantHandler';
-import EventDetailHandler, {
-  UPDATE_EVENT_DETAIL,
-  type EventDetail,
-} from './commands/EventDetailHandler';
-import {
-  ADD_LANE,
-  SET_POOL_BLACK_BOX,
-  SetPoolBlackBoxHandler,
-  blackBoxBlocker,
-  AddLaneHandler,
-  ROOT_TO_COLLABORATION,
-  RootToCollaborationHandler,
-  UPDATE_LANES,
-  UpdateLanesHandler,
-} from './commands/StructureHandlers';
-import { APPLY_LAYOUT, ApplyLayoutHandler, type LayoutResult } from './layout/ApplyLayoutHandler';
-import BpmnFlowRules, { deletable } from './interaction/BpmnFlowRules';
-import BpmnContextPadProvider from './interaction/ContextPadProvider';
-import DirectEditing from './interaction/DirectEditing';
-import Clipboard from './interaction/Clipboard';
+import { CHANGE_TYPE } from './commands/ChangeTypeHandler';
+import { SET_EVENT_DEFINITION } from './commands/EventDefinitionHandler';
+import { SET_LOOP, type LoopKind } from './commands/LoopHandler';
+import { SET_CHOREOGRAPHY_PARTICIPANT } from './commands/ChoreographyParticipantHandler';
+import { UPDATE_EVENT_DETAIL, type EventDetail } from './commands/EventDetailHandler';
+import { ADD_LANE, SET_POOL_BLACK_BOX, blackBoxBlocker } from './commands/StructureHandlers';
+import { APPLY_LAYOUT, type LayoutResult } from './layout/ApplyLayoutHandler';
+import { deletable } from './interaction/BpmnFlowRules';
+import type DirectEditing from './interaction/DirectEditing';
+import type Clipboard from './interaction/Clipboard';
 import { guardCommandStack } from './commands/guardCommandStack';
-import ClickSelectsBehavior from './interaction/SelectionBehavior';
-import ConnectTool from './interaction/ConnectTool';
-import BpmnElementFactory from './modeling/BpmnElementFactory';
-import BpmnIds from './modeling/BpmnIds';
-import SemanticSync from './modeling/SemanticSync';
-import StructureBehavior from './modeling/StructureBehavior';
+import type ConnectTool from './interaction/ConnectTool';
 import { bo, childrenOf, rootOf, type BpmnData } from './model';
 import { labelOf } from '@/bpmn/model/elements';
 import { getMany, getRef } from '@/bpmn/model/moddle';
+import { coreModule, EDITING_MODULES } from './modules';
+import type { DiagramInfo, EditorSnapshot, EditorTool, Listener } from './types';
 
-export interface DiagramInfo {
-  rootId: string;
-  name: string;
-  type: string;
-  active: boolean;
-}
-
-export type EditorTool = 'select' | 'pan' | 'lasso' | 'connect';
-
-export interface EditorSnapshot {
-  selection: string[];
-  canUndo: boolean;
-  canRedo: boolean;
-  /** Increments on every model change (execute / undo / redo). */
-  revision: number;
-  /** True when the model changed since it was opened or last exported. */
-  dirty: boolean;
-  zoom: number;
-  readOnly: boolean;
-  /** Root id of the BPMN diagram that is shown. */
-  activeDiagram: string;
-  /** Tool currently active inside diagram-js (tools end themselves, e.g. after one connection). */
-  activeTool: EditorTool;
-}
-
-type Listener = (snapshot: EditorSnapshot) => void;
-
-class BpmnFlowCommands {
-  static $inject = ['commandStack'];
-  constructor(commandStack: CommandStack) {
-    commandStack.registerHandler(UPDATE_PROPERTIES, UpdatePropertiesHandler);
-    commandStack.registerHandler(UPDATE_DOCUMENTATION, UpdateDocumentationHandler);
-    commandStack.registerHandler(UPDATE_CONDITION, UpdateConditionHandler);
-    commandStack.registerHandler(CHANGE_TYPE, ChangeTypeHandler);
-    commandStack.registerHandler(SET_EVENT_DEFINITION, EventDefinitionHandler);
-    commandStack.registerHandler(SET_LOOP, LoopHandler);
-    commandStack.registerHandler(SET_CHOREOGRAPHY_PARTICIPANT, ChoreographyParticipantHandler);
-    commandStack.registerHandler(UPDATE_EVENT_DETAIL, EventDetailHandler);
-    commandStack.registerHandler(ROOT_TO_COLLABORATION, RootToCollaborationHandler);
-    commandStack.registerHandler(UPDATE_LANES, UpdateLanesHandler);
-    commandStack.registerHandler(ADD_LANE, AddLaneHandler);
-    commandStack.registerHandler(SET_POOL_BLACK_BOX, SetPoolBlackBoxHandler);
-    commandStack.registerHandler(APPLY_LAYOUT, ApplyLayoutHandler);
-  }
-}
-
-const coreModule: ModuleDeclaration = {
-  __init__: ['bpmnFlowRenderer', 'clickSelectsBehavior'],
-  bpmnFlowRenderer: ['type', BpmnFlowRenderer],
-  clickSelectsBehavior: ['type', ClickSelectsBehavior],
-};
-
-const editingModule: ModuleDeclaration = {
-  __init__: [
-    'diSync',
-    'semanticSync',
-    'structureBehavior',
-    'bpmnFlowRules',
-    'bpmnFlowCommands',
-    'bpmnContextPadProvider',
-    'directEditing',
-    'connectTool',
-  ],
-  elementFactory: ['type', BpmnElementFactory],
-  bpmnIds: ['type', BpmnIds],
-  layouter: ['type', BpmnFlowLayouter],
-  diSync: ['type', DiSync],
-  semanticSync: ['type', SemanticSync],
-  structureBehavior: ['type', StructureBehavior],
-  bpmnFlowRules: ['type', BpmnFlowRules],
-  bpmnFlowCommands: ['type', BpmnFlowCommands],
-  bpmnContextPadProvider: ['type', BpmnContextPadProvider],
-  directEditing: ['type', DirectEditing],
-  bpmnClipboard: ['type', Clipboard],
-  connectTool: ['type', ConnectTool],
-};
-
-const EDITING_MODULES: ModuleDeclaration[] = [
-  ModelingModule,
-  MoveModule,
-  AutoScrollModule,
-  CreateModule,
-  ConnectModule,
-  ConnectionPreviewModule,
-  BendpointsModule,
-  ResizeModule,
-  AttachSupportModule,
-  GridSnappingModule,
-  ContextPadModule,
-  editingModule,
-];
+export type { DiagramInfo, EditorSnapshot, EditorTool } from './types';
 
 export class EditorController {
   private diagram: Diagram | null = null;
