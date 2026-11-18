@@ -36,11 +36,8 @@ describe('compatibility assessment', () => {
     expect(doc.report.mode).toBe('readonly');
     expect(doc.report.exportAllowed).toBe(true);
     const unsupported = doc.report.issues.filter((i) => i.code === 'UNSUPPORTED_ELEMENT');
-    // Choreography diagrams are a separate BPMN diagram type and stay read-only.
-    expect(unsupported.map((i) => i.elementType).sort()).toEqual([
-      'bpmn:Choreography',
-      'bpmn:ChoreographyTask',
-    ]);
+    // Implicit throw events are not part of the editable set.
+    expect(unsupported.map((i) => i.elementType).sort()).toEqual(['bpmn:ImplicitThrowEvent']);
     expect(codes(doc.report.issues)).toContain('PRESERVED_ELEMENT');
   });
 
@@ -56,5 +53,13 @@ describe('compatibility assessment', () => {
     );
     await expect(loadBpmnDocument('')).rejects.toThrow('empty');
     await expect(loadBpmnDocument('<html><body/></html>')).rejects.toBeInstanceOf(BpmnImportError);
+  });
+});
+
+describe('new choreography template', () => {
+  it('opens editable', async () => {
+    const { newChoreographyXml } = await import('@/bpmn/model/newDiagram');
+    const doc = await loadBpmnDocument(newChoreographyXml('t'));
+    expect(doc.report).toEqual({ mode: 'editable', exportAllowed: true, issues: [] });
   });
 });

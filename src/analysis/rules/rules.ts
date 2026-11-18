@@ -355,7 +355,11 @@ export function documentRules(definitions: ModdleElement): Finding[] {
   if (di.plane) {
     walkContainment(definitions, (el) => {
       if (!el.id) return;
-      const visual = is(el, 'bpmn:FlowNode') || is(el, 'bpmn:Participant') || is(el, 'bpmn:Lane');
+      // Choreography participants are drawn as bands of their tasks, not as pools.
+      const visual =
+        is(el, 'bpmn:FlowNode') ||
+        (is(el, 'bpmn:Participant') && !is(el.$parent, 'bpmn:Choreography')) ||
+        is(el, 'bpmn:Lane');
       if (visual && !di.shapes.has(el.id)) {
         findings.push({
           severity: 'warning',

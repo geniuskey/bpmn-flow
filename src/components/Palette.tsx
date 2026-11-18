@@ -1,4 +1,5 @@
 import {
+  PanelsTopLeft,
   Hexagon,
   CircleDashed,
   Database,
@@ -58,6 +59,11 @@ const CREATE: { type: string; label: string; icon: ComponentType<{ className?: s
   { type: 'bpmn:Group', label: 'Group', icon: Group },
   { type: 'bpmn:Participant', label: 'Pool', icon: Rows3 },
   { type: 'bpmn:Conversation', label: 'Conversation (in a collaboration)', icon: Hexagon },
+  {
+    type: 'bpmn:ChoreographyTask',
+    label: 'Choreography task (in a choreography)',
+    icon: PanelsTopLeft,
+  },
 ];
 
 const DRAG_THRESHOLD = 4;

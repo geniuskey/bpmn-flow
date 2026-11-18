@@ -121,7 +121,7 @@ test('nodes cannot be dragged out of their pool', async ({ page }) => {
 test('unsupported elements open read-only', async ({ page }) => {
   await page.goto('/?sample=unsupported-elements');
   await expect(page.getByText('Read-only').first()).toBeVisible();
-  await expect(page.getByTestId('compatibility-issues')).toContainText('Choreography Task');
+  await expect(page.getByTestId('compatibility-issues')).toContainText('Implicit Throw Event');
   // Dragging pans the canvas instead of moving the element: relative positions stay the same.
   const offset = async () => {
     const [a, b] = [

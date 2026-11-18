@@ -4,7 +4,7 @@
  */
 import { BpmnExportError, loadBpmnDocument } from '@/bpmn/document';
 import { BpmnImportError } from '@/bpmn/import/parse';
-import { newDiagramXml } from '@/bpmn/model/newDiagram';
+import { newChoreographyXml, newDiagramXml } from '@/bpmn/model/newDiagram';
 import { downloadText } from '@/lib/download';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useEditorStore } from '@/stores/editorStore';
@@ -98,6 +98,10 @@ export function pickFile(): void {
     if (file) void openFile(file);
   };
   input.click();
+}
+
+export function newChoreographyDocument(): Promise<boolean> {
+  return openXml(newChoreographyXml(), 'untitled-choreography.bpmn');
 }
 
 export function newDocument(): Promise<boolean> {

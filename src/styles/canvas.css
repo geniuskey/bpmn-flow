@@ -398,3 +398,18 @@
   stroke-width: 4px;
   stroke: var(--bf-shape-stroke);
 }
+.bf-choreography {
+  filter: none;
+}
+.bf-band-divider {
+  fill: none;
+  stroke: var(--bf-shape-stroke);
+  stroke-width: 1.25px;
+}
+.bf-band-shade {
+  fill: color-mix(in oklch, var(--bf-shape-stroke) 12%, transparent);
+  stroke: none;
+}
+.bf-band-label {
+  font-size: 11px;
+}

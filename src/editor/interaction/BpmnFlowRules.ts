@@ -42,6 +42,11 @@ const ARTIFACT_SHAPES = [
   'bpmn:SubConversation',
   'bpmn:CallConversation',
 ];
+const CHOREOGRAPHY_SHAPES = [
+  'bpmn:ChoreographyTask',
+  'bpmn:SubChoreography',
+  'bpmn:CallChoreography',
+];
 const CONVERSATION_SHAPES = ['bpmn:Conversation', 'bpmn:SubConversation', 'bpmn:CallConversation'];
 const DATA_SHAPES = ['bpmn:DataObjectReference', 'bpmn:DataStoreReference'];
 
@@ -79,12 +84,34 @@ export function canContain(target: Element | undefined, type: string): boolean {
   const targetBo = bo(target);
   // Pools live on the root of a process or collaboration diagram (not of a sub-process diagram).
   if (type === 'bpmn:Participant') {
-    return !target.parent && (is(targetBo, 'bpmn:Process') || is(targetBo, 'bpmn:Collaboration'));
+    return (
+      !target.parent &&
+      (is(targetBo, 'bpmn:Process') || is(targetBo, 'bpmn:Collaboration')) &&
+      !is(targetBo, 'bpmn:Choreography')
+    );
   }
   if (type === 'bpmn:Lane') return false; // lanes are added through `lane.add`
   if (type === 'bpmn:BoundaryEvent') return false; // attached to an activity instead
-  if (CONVERSATION_SHAPES.includes(type))
-    return !target.parent && is(targetBo, 'bpmn:Collaboration');
+  if (CONVERSATION_SHAPES.includes(type)) {
+    return (
+      !target.parent && is(targetBo, 'bpmn:Collaboration') && !is(targetBo, 'bpmn:Choreography')
+    );
+  }
+  // Choreographies hold events, gateways and choreography activities — no tasks or data.
+  const container = processOf(target);
+  const inChoreography =
+    !!container && (is(container, 'bpmn:Choreography') || is(container, 'bpmn:SubChoreography'));
+  if (CHOREOGRAPHY_SHAPES.includes(type) && !inChoreography) return false;
+  if (
+    inChoreography &&
+    !ARTIFACT_SHAPES.includes(type) &&
+    !CHOREOGRAPHY_SHAPES.includes(type) &&
+    !/Event$/.test(type) &&
+    !/Gateway$/.test(type)
+  ) {
+    return false;
+  }
+  if (is(targetBo, 'bpmn:Choreography')) return !target.parent;
   if (ARTIFACT_SHAPES.includes(type)) {
     return (
       !target.parent ||

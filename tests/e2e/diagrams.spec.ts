@@ -96,3 +96,66 @@ test('conversation diagrams: create conversations and link them to pools', async
   expect(['valid', 'skipped']).toContain(xsdValidate(xml));
   saveForInterop('e2e-conversation.bpmn', xml);
 });
+
+test('choreography diagrams: tasks with participant bands', async ({ page }) => {
+  await page.goto('/?sample=choreography');
+  await expect(el(page, 'Send_invoice')).toBeVisible();
+  await expect(page.getByText('Read-only')).toHaveCount(0);
+  await expect(el(page, 'Send_invoice')).toContainText('Seller');
+  await expect(el(page, 'Send_invoice')).toContainText('Buyer');
+  await page.keyboard.press('0');
+
+  // A new choreography task gets the choreography's participants as bands.
+  const end = (await el(page, 'End_c').boundingBox())!;
+  await page.getByTestId('create-ChoreographyTask').click();
+  await page.mouse.move(end.x + 200, end.y + 20, { steps: 3 });
+  await page.mouse.click(end.x + 200, end.y + 20);
+  await settle(page);
+  const task = (await page
+    .locator('.djs-shape[data-element-id^="ChoreographyTask_"]')
+    .getAttribute('data-element-id'))!;
+  await expect(el(page, task)).toContainText('Buyer');
+
+  // A new receiving participant; then move the task — its bands follow.
+  const inspector = page.getByTestId('inspector');
+  await inspector.getByLabel('New receiving participant').fill('Bank');
+  await inspector.getByLabel('New receiving participant').press('Enter');
+  await expect(el(page, task)).toContainText('Bank');
+  const box = (await el(page, task).boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 20, box.y + box.height / 2 + 40, { steps: 4 });
+  await page.mouse.move(box.x + box.width / 2 + 40, box.y + box.height / 2 + 80, { steps: 4 });
+  await page.mouse.up();
+  await settle(page);
+
+  let xml = await exportXml(page);
+  const taskXml = new RegExp(
+    `<bpmn:choreographyTask id="${task}"[\\s\\S]*?</bpmn:choreographyTask>`,
+  ).exec(xml)![0];
+  expect(taskXml).toMatch(/initiatingParticipantRef="Seller"|initiatingParticipantRef="Buyer"/);
+  expect(xml).toMatch(/<bpmn:participant id="[^"]+" name="Bank" \/>/);
+  const taskBounds = new RegExp(
+    `bpmnElement="${task}">\\s*<dc:Bounds x="([\\d.]+)" y="([\\d.]+)"`,
+  ).exec(xml)!;
+  const bottomBand = new RegExp(
+    `participantBandKind="bottom_non_initiating"[^>]*>\\s*<dc:Bounds x="([\\d.]+)" y="([\\d.]+)" width="[\\d.]+" height="([\\d.]+)"`,
+    'g',
+  );
+  const bands = [...xml.matchAll(bottomBand)].map((m) => ({ x: +m[1]!, y: +m[2]!, h: +m[3]! }));
+  // One of the bottom bands sits at the bottom of the moved task.
+  expect(bands.some((b) => b.x === +taskBounds[1]! && b.y + b.h === +taskBounds[2]! + 80)).toBe(
+    true,
+  );
+  expect(['valid', 'skipped']).toContain(xsdValidate(xml));
+  saveForInterop('e2e-choreography.bpmn', xml);
+
+  // Delete removes the task's bands; undo restores them.
+  await el(page, task).click();
+  await page.keyboard.press('Delete');
+  xml = await exportXml(page);
+  expect(xml).not.toContain(`choreographyActivityShape="${task}_di"`);
+  await page.keyboard.press('ControlOrMeta+z');
+  xml = await exportXml(page);
+  expect(xml).toContain(`choreographyActivityShape="${task}_di"`);
+});

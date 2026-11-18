@@ -16,6 +16,7 @@ import { bo, rootOf, type BpmnData } from '../model';
 import type BpmnElementFactory from './BpmnElementFactory';
 import { ChangeLog } from './ChangeLog';
 import { allLanes, artifactContainerOf, processOf } from './semantic';
+import { bandsOf } from './choreography';
 
 type Ctx = Record<string, unknown>;
 type Hook = (context: Ctx, log: ChangeLog) => void;
@@ -31,6 +32,12 @@ function isArtifact(el: ModdleElement): boolean {
 function listProperty(el: ModdleElement): 'artifacts' | 'flowElements' | 'conversations' {
   if (is(el, 'bpmn:ConversationNode')) return 'conversations';
   return isArtifact(el) ? 'artifacts' : 'flowElements';
+}
+
+/** The choreography that owns an activity (its participants live there). */
+export function choreographyOf(el: ModdleElement): ModdleElement | undefined {
+  for (let p = el.$parent; p; p = p.$parent) if (is(p, 'bpmn:Choreography')) return p;
+  return undefined;
 }
 
 /** The collaboration on the diagram root, required for collaboration-level content. */
@@ -224,6 +231,7 @@ export default class SemanticSync extends CommandInterceptor {
         log.set(element, 'dataObjectRef', dataObject);
       }
       this.insertInto(container, 'flowElements', element, log);
+      if (is(element, 'bpmn:ChoreographyActivity')) this.addBands(shape, element, log);
       if (is(element, 'bpmn:BoundaryEvent')) {
         log.set(element, 'attachedToRef', shape.host ? bo(shape.host) : undefined);
       }
@@ -262,6 +270,9 @@ export default class SemanticSync extends CommandInterceptor {
       return;
     }
     if (parent) log.remove(parent.get(listProperty(element)) as ModdleElement[], element);
+    const planeElements = this.plane().get('planeElement') as ModdleElement[];
+    for (const band of bandsOf(shape)) log.remove(planeElements, band);
+    if (is(element, 'bpmn:ChoreographyTask')) this.removeUnusedMessageFlows(element, log);
     if (is(element, 'bpmn:Group')) this.removeUnusedCategory(element, log);
     if (is(element, 'bpmn:DataObjectReference')) this.removeUnusedDataObject(element, log);
     if (is(element, 'bpmn:FlowNode')) {
@@ -270,6 +281,85 @@ export default class SemanticSync extends CommandInterceptor {
       }
     }
     this.removeForeignDi([element], log);
+  }
+
+  /**
+   * A new choreography activity gets two participants (the first two of the
+   * choreography, created if missing) and a top (initiating) and bottom band.
+   */
+  private addBands(shape: Shape, activity: ModdleElement, log: ChangeLog): void {
+    const choreography = choreographyOf(activity);
+    if (!choreography) throw new Error('Choreography activities belong in a choreography.');
+    if (getMany(activity, 'participantRef').length < 2) {
+      const participants = choreography.get('participants') as ModdleElement[];
+      const chosen = participants.slice(0, 2);
+      ['Participant A', 'Participant B'].slice(chosen.length).forEach((name, i) => {
+        const p = this.created(shape, `participant${i}`, () =>
+          this.factory.createModdle('bpmn:Participant', { name }),
+        );
+        this.insertInto(choreography, 'participants', p, log);
+        chosen.push(p);
+      });
+      log.set(activity, 'participantRef', chosen);
+      log.set(activity, 'initiatingParticipantRef', chosen[0]);
+    }
+    // BPMN requires a choreography task to refer to at least one message flow.
+    if (is(activity, 'bpmn:ChoreographyTask') && !getMany(activity, 'messageFlowRef').length) {
+      const [from, to] = getMany(activity, 'participantRef');
+      const flow = this.created(shape, 'messageFlow', () =>
+        this.factory.createModdle('bpmn:MessageFlow', { sourceRef: from, targetRef: to }),
+      );
+      this.insertInto(choreography, 'messageFlows', flow, log);
+      log.set(activity, 'messageFlowRef', [flow]);
+    }
+    let bands = bandsOf(shape);
+    if (!bands.length) {
+      const [a, b] = getMany(activity, 'participantRef');
+      bands = [
+        this.created(shape, 'bandTop', () =>
+          this.factory.createModdle('bpmndi:BPMNShape', {
+            id: `${activity.id}_band_top`,
+            bpmnElement: a,
+            choreographyActivityShape: (shape as unknown as BpmnData).di,
+            participantBandKind: 'top_initiating',
+          }),
+        ),
+        this.created(shape, 'bandBottom', () =>
+          this.factory.createModdle('bpmndi:BPMNShape', {
+            id: `${activity.id}_band_bottom`,
+            bpmnElement: b,
+            choreographyActivityShape: (shape as unknown as BpmnData).di,
+            participantBandKind: 'bottom_non_initiating',
+          }),
+        ),
+      ];
+      const holder = shape as Shape & { bands?: ModdleElement[] };
+      log.apply(
+        () => (holder.bands = bands),
+        () => (holder.bands = []),
+      );
+    }
+    const plane = this.plane();
+    for (const band of bands) {
+      if (!getMany(plane, 'planeElement').includes(band)) {
+        log.insert(plane.get('planeElement') as ModdleElement[], band);
+        log.setParent(band, plane);
+      }
+    }
+  }
+
+  /** Message flows only referenced by a deleted choreography task go with it. */
+  private removeUnusedMessageFlows(task: ModdleElement, log: ChangeLog): void {
+    const choreography = choreographyOf(task) ?? task.$parent;
+    const flows = choreography?.get('messageFlows') as ModdleElement[] | undefined;
+    if (!flows) return;
+    for (const flow of getMany(task, 'messageFlowRef')) {
+      let used = false;
+      walkContainment(this.definitions, (el) => {
+        if (el !== task && getMany(el, 'messageFlowRef').includes(flow)) used = true;
+      });
+      if (!used) log.remove(flows, flow);
+    }
   }
 
   private removeUnusedDataObject(reference: ModdleElement, log: ChangeLog): void {

@@ -52,12 +52,12 @@ describe('visual mapping', () => {
   it('maps supported and unsupported elements', async () => {
     const { di } = await load('unsupported-elements.bpmn');
     expect(visualFor(bo(di, 'End_unsup'), false).kind).toBe('event');
-    // Choreography tasks are outside the editable set and drawn as placeholders.
+    // Implicit throw events are outside the editable set and drawn as placeholders.
     expect(visualFor(bo(di, 'Start_msg'), false).kind).toBe('event');
-    expect(visualFor(bo(di, 'Send_invoice'), false)).toMatchObject({
+    expect(visualFor(bo(di, 'Implicit_1'), false)).toMatchObject({
       kind: 'unsupportedShape',
-      outline: 'rect',
-      caption: 'Choreography Task',
+      outline: 'circle',
+      caption: 'Implicit Throw Event',
     });
   });
 });

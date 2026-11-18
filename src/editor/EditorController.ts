@@ -54,6 +54,9 @@ import {
 import ChangeTypeHandler, { CHANGE_TYPE } from './commands/ChangeTypeHandler';
 import EventDefinitionHandler, { SET_EVENT_DEFINITION } from './commands/EventDefinitionHandler';
 import LoopHandler, { SET_LOOP, type LoopKind } from './commands/LoopHandler';
+import ChoreographyParticipantHandler, {
+  SET_CHOREOGRAPHY_PARTICIPANT,
+} from './commands/ChoreographyParticipantHandler';
 import EventDetailHandler, {
   UPDATE_EVENT_DETAIL,
   type EventDetail,
@@ -117,6 +120,7 @@ class BpmnFlowCommands {
     commandStack.registerHandler(CHANGE_TYPE, ChangeTypeHandler);
     commandStack.registerHandler(SET_EVENT_DEFINITION, EventDefinitionHandler);
     commandStack.registerHandler(SET_LOOP, LoopHandler);
+    commandStack.registerHandler(SET_CHOREOGRAPHY_PARTICIPANT, ChoreographyParticipantHandler);
     commandStack.registerHandler(UPDATE_EVENT_DETAIL, EventDetailHandler);
     commandStack.registerHandler(ROOT_TO_COLLABORATION, RootToCollaborationHandler);
     commandStack.registerHandler(UPDATE_LANES, UpdateLanesHandler);
@@ -467,6 +471,15 @@ export class EditorController {
   updateEventDetail(id: string, detail: EventDetail): void {
     const element = this.getElement(id);
     if (element) this.exec(UPDATE_EVENT_DETAIL, { element, detail });
+  }
+
+  setChoreographyParticipant(
+    id: string,
+    slot: 0 | 1,
+    choice: { participantId?: string; newName?: string },
+  ): void {
+    const element = this.getElement(id);
+    if (element) this.exec(SET_CHOREOGRAPHY_PARTICIPANT, { element, slot, ...choice });
   }
 
   setLoop(id: string, loop: LoopKind): void {

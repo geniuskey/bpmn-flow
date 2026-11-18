@@ -8,6 +8,7 @@ import type { Element } from 'diagram-js/lib/model/Types';
 import { readBounds, translateLabel, writeBounds, writeWaypoints } from '@/bpmn/di/di';
 import type { BpmnModdleInstance } from '@/bpmn/model/moddle';
 import { isConnection, type BpmnData, type BpmnShape } from '../model';
+import { bandsOf, layoutBands } from '../modeling/choreography';
 
 export default class DiSync {
   static $inject = ['eventBus', 'moddle'];
@@ -39,4 +40,7 @@ export function syncElement(moddle: BpmnModdleInstance, element: Element): void 
     height: shape.height,
   });
   if (changed && previous) translateLabel(di, shape.x - previous.x, shape.y - previous.y);
+  // Choreography activities: participant bands follow the activity.
+  for (const [band, bounds] of layoutBands(shape, bandsOf(shape)))
+    writeBounds(moddle, band, bounds);
 }

@@ -16,4 +16,5 @@ export const EDITABLE_FIXTURES = [
   'advanced-elements.bpmn',
   'multi-diagram.bpmn',
   'conversation.bpmn',
+  'choreography.bpmn',
 ];

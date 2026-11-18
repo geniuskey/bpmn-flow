@@ -119,8 +119,15 @@ export function importDiagram(
     };
 
     const planeElements = getMany(plane, 'planeElement');
+    const isBand = (p: ModdleElement) => !!getRef(p, 'choreographyActivityShape');
+    // Participant bands belong to their choreography activity (attached before drawing).
+    const bandsByActivity = new Map<ModdleElement, ModdleElement[]>();
+    for (const band of planeElements.filter(isBand)) {
+      const activityDi = getRef(band, 'choreographyActivityShape')!;
+      bandsByActivity.set(activityDi, [...(bandsByActivity.get(activityDi) ?? []), band]);
+    }
     const shapes = planeElements
-      .filter((p) => is(p, 'bpmndi:BPMNShape'))
+      .filter((p) => is(p, 'bpmndi:BPMNShape') && !isBand(p))
       .map((diShape, index) => ({ diShape, index, bo: getRef(diShape, 'bpmnElement') }))
       .filter((s): s is { diShape: ModdleElement; index: number; bo: ModdleElement } => !!s.bo)
       .sort((a, b) => shapeOrder(a.bo) - shapeOrder(b.bo) || a.index - b.index);
@@ -138,6 +145,7 @@ export function importDiagram(
         businessObject: bo,
         di: diShape,
         unsupported: !isSupportedShape(bo),
+        ...(bandsByActivity.has(diShape) ? { bands: bandsByActivity.get(diShape) } : {}),
         ...bounds,
       }) as BpmnShape;
       const host = is(bo, 'bpmn:BoundaryEvent')

@@ -90,5 +90,7 @@ export function buildProcessGraph(process: ModdleElement): ProcessGraph {
 }
 
 export function processesOf(definitions: ModdleElement): ModdleElement[] {
-  return getMany(definitions, 'rootElements').filter((r) => is(r, 'bpmn:Process'));
+  return getMany(definitions, 'rootElements').filter(
+    (r) => is(r, 'bpmn:Process') || is(r, 'bpmn:Choreography'),
+  );
 }

@@ -17,6 +17,7 @@ export type VisualKind =
   | 'dataObject'
   | 'dataStore'
   | 'conversation'
+  | 'choreography'
   | 'conversationLink'
   | 'sequenceFlow'
   | 'messageFlow'
@@ -35,13 +36,16 @@ export interface Visual {
 export function outlineFor(el: ModdleElement): Outline {
   if (is(el, 'bpmn:Event')) return 'circle';
   if (is(el, 'bpmn:Gateway')) return 'diamond';
-  if (is(el, 'bpmn:Activity') || is(el, 'bpmn:Group')) return 'roundRect';
+  if (is(el, 'bpmn:Activity') || is(el, 'bpmn:Group') || is(el, 'bpmn:ChoreographyActivity')) {
+    return 'roundRect';
+  }
   if (is(el, 'bpmn:ConversationNode')) return 'hexagon';
   return 'rect';
 }
 
 function shapeKind(el: ModdleElement): VisualKind {
   if (is(el, 'bpmn:Event')) return 'event';
+  if (is(el, 'bpmn:ChoreographyActivity')) return 'choreography';
   if (is(el, 'bpmn:SubProcess')) return 'subProcess';
   if (is(el, 'bpmn:Activity')) return 'activity';
   if (is(el, 'bpmn:Gateway')) return 'gateway';

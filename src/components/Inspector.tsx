@@ -222,6 +222,9 @@ function ElementDetails({ id }: { id: string }) {
             </select>
           </Row>
         )}
+        {supported && is(bo, 'bpmn:ChoreographyActivity') && (
+          <ChoreographyFields elementId={element.id} activity={bo} readOnly={readOnly} />
+        )}
         {supported && is(bo, 'bpmn:Activity') && (
           <>
             <Row label="Loop">
@@ -363,6 +366,60 @@ function ElementDetails({ id }: { id: string }) {
           </Row>
         </Section>
       )}
+    </>
+  );
+}
+
+function ChoreographyFields({
+  elementId,
+  activity,
+  readOnly,
+}: {
+  elementId: string;
+  activity: ModdleElement;
+  readOnly: boolean;
+}) {
+  const controller = useEditorStore((s) => s.controller);
+  let choreography = activity.$parent;
+  while (choreography && !is(choreography, 'bpmn:Choreography'))
+    choreography = choreography.$parent;
+  const participants = getMany(choreography, 'participants');
+  const refs = getMany(activity, 'participantRef');
+  return (
+    <>
+      {(['Initiating', 'Receiving'] as const).map((label, slot) => (
+        <Row key={label} label={label}>
+          <select
+            aria-label={`${label} participant`}
+            className={inputClass}
+            value={refs[slot]?.id ?? ''}
+            disabled={readOnly}
+            onChange={(e) =>
+              controller?.setChoreographyParticipant(elementId, slot as 0 | 1, {
+                participantId: e.target.value,
+              })
+            }
+          >
+            {participants.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name || p.id}
+              </option>
+            ))}
+          </select>
+        </Row>
+      ))}
+      <Row label="New participant">
+        <TextField
+          key={`${elementId}:newParticipant:${participants.length}`}
+          label="New receiving participant"
+          value=""
+          disabled={readOnly}
+          placeholder="Name (becomes receiving)"
+          onCommit={(v) =>
+            v.trim() && controller?.setChoreographyParticipant(elementId, 1, { newName: v })
+          }
+        />
+      </Row>
     </>
   );
 }

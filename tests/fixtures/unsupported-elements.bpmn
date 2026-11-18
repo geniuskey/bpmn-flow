@@ -1,33 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_unsup" targetNamespace="http://example.com/bpmn-flow/fixtures">
   <bpmn:message id="Message_1" name="Invoice" />
-  <bpmn:choreography id="Choreo_1" name="Invoicing">
-    <bpmn:participant id="Buyer" name="Buyer" />
-    <bpmn:participant id="Seller" name="Seller" />
-    <bpmn:messageFlow id="MF_inv" sourceRef="Seller" targetRef="Buyer" messageRef="Message_1" />
-    <bpmn:startEvent id="Start_msg" name="Invoice due">
+  <bpmn:process id="Process_unsup" isExecutable="false">
+    <bpmn:startEvent id="Start_msg" name="Invoice received">
       <bpmn:outgoing>U1</bpmn:outgoing>
     </bpmn:startEvent>
-    <bpmn:choreographyTask id="Send_invoice" name="Send invoice" initiatingParticipantRef="Seller">
+    <bpmn:implicitThrowEvent id="Implicit_1" name="Implicit throw">
       <bpmn:incoming>U1</bpmn:incoming>
       <bpmn:outgoing>U2</bpmn:outgoing>
-      <bpmn:participantRef>Seller</bpmn:participantRef>
-      <bpmn:participantRef>Buyer</bpmn:participantRef>
-      <bpmn:messageFlowRef>MF_inv</bpmn:messageFlowRef>
-    </bpmn:choreographyTask>
+    </bpmn:implicitThrowEvent>
     <bpmn:endEvent id="End_unsup">
       <bpmn:incoming>U2</bpmn:incoming>
     </bpmn:endEvent>
-    <bpmn:sequenceFlow id="U1" sourceRef="Start_msg" targetRef="Send_invoice" />
-    <bpmn:sequenceFlow id="U2" sourceRef="Send_invoice" targetRef="End_unsup" />
-  </bpmn:choreography>
+    <bpmn:sequenceFlow id="U1" sourceRef="Start_msg" targetRef="Implicit_1" />
+    <bpmn:sequenceFlow id="U2" sourceRef="Implicit_1" targetRef="End_unsup" />
+  </bpmn:process>
   <bpmndi:BPMNDiagram id="Diagram_unsup">
-    <bpmndi:BPMNPlane id="Plane_unsup" bpmnElement="Choreo_1">
+    <bpmndi:BPMNPlane id="Plane_unsup" bpmnElement="Process_unsup">
       <bpmndi:BPMNShape id="Start_msg_di" bpmnElement="Start_msg"><dc:Bounds x="152" y="122" width="36" height="36" /></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Send_invoice_di" bpmnElement="Send_invoice"><dc:Bounds x="250" y="90" width="120" height="100" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Implicit_1_di" bpmnElement="Implicit_1"><dc:Bounds x="292" y="122" width="36" height="36" /></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_unsup_di" bpmnElement="End_unsup"><dc:Bounds x="432" y="122" width="36" height="36" /></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="U1_di" bpmnElement="U1"><di:waypoint x="188" y="140" /><di:waypoint x="250" y="140" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="U2_di" bpmnElement="U2"><di:waypoint x="370" y="140" /><di:waypoint x="432" y="140" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="U1_di" bpmnElement="U1"><di:waypoint x="188" y="140" /><di:waypoint x="292" y="140" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="U2_di" bpmnElement="U2"><di:waypoint x="328" y="140" /><di:waypoint x="432" y="140" /></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>

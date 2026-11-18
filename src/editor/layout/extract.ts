@@ -38,7 +38,11 @@ function containerOf(parent: Element, lanes: Shape[]): LayoutContainer {
 }
 
 export function extractLayoutContainers(root: Element): LayoutContainer[] {
-  if (is(bo(root), 'bpmn:Process') || is(bo(root), 'bpmn:SubProcess')) {
+  if (
+    is(bo(root), 'bpmn:Process') ||
+    is(bo(root), 'bpmn:SubProcess') ||
+    is(bo(root), 'bpmn:Choreography')
+  ) {
     return [containerOf(root, [])];
   }
   return childrenOf(root)

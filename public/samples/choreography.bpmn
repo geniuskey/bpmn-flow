@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_choreo" targetNamespace="http://example.com/bpmn-flow/fixtures">
+  <bpmn:message id="Message_1" name="Invoice" />
+  <bpmn:choreography id="Choreo_1" name="Invoicing">
+    <bpmn:participant id="Buyer" name="Buyer" />
+    <bpmn:participant id="Seller" name="Seller" />
+    <bpmn:messageFlow id="MF_inv" sourceRef="Seller" targetRef="Buyer" messageRef="Message_1" />
+    <bpmn:startEvent id="Start_c" name="Invoice due">
+      <bpmn:outgoing>c1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:choreographyTask id="Send_invoice" name="Send invoice" initiatingParticipantRef="Seller">
+      <bpmn:incoming>c1</bpmn:incoming>
+      <bpmn:outgoing>c2</bpmn:outgoing>
+      <bpmn:participantRef>Seller</bpmn:participantRef>
+      <bpmn:participantRef>Buyer</bpmn:participantRef>
+      <bpmn:messageFlowRef>MF_inv</bpmn:messageFlowRef>
+    </bpmn:choreographyTask>
+    <bpmn:endEvent id="End_c">
+      <bpmn:incoming>c2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="c1" sourceRef="Start_c" targetRef="Send_invoice" />
+    <bpmn:sequenceFlow id="c2" sourceRef="Send_invoice" targetRef="End_c" />
+  </bpmn:choreography>
+  <bpmndi:BPMNDiagram id="Diagram_choreo">
+    <bpmndi:BPMNPlane id="Plane_choreo" bpmnElement="Choreo_1">
+      <bpmndi:BPMNShape id="Start_c_di" bpmnElement="Start_c"><dc:Bounds x="152" y="142" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Send_invoice_di" bpmnElement="Send_invoice"><dc:Bounds x="250" y="110" width="120" height="100" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Send_invoice_band_seller" bpmnElement="Seller" choreographyActivityShape="Send_invoice_di" participantBandKind="top_initiating" isMessageVisible="false"><dc:Bounds x="250" y="110" width="120" height="20" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Send_invoice_band_buyer" bpmnElement="Buyer" choreographyActivityShape="Send_invoice_di" participantBandKind="bottom_non_initiating"><dc:Bounds x="250" y="190" width="120" height="20" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_c_di" bpmnElement="End_c"><dc:Bounds x="432" y="142" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="c1_di" bpmnElement="c1"><di:waypoint x="188" y="160" /><di:waypoint x="250" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c2_di" bpmnElement="c2"><di:waypoint x="370" y="160" /><di:waypoint x="432" y="160" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

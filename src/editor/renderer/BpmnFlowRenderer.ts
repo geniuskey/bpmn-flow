@@ -20,6 +20,7 @@ import { getMany, getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
 import type { BpmnConnection, BpmnShape } from '../model';
 import { arrowHeadPath, outlinePath, polylineMid, polylinePath, startMarkerPath } from './geometry';
 import { hasExternalLabel, isExpanded, isThrowing, visualFor } from './visuals';
+import { bandKind, bandsOf, isInitiatingBand, layoutBands } from '../modeling/choreography';
 
 export const FONT_FAMILY = 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
 const FONT_SIZE = 12;
@@ -183,6 +184,10 @@ export default class BpmnFlowRenderer extends BaseRenderer {
           `M0,${ry}A${w / 2},${ry} 0 0,0 ${w},${ry}M0,${ry * 2}A${w / 2},${ry} 0 0,0 ${w},${ry * 2}`,
           'bf-data-fold',
         );
+        break;
+      }
+      case 'choreography': {
+        main = this.drawChoreography(gfx, shape);
         break;
       }
       case 'conversation': {
@@ -587,6 +592,63 @@ export default class BpmnFlowRenderer extends BaseRenderer {
     el(g, 'circle', { cx: 7, cy: 7, r: 5.5, 'stroke-dasharray': '2.2 2.12' }, 'bf-icon-teeth');
     el(g, 'circle', { cx: 7, cy: 7, r: 4 }, 'bf-icon-stroke');
     el(g, 'circle', { cx: 7, cy: 7, r: 1.6 }, 'bf-icon-stroke');
+  }
+
+  /** Choreography activity: rounded box with participant bands (shaded when not initiating). */
+  private drawChoreography(gfx: SVGElement, shape: BpmnShape): SVGElement {
+    const bo = shape.businessObject;
+    const box = { x: 0, y: 0, width: shape.width, height: shape.height };
+    const call = is(bo, 'bpmn:CallChoreography') ? ' bf-call-activity' : '';
+    const main = path(
+      gfx,
+      outlinePath('roundRect', box),
+      `bf-shape bf-activity bf-choreography${call}`,
+    );
+    const layout = layoutBands(shape, bandsOf(shape));
+    let topEnd = 0;
+    let bottomStart = shape.height;
+    for (const [band, abs] of layout) {
+      const b = { x: 0, y: abs.y - shape.y, width: shape.width, height: abs.height };
+      const shaded = !isInitiatingBand(band);
+      const isTop = !bandKind(band).startsWith('bottom');
+      if (isTop) topEnd = Math.max(topEnd, b.y + b.height);
+      else bottomStart = Math.min(bottomStart, b.y);
+      path(
+        gfx,
+        isTop ? `M0,${b.y + b.height}H${shape.width}` : `M0,${b.y}H${shape.width}`,
+        'bf-band-divider',
+      );
+      if (shaded) {
+        el(
+          gfx,
+          'rect',
+          {
+            x: 1,
+            y: b.y + (isTop ? 1 : 0),
+            width: shape.width - 2,
+            height: b.height - 1,
+            rx: isTop ? 0 : 0,
+          },
+          'bf-band-shade',
+        );
+      }
+      const participant = getRef(band, 'bpmnElement');
+      this.drawCenteredText(gfx, participant?.name ?? participant?.id, b, 'bf-label bf-band-label');
+    }
+    const middle = {
+      x: 0,
+      y: topEnd,
+      width: shape.width,
+      height: Math.max(10, bottomStart - topEnd),
+    };
+    this.drawCenteredText(gfx, bo.name, middle, 'bf-label');
+    if (is(bo, 'bpmn:SubChoreography') && shape.di.get('isExpanded') === false) {
+      const cx = shape.width / 2;
+      const by = bottomStart - 16;
+      path(gfx, `M${cx - 6},${by}h12v12h-12z`, 'bf-icon-stroke');
+      path(gfx, `M${cx - 3},${by + 6}h6M${cx},${by + 3}v6`, 'bf-icon-stroke');
+    }
+    return main;
   }
 
   /** Pool / lane: rectangle with a header band holding the rotated name. */

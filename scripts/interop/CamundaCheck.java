@@ -52,8 +52,12 @@ public class CamundaCheck {
       } catch (ClassCastException e) {
         // The Camunda 7 model API has no type for some BPMN elements (e.g.
         // adHocSubProcess); they parse as generic elements. Tool limitation.
-        if (readText(file).contains("<bpmn:adHocSubProcess")) {
-          System.out.printf("LIMIT %s: Camunda 7 model API does not implement adHocSubProcess%n", file.getName());
+        String text = readText(file);
+        if (text.contains("<bpmn:adHocSubProcess") || text.contains("<bpmn:choreographyTask")) {
+          System.out.printf(
+              "LIMIT %s: Camunda 7 model API does not implement %s%n",
+              file.getName(),
+              text.contains("<bpmn:choreographyTask") ? "choreography elements" : "adHocSubProcess");
           continue;
         }
         failures++;

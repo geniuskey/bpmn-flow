@@ -13,7 +13,14 @@ export function processOf(parent: Element | undefined): ModdleElement | undefine
   for (let p = parent; p; p = p.parent) {
     const b = bo(p);
     if (!b) continue;
-    if (is(b, 'bpmn:Process') || is(b, 'bpmn:SubProcess')) return b;
+    if (
+      is(b, 'bpmn:Process') ||
+      is(b, 'bpmn:SubProcess') ||
+      is(b, 'bpmn:Choreography') ||
+      is(b, 'bpmn:SubChoreography')
+    ) {
+      return b;
+    }
     if (is(b, 'bpmn:Participant')) return getRef(b, 'processRef');
     if (is(b, 'bpmn:Collaboration')) return undefined;
   }
@@ -78,7 +85,7 @@ export function isExpandedContainer(el: Element): boolean {
   const b = bo(el);
   return (
     !!b &&
-    is(b, 'bpmn:SubProcess') &&
+    (is(b, 'bpmn:SubProcess') || is(b, 'bpmn:SubChoreography')) &&
     (el as { di?: ModdleElement }).di?.get('isExpanded') !== false
   );
 }
@@ -101,7 +108,9 @@ export function containerAt(
     contains(s, box.x, box.y) && contains(s, box.x + box.width, box.y + box.height);
   const rootBo = bo(root);
   let best: Element | undefined =
-    is(rootBo, 'bpmn:Process') || is(rootBo, 'bpmn:SubProcess') ? root : undefined;
+    is(rootBo, 'bpmn:Process') || is(rootBo, 'bpmn:SubProcess') || is(rootBo, 'bpmn:Choreography')
+      ? root
+      : undefined;
   const visit = (parent: Element) => {
     for (const child of childrenOf(parent)) {
       if (exclude.has(child) || !isContainerShape(child) || !inside(child as Shape)) continue;

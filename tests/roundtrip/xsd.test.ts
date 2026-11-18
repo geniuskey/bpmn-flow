@@ -50,3 +50,11 @@ describe.skipIf(!enabled)('exported XML conforms to the BPMN 2.0 XSD', () => {
     expect(validate(await exportBpmnXml(doc), 'new.bpmn')).toBe('valid');
   });
 });
+
+describe.skipIf(!enabled)('new choreography template conforms to the XSD', () => {
+  it('is valid', async () => {
+    const { newChoreographyXml } = await import('@/bpmn/model/newDiagram');
+    const doc = await loadBpmnDocument(newChoreographyXml('xsd'));
+    expect(validate(await exportBpmnXml(doc), 'choreo.bpmn')).toBe('valid');
+  });
+});

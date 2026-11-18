@@ -31,6 +31,8 @@ export interface DiIndex {
   duplicates: ModdleElement[];
   /** DI elements whose `bpmnElement` reference is missing. */
   dangling: ModdleElement[];
+  /** Participant bands of choreography activities. */
+  bands: ModdleElement[];
 }
 
 export function indexDi(definitions: ModdleElement): DiIndex {
@@ -46,10 +48,16 @@ export function indexDi(definitions: ModdleElement): DiIndex {
     edges: new Map(),
     duplicates: [],
     dangling: [],
+    bands: [],
   };
   // Elements may be drawn in any diagram (e.g. a collapsed sub-process in its own plane).
   for (const p of index.planes) {
     for (const di of getMany(p, 'planeElement')) {
+      // Participant bands of choreography activities are part of their activity.
+      if (getRef(di, 'choreographyActivityShape')) {
+        index.bands.push(di);
+        continue;
+      }
       const target = getRef(di, 'bpmnElement');
       if (!target?.id) {
         index.dangling.push(di);

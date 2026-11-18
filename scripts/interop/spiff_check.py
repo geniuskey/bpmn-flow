@@ -63,6 +63,10 @@ def main() -> int:
                 parser.add_bpmn_file(str(executable_copy(f, Path(tmp))))
                 ids = parser.get_process_ids()
                 if not ids:
+                    if "<bpmn:choreography " in f.read_text(encoding="utf-8"):
+                        # BPMN choreographies describe interactions; engines execute processes.
+                        print(f"NOTE  {f.name}: choreography only, nothing executable")
+                        continue
                     raise ValueError("no process found")
                 print(f"OK   {f.name}: " + "; ".join(run_process(parser, pid) for pid in ids))
             except Exception as exc:

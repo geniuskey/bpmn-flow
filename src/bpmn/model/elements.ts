@@ -44,6 +44,15 @@ export const EDITABLE_FLOW_NODE_TYPES = [
   'bpmn:SubProcess',
   'bpmn:Transaction',
   'bpmn:AdHocSubProcess',
+  'bpmn:ChoreographyTask',
+  'bpmn:SubChoreography',
+  'bpmn:CallChoreography',
+] as const;
+
+export const CHOREOGRAPHY_ACTIVITY_TYPES = [
+  'bpmn:ChoreographyTask',
+  'bpmn:SubChoreography',
+  'bpmn:CallChoreography',
 ] as const;
 
 export type EditableFlowNodeType = (typeof EDITABLE_FLOW_NODE_TYPES)[number];
@@ -127,6 +136,7 @@ export function supportedEventDefinitions(eventType: string): readonly string[] 
 
 export const CONTAINER_TYPES = [
   'bpmn:Process',
+  'bpmn:Choreography',
   'bpmn:Collaboration',
   'bpmn:Participant',
   'bpmn:LaneSet',
@@ -197,6 +207,17 @@ export const PRESERVED_ROOT_TYPES = [
   'bpmn:Interface',
   'bpmn:DataStore',
   'bpmn:Resource',
+  'bpmn:GlobalTask',
+  'bpmn:GlobalUserTask',
+  'bpmn:GlobalManualTask',
+  'bpmn:GlobalScriptTask',
+  'bpmn:GlobalBusinessRuleTask',
+  'bpmn:GlobalChoreographyTask',
+  'bpmn:GlobalConversation',
+  'bpmn:PartnerEntity',
+  'bpmn:PartnerRole',
+  'bpmn:CorrelationProperty',
+  'bpmn:EndPoint',
 ] as const;
 
 export type ElementCategory = 'event' | 'activity' | 'gateway' | 'flow' | 'container' | 'other';
@@ -219,6 +240,10 @@ export function isEditableArtifact(el: ModdleElement | undefined): boolean {
 }
 
 /** Any element the editor can show and edit as a shape (besides pools and lanes). */
+export function isChoreographyActivity(el: ModdleElement | undefined): boolean {
+  return !!el && (CHOREOGRAPHY_ACTIVITY_TYPES as readonly string[]).includes(el.$type);
+}
+
 export function isConversationNode(el: ModdleElement | undefined): boolean {
   return !!el && (CONVERSATION_TYPES as readonly string[]).includes(el.$type);
 }

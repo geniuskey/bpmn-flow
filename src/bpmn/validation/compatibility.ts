@@ -64,7 +64,9 @@ const KNOWN_TYPES = new Set<string>([
 /** Elements that need a BPMNShape / BPMNEdge to be shown. */
 function needsShape(el: ModdleElement): boolean {
   if (isEditableShapeElement(el)) return true;
-  if (is(el, 'bpmn:Lane') || is(el, 'bpmn:Participant')) return true;
+  // Choreography participants are drawn as bands of their activities, not as pools.
+  if (is(el, 'bpmn:Participant')) return !is(el.$parent, 'bpmn:Choreography');
+  if (is(el, 'bpmn:Lane')) return true;
   return false;
 }
 
@@ -175,7 +177,9 @@ export function assessCompatibility(
       });
       readonly = true;
     }
-    if (di.plane && isEditableConnection(el) && el.id && !di.edges.has(el.id)) {
+    // Message flows of a choreography are shown through its tasks, not as edges.
+    const drawnAsEdge = !(is(el, 'bpmn:MessageFlow') && is(el.$parent, 'bpmn:Choreography'));
+    if (di.plane && isEditableConnection(el) && drawnAsEdge && el.id && !di.edges.has(el.id)) {
       issues.push({
         code: 'MISSING_DI',
         severity: 'warning',

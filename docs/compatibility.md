@@ -76,7 +76,7 @@ with three independent BPMN implementations (none is a project dependency):
 Python tools live in a local `.venv-interop`
 (`python3 -m venv .venv-interop && .venv-interop/bin/pip install SpiffWorkflow pm4py`).
 
-Result on 2026-11-18 (17 files: 10 edited fixtures, 7 diagrams built in the UI):
+Result on 2026-11-18 (19 files: 11 edited fixtures, 8 diagrams built in the UI):
 
 | File                                                                                                       | SpiffWorkflow                                                                                                   | pm4py                                           | Camunda Model API                                             |
 | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------- |

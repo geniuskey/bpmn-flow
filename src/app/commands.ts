@@ -2,7 +2,14 @@
  * Application command registry shared by keyboard shortcuts, the command
  * palette (⌘/Ctrl+K) and the canvas context menu.
  */
-import { downloadOriginal, exportXml, newDocument, pickFile, runAutoLayout } from './actions';
+import {
+  downloadOriginal,
+  exportXml,
+  newChoreographyDocument,
+  newDocument,
+  pickFile,
+  runAutoLayout,
+} from './actions';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useEditorStore } from '@/stores/editorStore';
 import { useUiStore } from '@/stores/uiStore';
@@ -27,6 +34,12 @@ export const COMMANDS: AppCommand[] = [
     group: 'File',
     keys: 'Mod+Alt+N',
     run: () => newDocument(),
+  },
+  {
+    id: 'file.newChoreography',
+    label: 'New choreography diagram',
+    group: 'File',
+    run: () => newChoreographyDocument(),
   },
   {
     id: 'file.open',

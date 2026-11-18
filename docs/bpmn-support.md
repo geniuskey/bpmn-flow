@@ -26,7 +26,8 @@ The source of truth is `src/bpmn/model/elements.ts` (what counts as supported) a
 | LaneSet / Lane                                                                                          | ✅                                                                                                | “Add lane below” on a pool or lane                                                                                           | resize (bottom edge; pool follows), rename, delete when empty; nodes move between lanes — `flowNodeRef` follows position                                                                        |
 | Documentation, extension elements, vendor attributes                                                    | inspector                                                                                         | —                                                                                                                            | description editable; extensions preserved verbatim                                                                                                                                             |
 | Root-level Message, Signal, Error, Escalation, DataStore, Category, ItemDefinition, Interface, Resource | not shown                                                                                         | created when an event references a name / a group is added                                                                   | preserved                                                                                                                                                                                       |
-| Conversations, conversation links, choreographies (separate BPMN diagram types), multiple diagrams      | dashed placeholder with type caption                                                              | —                                                                                                                            | document opens **read-only**                                                                                                                                                                    |
+| Choreography, Choreography Task, Sub-Choreography, Call Choreography, participant bands                 | ✅ (bands with participant names; non-initiating band shaded)                                     | “New choreography diagram” command; palette (in a choreography)                                                              | move, resize (bands re-stack), rename, delete; initiating/receiving participant (existing or new); a new task gets two participants, bands and the message flow BPMN requires                   |
+| Implicit throw events and other element kinds not listed above                                          | dashed placeholder with type caption                                                              | —                                                                                                                            | document opens **read-only**                                                                                                                                                                    |
 
 ## Editing behavior that keeps BPMN consistent
 
@@ -55,6 +56,7 @@ selector in the header or “Open sub-process diagram” on a collapsed sub-proc
 Deleting an element removes its DI from every diagram (and a sub-process's own
 diagram); type changes re-point all of them.
 
-Opened read-only (shown as placeholders): choreography diagrams, which BPMN
-defines as a diagram type of its own next to process, collaboration and
-conversation diagrams.
+All four BPMN diagram types (process, collaboration, conversation,
+choreography) are editable. Opened read-only (shown as placeholders): the
+remaining rarely used element kinds outside these tables, such as implicit throw
+events.
