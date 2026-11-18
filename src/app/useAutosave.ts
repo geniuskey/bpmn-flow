@@ -1,16 +1,38 @@
 import { useEffect } from 'react';
 import { useEditorStore } from '@/stores/editorStore';
-import { saveSession } from './actions';
+import { flushAutosave, hasUnsavedSession, scheduleAutosave } from './actions';
 
-const DELAY_MS = 1000;
-
-/** Saves the document to IndexedDB shortly after each change. */
+/**
+ * Saves the document to IndexedDB shortly after each change.
+ *
+ * Every change is saved, including ones that make the document match its last
+ * export again (undo after export): `dirty` tracks "differs from the export",
+ * not "differs from the autosave". Pending saves are flushed when the page is
+ * hidden, and leaving while one is still running asks for confirmation.
+ */
 export function useAutosave(): void {
   const revision = useEditorStore((s) => s.snapshot.revision);
-  const dirty = useEditorStore((s) => s.snapshot.dirty);
   useEffect(() => {
-    if (!dirty) return;
-    const t = setTimeout(() => void saveSession(), DELAY_MS);
-    return () => clearTimeout(t);
-  }, [revision, dirty]);
+    if (revision > 0) scheduleAutosave();
+  }, [revision]);
+
+  useEffect(() => {
+    const flush = () => void flushAutosave();
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!hasUnsavedSession()) return;
+      flush();
+      e.preventDefault();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', flush);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', flush);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+    };
+  }, []);
 }

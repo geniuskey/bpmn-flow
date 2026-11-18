@@ -8,22 +8,47 @@ import { CommandPalette } from '@/components/CommandPalette';
 import { Palette } from '@/components/Palette';
 import { ResizeHandle } from '@/components/ResizeHandle';
 import { useUiStore } from '@/stores/uiStore';
+import { useDocumentStore } from '@/stores/documentStore';
+import { persistence } from '@/persistence/db';
 import { newDocument, openXml, restoreSession } from './actions';
 import { useAutosave } from './useAutosave';
 import { useKeyboardShortcuts } from './shortcuts';
 import { useTheme } from './useTheme';
 import { useCompactLayout } from './useCompactLayout';
 
+const KEPT_HINT =
+  'Run “Restore previous autosave” from the command palette (Ctrl/⌘+K) to go back to it.';
+
 async function openInitialDocument(): Promise<void> {
   // `?sample=<name>` opens a bundled example (used by docs and E2E tests).
+  // Opening it keeps the stored session in the `previous` slot.
   const sample = new URLSearchParams(window.location.search).get('sample');
   if (sample && /^[a-z0-9-]+$/.test(sample)) {
-    const res = await fetch(`${import.meta.env.BASE_URL}samples/${sample}.bpmn`).catch(() => null);
-    if (res?.ok && (await openXml(await res.text(), `${sample}.bpmn`, { confirmDiscard: false })))
+    const fileName = `${sample}.bpmn`;
+    const stored = await persistence.loadSession();
+    const res = await fetch(`${import.meta.env.BASE_URL}samples/${fileName}`).catch(() => null);
+    if (res?.ok && (await openXml(await res.text(), fileName, { confirmDiscard: false }))) {
+      if (stored && stored.fileName !== fileName) {
+        useDocumentStore.getState().notify({
+          kind: 'info',
+          title: `Opened the “${sample}” sample. Your autosaved “${stored.fileName}” was kept.`,
+          details: [KEPT_HINT],
+        });
+      }
       return;
+    }
   }
-  if (await restoreSession()) return;
-  await newDocument();
+  const restored = await restoreSession();
+  if (restored === 'restored') return;
+  // A session that cannot be opened (for example after an app update) is kept, not overwritten.
+  if ((await newDocument()) && restored === 'failed') {
+    useDocumentStore.getState().notify({
+      kind: 'warning',
+      title:
+        'Your last session could not be restored, so a new diagram was opened. The session was kept.',
+      details: [KEPT_HINT],
+    });
+  }
 }
 
 export function App() {

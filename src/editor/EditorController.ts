@@ -194,7 +194,8 @@ export class EditorController {
     activeTool: 'select',
     activeDiagram: '__root',
   };
-  private savedStackIndex = -1;
+  /** Undo-stack entry that was on top when the document was last exported (null: none). */
+  private savedAction: unknown = null;
   private tool: EditorTool = 'select';
 
   constructor(private readonly container: HTMLElement) {}
@@ -250,7 +251,7 @@ export class EditorController {
     this.container.replaceChildren(host);
     this.diagram = diagram;
     this.document = doc;
-    this.savedStackIndex = -1;
+    this.savedAction = null;
     this.wireEvents(diagram, readOnly);
     this.setTool(this.tool);
     this.fit();
@@ -288,9 +289,15 @@ export class EditorController {
     return this.diagram.get<CommandStack>('commandStack', false) ?? null;
   }
 
-  private stackIndex(): number {
-    const stack = this.stack() as unknown as { _stackIdx?: number } | null;
-    return stack?._stackIdx ?? -1;
+  /**
+   * The undo-stack entry on top of the stack. Comparing entries rather than
+   * positions keeps `dirty` true after "undo, then a different edit", which
+   * returns to the same position with different content.
+   */
+  private topAction(): unknown {
+    const stack = this.stack() as unknown as { _stack?: unknown[]; _stackIdx?: number } | null;
+    const idx = stack?._stackIdx ?? -1;
+    return idx >= 0 ? (stack?._stack?.[idx] ?? null) : null;
   }
 
   private refreshStack(): void {
@@ -298,7 +305,7 @@ export class EditorController {
     this.update({
       canUndo: !!stack?.canUndo(),
       canRedo: !!stack?.canRedo(),
-      dirty: this.stackIndex() !== this.savedStackIndex,
+      dirty: this.topAction() !== this.savedAction,
       revision: this.snapshot.revision + 1,
     });
   }
@@ -446,7 +453,6 @@ export class EditorController {
   isEditingText(): boolean {
     return !!this.get<DirectEditing>('directEditing')?.isActive();
   }
-
   private exec(command: string, context: Record<string, unknown>): void {
     const stack = this.stack();
     if (stack) stack.execute(command, context);
@@ -676,7 +682,7 @@ export class EditorController {
   async exportXml(): Promise<string> {
     if (!this.document) throw new Error('No document is open.');
     const xml = await exportBpmnXml(this.document);
-    this.savedStackIndex = this.stackIndex();
+    this.savedAction = this.topAction();
     this.refreshStack();
     return xml;
   }

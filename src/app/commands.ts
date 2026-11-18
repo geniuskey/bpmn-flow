@@ -8,6 +8,7 @@ import {
   newChoreographyDocument,
   newDocument,
   pickFile,
+  restorePreviousSession,
   runAutoLayout,
 } from './actions';
 import { useDocumentStore } from '@/stores/documentStore';
@@ -54,6 +55,12 @@ export const COMMANDS: AppCommand[] = [
     group: 'File',
     keys: 'Mod+S',
     run: () => exportXml(),
+  },
+  {
+    id: 'file.restorePrevious',
+    label: 'Restore previous autosave',
+    group: 'File',
+    run: () => restorePreviousSession(),
   },
   {
     id: 'file.original',

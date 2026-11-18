@@ -1,6 +1,8 @@
 /**
  * Local persistence in IndexedDB (no server):
- * - `session`: the last open document for autosave/restore
+ * - `session`: the last open document for autosave/restore (`current`), and the
+ *   one it replaced (`previous`), so opening another document never destroys
+ *   the only copy of unexported work
  * - `metadata`: analysis metadata keyed by [documentId, elementId]
  *
  * Every call is defensive: storage can be unavailable (private mode, quota),
@@ -10,7 +12,7 @@ import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { AnalysisMetadata } from '@/analysis/estimates/metadata';
 
 export interface SavedSession {
-  id: 'current';
+  id: 'current' | 'previous';
   xml: string;
   fileName: string;
   documentId: string;
@@ -55,6 +57,23 @@ export const persistence = {
     }, false),
   loadSession: () => safe(async () => (await (await db()).get('session', 'current')) ?? null, null),
   clearSession: () => safe(async () => (await db()).delete('session', 'current'), undefined),
+  /**
+   * Copies the current session to the `previous` slot, unless there is none or
+   * it is the same document as `incoming` (re-opening a document, for example a
+   * reloaded sample link, must not push older work out of the backup).
+   */
+  backupSession: (incoming: Pick<SavedSession, 'documentId' | 'fileName'>) =>
+    safe(async () => {
+      const database = await db();
+      const current = await database.get('session', 'current');
+      if (!current) return false;
+      if (current.documentId === incoming.documentId && current.fileName === incoming.fileName)
+        return false;
+      await database.put('session', { ...current, id: 'previous' });
+      return true;
+    }, false),
+  loadPreviousSession: () =>
+    safe(async () => (await (await db()).get('session', 'previous')) ?? null, null),
 
   loadMetadata: (documentId: string) =>
     safe(async () => {

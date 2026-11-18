@@ -73,9 +73,21 @@ export function useKeyboardShortcuts(): void {
         useUiStore.getState().setCommandPaletteOpen(true);
         return;
       }
-      if (mod && key === 'o') return run('file.open');
-      if (mod && key === 's') return run('file.export');
-      if (mod && e.altKey && key === 'n') return run('file.new');
+      // File commands also work while typing: commit the field first (fields
+      // commit on blur), so exports include it and "discard changes?" sees it.
+      const fileCmd = !mod
+        ? null
+        : key === 'o'
+          ? 'file.open'
+          : key === 's'
+            ? 'file.export'
+            : e.altKey && key === 'n'
+              ? 'file.new'
+              : null;
+      if (fileCmd) {
+        if (isTyping(e.target)) (e.target as HTMLElement).blur();
+        return run(fileCmd);
+      }
       if (isTyping(e.target) || !ctrl || ctrl.isEditingText()) return;
 
       if (mod && key === 'z') return run(e.shiftKey ? 'edit.redo' : 'edit.undo');

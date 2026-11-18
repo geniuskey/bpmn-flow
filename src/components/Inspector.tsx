@@ -1,5 +1,5 @@
 import { Lock } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { readBounds } from '@/bpmn/di/di';
 import {
   canBeParallelMultiple,
@@ -51,28 +51,45 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 const inputClass =
   'h-8 w-full rounded-md border bg-background px-2.5 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60';
 
+/**
+ * Draft state for a text field that commits on blur or Enter. Escape restores
+ * the stored value and leaves without committing: the blur that follows must
+ * not commit the stale draft its handler still closes over.
+ */
+function useDraft(value: string, onCommit: (value: string) => void) {
+  const [draft, setDraft] = useState(value);
+  const cancelled = useRef(false);
+  return {
+    value: draft,
+    onChange: (e: { target: { value: string } }) => setDraft(e.target.value),
+    onBlur: () => {
+      if (cancelled.current) {
+        cancelled.current = false;
+        return;
+      }
+      if (draft !== value) onCommit(draft);
+    },
+    onKeyDown: (e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>, multiline = false) => {
+      if (e.key === 'Enter' && !multiline) e.currentTarget.blur();
+      if (e.key === 'Escape') {
+        cancelled.current = true;
+        setDraft(value);
+        e.currentTarget.blur();
+      }
+    },
+  };
+}
+
 function NameField({ id, value, disabled }: { id: string; value: string; disabled: boolean }) {
   const controller = useEditorStore((s) => s.controller);
-  const [draft, setDraft] = useState(value);
-  const commit = () => {
-    if (draft !== value) controller?.updateProperties(id, { name: draft });
-  };
+  const draft = useDraft(value, (name) => controller?.updateProperties(id, { name }));
   return (
     <input
       aria-label="Name"
       className={inputClass}
-      value={draft}
       disabled={disabled}
       placeholder={disabled ? '' : 'Unnamed'}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-        if (e.key === 'Escape') {
-          setDraft(value);
-          (e.target as HTMLInputElement).blur();
-        }
-      }}
+      {...draft}
     />
   );
 }
@@ -92,32 +109,22 @@ function TextField({
   placeholder?: string;
   onCommit: (value: string) => void;
 }) {
-  const [draft, setDraft] = useState(value);
-  const commit = () => {
-    if (draft !== value) onCommit(draft);
-  };
+  const draft = useDraft(value, onCommit);
   const props = {
     'aria-label': label,
-    value: draft,
     disabled,
     placeholder: disabled ? '' : placeholder,
-    onChange: (e: { target: { value: string } }) => setDraft(e.target.value),
-    onBlur: commit,
+    ...draft,
   };
   return multiline ? (
-    <textarea {...props} rows={3} className={`${inputClass} h-auto resize-y py-1.5`} />
-  ) : (
-    <input
+    <textarea
       {...props}
-      className={inputClass}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-        if (e.key === 'Escape') {
-          setDraft(value);
-          (e.target as HTMLInputElement).blur();
-        }
-      }}
+      rows={3}
+      className={`${inputClass} h-auto resize-y py-1.5`}
+      onKeyDown={(e) => draft.onKeyDown(e, true)}
     />
+  ) : (
+    <input {...props} className={inputClass} />
   );
 }
 

@@ -23,11 +23,15 @@ function controller() {
   return useEditorStore.getState().controller;
 }
 
-/** Imports XML. On any failure the currently open document stays untouched. */
+/**
+ * Imports XML. On any failure the currently open document stays untouched.
+ * The autosave of the document being replaced is kept in the `previous` slot
+ * (see `restorePreviousSession`) unless `keepPrevious` is false.
+ */
 export async function openXml(
   xml: string,
   fileName: string,
-  options: { confirmDiscard?: boolean } = {},
+  options: { confirmDiscard?: boolean; keepPrevious?: boolean } = {},
 ): Promise<boolean> {
   const docs = useDocumentStore.getState();
   const ctrl = controller();
@@ -42,10 +46,16 @@ export async function openXml(
 
   docs.setLoading(true);
   try {
+    // Persist the outgoing document's latest edits before it is replaced.
+    await flushAutosave();
     const doc = await loadBpmnDocument(xml, fileName);
     const result = ctrl.open(doc);
     docs.setDocument(doc);
     void useMetadataStore.getState().load(documentIdOf(doc));
+    if (options.keepPrevious !== false) {
+      const incoming = { documentId: documentIdOf(doc), fileName: doc.fileName };
+      void enqueueSave(() => persistence.backupSession(incoming));
+    }
     void saveSession();
 
     const { report } = doc;
@@ -153,35 +163,98 @@ export async function runAutoLayout(): Promise<void> {
   }
 }
 
+// Saves run one at a time, in order, so a slow export can never overwrite a
+// newer one. Each job reads the document when it runs, not when it was queued.
+let saveQueue: Promise<unknown> = Promise.resolve();
+let queuedSaves = 0;
+
+function enqueueSave<T>(job: () => Promise<T>): Promise<T> {
+  queuedSaves++;
+  const run = saveQueue.then(job).finally(() => queuedSaves--);
+  saveQueue = run.catch(() => undefined);
+  return run;
+}
+
 /** Writes the current document to IndexedDB (verified export, or the original for lossy files). */
-export async function saveSession(): Promise<boolean> {
-  const doc = useDocumentStore.getState().doc;
-  if (!doc) return false;
-  let xml = doc.originalXml;
-  if (doc.report.exportAllowed) {
-    try {
-      xml = await exportBpmnXml(doc);
-    } catch {
-      return false; // keep the previous autosave rather than storing something unverified
+export function saveSession(): Promise<boolean> {
+  return enqueueSave(async () => {
+    const doc = useDocumentStore.getState().doc;
+    if (!doc) return false;
+    let xml = doc.originalXml;
+    if (doc.report.exportAllowed) {
+      try {
+        xml = await exportBpmnXml(doc);
+      } catch {
+        return false; // keep the previous autosave rather than storing something unverified
+      }
     }
-  }
-  return persistence.saveSession({
-    xml,
-    fileName: doc.fileName,
-    documentId: documentIdOf(doc),
-    savedAt: Date.now(),
+    return persistence.saveSession({
+      xml,
+      fileName: doc.fileName,
+      documentId: documentIdOf(doc),
+      savedAt: Date.now(),
+    });
   });
 }
 
-/** Re-opens the autosaved document from a previous visit, if any. */
-export async function restoreSession(): Promise<boolean> {
+const AUTOSAVE_DELAY_MS = 1000;
+let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Saves the session shortly after the latest change (debounced). */
+export function scheduleAutosave(): void {
+  if (autosaveTimer) clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => {
+    autosaveTimer = null;
+    void saveSession();
+  }, AUTOSAVE_DELAY_MS);
+}
+
+/** Runs a scheduled autosave now and resolves once every queued save finished. */
+export async function flushAutosave(): Promise<void> {
+  if (autosaveTimer) {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = null;
+    void saveSession();
+  }
+  await saveQueue;
+}
+
+/** True while a change has not reached IndexedDB yet. */
+export function hasUnsavedSession(): boolean {
+  return autosaveTimer !== null || queuedSaves > 0;
+}
+
+/**
+ * Re-opens the autosaved document from a previous visit, if any. 'failed'
+ * means a session exists but could not be opened; it is left in place.
+ */
+export async function restoreSession(): Promise<'restored' | 'none' | 'failed'> {
   const session = await persistence.loadSession();
-  if (!session) return false;
-  const ok = await openXml(session.xml, session.fileName, { confirmDiscard: false });
+  if (!session) return 'none';
+  const ok = await openXml(session.xml, session.fileName, {
+    confirmDiscard: false,
+    keepPrevious: false,
+  });
+  if (!ok) return 'failed';
+  useDocumentStore.getState().notify({
+    kind: 'info',
+    title: `Restored “${session.fileName}” from your last session (saved ${new Date(session.savedAt).toLocaleString()}).`,
+  });
+  return 'restored';
+}
+
+/** Re-opens the autosave that the current document replaced (the two swap places). */
+export async function restorePreviousSession(): Promise<boolean> {
+  const previous = await persistence.loadPreviousSession();
+  if (!previous) {
+    useDocumentStore.getState().notify({ kind: 'info', title: 'There is no previous autosave.' });
+    return false;
+  }
+  const ok = await openXml(previous.xml, previous.fileName);
   if (ok) {
     useDocumentStore.getState().notify({
       kind: 'info',
-      title: `Restored “${session.fileName}” from your last session (saved ${new Date(session.savedAt).toLocaleString()}).`,
+      title: `Restored “${previous.fileName}” (autosaved ${new Date(previous.savedAt).toLocaleString()}).`,
     });
   }
   return ok;

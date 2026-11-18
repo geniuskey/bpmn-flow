@@ -100,6 +100,18 @@ gateway markers); only the visual treatment is modernized.
 keyed by `[documentId, elementId]`. All storage calls fail soft: the editor keeps
 working when IndexedDB is unavailable.
 
+Autosave (`src/app/useAutosave.ts`, `src/app/actions.ts`):
+
+- Every change is saved 1 s after the last edit, independent of `dirty`
+  (which means "differs from the last export"). Saves run one at a time, in order.
+- Pending saves are flushed when the page is hidden or another document is opened;
+  leaving the page while a save is pending asks for confirmation.
+- Opening a different document (including a `?sample=` link, or a new diagram after a
+  session failed to restore) first copies the stored session to a `previous` slot.
+  "Restore previous autosave" in the command palette swaps the two back.
+- `dirty` compares the undo-stack entry on top of the stack with the one at the last
+  export, so "export, undo, different edit" still counts as unsaved.
+
 ## Performance
 
 Measured in `tests/e2e/performance.spec.ts` (1000 tasks, Chromium, Apple M-series):
