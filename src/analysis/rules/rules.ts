@@ -11,6 +11,16 @@ import { getMany, getRef, is, walkContainment, type ModdleElement } from '@/bpmn
 import { cycles, reachableFrom } from '../graph/algorithms';
 import type { ProcessGraph } from '../graph/processGraph';
 import type { Finding } from '../types';
+import {
+  invalidSequenceFlowEnds,
+  isCompensationActivity,
+  isCompensationBoundary,
+  isEventSubProcess,
+  isInstantiating,
+  isLinkThrow,
+  messageFlowRules,
+  specProcessRules,
+} from './specRules';
 
 function label(graph: ProcessGraph, id: string): string {
   const n = graph.nodes.get(id);
@@ -20,34 +30,17 @@ function label(graph: ProcessGraph, id: string): string {
 const isStart = (t: string) => t === 'bpmn:StartEvent';
 const isEnd = (t: string) => t === 'bpmn:EndEvent';
 
-/** Elements that legitimately start without incoming flows. */
+/**
+ * Elements that legitimately start without incoming flows. Inside an event
+ * sub-process only its start event is an entry (it is its own scope).
+ */
 function isEntry(node: ModdleElement): boolean {
   return (
     is(node, 'bpmn:StartEvent') ||
     is(node, 'bpmn:BoundaryEvent') ||
+    isInstantiating(node) ||
     isEventSubProcess(node) ||
-    isEventSubProcessContent(node) ||
     isCompensationActivity(node)
-  );
-}
-
-/** An event sub-process is started by its start event's trigger, not by sequence flows. */
-function isEventSubProcess(node: ModdleElement): boolean {
-  return is(node, 'bpmn:SubProcess') && node.get('triggeredByEvent') === true;
-}
-
-/**
- * Compensation is wired by an association from the compensation boundary event
- * to the compensation activity; neither has sequence flows.
- */
-function isCompensationActivity(node: ModdleElement): boolean {
-  return is(node, 'bpmn:Activity') && node.get('isForCompensation') === true;
-}
-
-function isCompensationBoundary(node: ModdleElement): boolean {
-  return (
-    is(node, 'bpmn:BoundaryEvent') &&
-    getMany(node, 'eventDefinitions').some((d) => is(d, 'bpmn:CompensateEventDefinition'))
   );
 }
 
@@ -56,21 +49,9 @@ function standsAlone(node: ModdleElement): boolean {
   return isEventSubProcess(node) || isCompensationActivity(node) || isCompensationBoundary(node);
 }
 
-function isEventSubProcessContent(node: ModdleElement): boolean {
-  return (
-    !!node.$parent &&
-    is(node.$parent, 'bpmn:SubProcess') &&
-    node.$parent.get('triggeredByEvent') === true
-  );
-}
-
-/** Elements that legitimately end without outgoing flows. */
+/** Elements that legitimately end without outgoing flows: end events and link throw events. */
 function isExit(node: ModdleElement): boolean {
-  return (
-    is(node, 'bpmn:EndEvent') ||
-    (is(node, 'bpmn:Event') &&
-      getMany(node, 'eventDefinitions').some((d) => is(d, 'bpmn:LinkEventDefinition')))
-  );
+  return is(node, 'bpmn:EndEvent') || isLinkThrow(node);
 }
 
 export function processRules(graph: ProcessGraph): Finding[] {
@@ -81,26 +62,40 @@ export function processRules(graph: ProcessGraph): Finding[] {
   const pname = graph.process.name ? `“${graph.process.name}”` : pid;
 
   const starts = nodes.filter((n) => isStart(n.type)).map((n) => n.id);
+  // An instantiating event-based gateway or receive task starts the process instead (p. 189, 328).
+  const instantiating = nodes.some((n) => isInstantiating(n.element));
   const ends = nodes.filter((n) => isEnd(n.type)).map((n) => n.id);
 
   // Ad-hoc sub-processes run their activities in any order: no flow structure is required.
   const adHoc = is(graph.process, 'bpmn:AdHocSubProcess');
-  if (!adHoc && !starts.length) {
+  // Start and end events are optional, but come in pairs (BPMN 2.0.2, p. 268, 276).
+  const pairSeverity = starts.length || ends.length || instantiating ? 'error' : 'info';
+  if (!adHoc && !starts.length && !instantiating) {
     findings.push({
-      severity: 'warning',
+      severity: pairSeverity,
       ruleId: 'VAL-MISSING-START',
-      message: `Process ${pname} has no start event.`,
+      message: ends.length
+        ? `Process ${pname} has an end event but no start event.`
+        : `Process ${pname} has no start event.`,
       elementIds: [pid],
-      recommendation: 'Add a start event so it is clear where the process begins.',
+      recommendation: ends.length
+        ? 'A process level with an end event must have at least one start event (BPMN 2.0.2, p. 268).'
+        : 'Start and end events are optional, but they make it clear where the process begins.',
     });
   }
   if (!adHoc && !ends.length) {
     findings.push({
-      severity: 'warning',
+      severity: pairSeverity,
       ruleId: 'VAL-MISSING-END',
-      message: `Process ${pname} has no end event.`,
+      message:
+        starts.length || instantiating
+          ? `Process ${pname} has a start event but no end event.`
+          : `Process ${pname} has no end event.`,
       elementIds: [pid],
-      recommendation: 'Add an end event for every way the process can finish.',
+      recommendation:
+        starts.length || instantiating
+          ? 'A process level with a start event must have at least one end event (BPMN 2.0.2, p. 276).'
+          : 'Add an end event for every way the process can finish.',
     });
   }
 
@@ -121,8 +116,8 @@ export function processRules(graph: ProcessGraph): Finding[] {
     findings.filter((f) => f.ruleId === 'GRAPH-ISOLATED').map((f) => f.elementIds[0]),
   );
 
-  // Unreachable from any start event.
-  if (!adHoc && starts.length) {
+  // Unreachable from any start event (or instantiating gateway / receive task).
+  if (!adHoc && (starts.length || instantiating)) {
     const entries = nodes.filter((n) => isEntry(n.element)).map((n) => n.id);
     const reachable = reachableFrom(entries, graph.out);
     for (const n of nodes) {
@@ -186,11 +181,12 @@ export function processRules(graph: ProcessGraph): Finding[] {
     const inCount = graph.in.get(n.id)!.length;
     if (outCount <= 1 && inCount <= 1 && outCount + inCount > 0) {
       findings.push({
-        severity: 'info',
+        severity: 'warning',
         ruleId: 'GW-PASS-THROUGH',
         message: `${label(graph, n.id)} neither splits nor merges the flow.`,
         elementIds: [n.id],
-        recommendation: 'A gateway with one incoming and one outgoing flow can usually be removed.',
+        recommendation:
+          'A gateway must merge or split the flow (BPMN 2.0.2, p. 319); remove it or add branches.',
       });
     }
     if (outCount > 1 && inCount > 1) {
@@ -202,11 +198,17 @@ export function processRules(graph: ProcessGraph): Finding[] {
         recommendation: 'Separate merging and splitting into two gateways for readability.',
       });
     }
-    if (is(n.element, 'bpmn:ExclusiveGateway') && outCount > 1) {
+    const conditional =
+      is(n.element, 'bpmn:ExclusiveGateway') ||
+      is(n.element, 'bpmn:InclusiveGateway') ||
+      is(n.element, 'bpmn:ComplexGateway');
+    if (conditional && outCount > 1) {
       const def = getRef(n.element, 'default');
-      const unconditioned = getMany(n.element, 'outgoing').filter(
-        (f) => f !== def && !getRef(f, 'conditionExpression'),
-      );
+      // The actual sequence flows (not the `outgoing` list, which some files omit).
+      const outgoing = graph.edges
+        .map((e) => e.element)
+        .filter((f) => getRef(f, 'sourceRef') === n.element);
+      const unconditioned = outgoing.filter((f) => f !== def && !getRef(f, 'conditionExpression'));
       if (unconditioned.length) {
         findings.push({
           severity: 'warning',
@@ -241,6 +243,17 @@ export function processRules(graph: ProcessGraph): Finding[] {
         message: `Sequence flow ${e.id} ${is(target, 'bpmn:StartEvent') ? 'enters a start event' : 'leaves an end event'}.`,
         elementIds: [e.id],
         recommendation: 'Start events have no incoming and end events no outgoing sequence flows.',
+      });
+    }
+    const reasons = invalidSequenceFlowEnds(source, target);
+    if (reasons.length) {
+      findings.push({
+        severity: 'error',
+        ruleId: 'VAL-INVALID-CONNECTION',
+        message: `Sequence flow ${e.id} ${reasons.join(' and ')}.`,
+        elementIds: [e.id],
+        recommendation:
+          'Boundary events and link catch events have no incoming, compensation boundary events and link throw events no outgoing sequence flows; event sub-processes and compensation activities have none (BPMN 2.0.2, p. 204, 268, 288).',
       });
     }
     if (!graph.nodes.has(source.id ?? '') || !graph.nodes.has(target.id ?? '')) {
@@ -311,6 +324,8 @@ export function processRules(graph: ProcessGraph): Finding[] {
       }
     }
 
+  findings.push(...specProcessRules(graph));
+
   // Readability
   for (const n of nodes) {
     if (is(n.element, 'bpmn:Activity') && !n.name?.trim()) {
@@ -375,6 +390,8 @@ export function documentRules(definitions: ModdleElement): Finding[] {
       });
     }
   });
+
+  findings.push(...messageFlowRules(definitions));
 
   const di = indexDi(definitions);
   for (const d of [...di.dangling, ...di.duplicates]) {

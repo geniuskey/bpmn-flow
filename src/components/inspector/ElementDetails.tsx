@@ -6,7 +6,8 @@ import {
   isEditableConnection,
   isEditableShapeElement,
   labelOf,
-  supportedEventDefinitions,
+  allowedEventDefinitions,
+  interruptingIsFixed,
 } from '@/bpmn/model/elements';
 import { getMany, getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
 import { Badge } from '@/components/ui/badge';
@@ -42,7 +43,16 @@ export function ElementDetails({ id }: { id: string }) {
   const source = getRef(bo, 'sourceRef');
   const target = getRef(bo, 'targetRef');
   const alternatives = supported ? alternativeTypes(bo.$type) : [];
-  const eventDefs = supported ? supportedEventDefinitions(bo.$type) : [];
+  // Triggers allowed where the event is, plus the ones it has (so they can be removed).
+  const eventDefs =
+    supported && is(bo, 'bpmn:Event')
+      ? [
+          ...new Set([
+            ...allowedEventDefinitions(bo),
+            ...getMany(bo, 'eventDefinitions').map((d) => d.$type),
+          ]),
+        ]
+      : [];
 
   return (
     <>
@@ -121,9 +131,10 @@ export function ElementDetails({ id }: { id: string }) {
             />
           ))}
         {(is(bo, 'bpmn:BoundaryEvent') ||
-          (is(bo, 'bpmn:StartEvent') && bo.$parent?.get('triggeredByEvent') === true)) && (
-          <InterruptingField elementId={element.id} bo={bo} readOnly={readOnly} />
-        )}
+          (is(bo, 'bpmn:StartEvent') && bo.$parent?.get('triggeredByEvent') === true)) &&
+          !interruptingIsFixed(bo) && (
+            <InterruptingField elementId={element.id} bo={bo} readOnly={readOnly} />
+          )}
         <Row label="Description">
           <TextField
             key={`${element.id}:doc:${docs[0]?.text ?? ''}`}
@@ -135,6 +146,11 @@ export function ElementDetails({ id }: { id: string }) {
             onCommit={(v) => controller?.updateDocumentation(element.id, v)}
           />
         </Row>
+        {docs.slice(1).map((doc, i) => (
+          <Row key={i} label={`Description ${i + 2}`}>
+            <p className="text-xs whitespace-pre-wrap text-muted-foreground">{doc.text}</p>
+          </Row>
+        ))}
       </Section>
 
       {(source || target || standardAttributes(bo).length > 0) && (

@@ -71,6 +71,25 @@ export type TimerType = 'timeDuration' | 'timeDate' | 'timeCycle';
 export type EventDetail =
   | { kind: 'timer'; timerType: TimerType; value: string }
   | { kind: 'reference'; name: string }
-  | { kind: 'condition'; value: string };
+  | { kind: 'condition'; value: string }
+  /** Link events are paired by the name of their LinkEventDefinition (BPMN 2.0.2 §10.5.5). */
+  | { kind: 'link'; name: string };
+
+/** Loop / multi-instance attributes (BPMN 2.0.2 §10.3.8). Empty strings clear them. */
+export type LoopField =
+  | 'loopCondition'
+  | 'loopMaximum'
+  | 'testBefore'
+  | 'loopCardinality'
+  | 'completionCondition'
+  | 'behavior';
+
+/** Details of non-event elements edited through `element.updateDetail`. */
+export type ElementDetail =
+  /** Message carried by a message flow (`messageRef`), found or created by name. */
+  | { kind: 'message'; name: string }
+  /** Envelope decorator of a message flow (DI messageVisibleKind); undefined hides it. */
+  | { kind: 'messageVisibleKind'; value: 'initiating' | 'non_initiating' | undefined }
+  | { kind: 'loop'; field: LoopField; value: string | boolean };
 
 export type PropertyValue = string | number | boolean | ModdleElement | undefined;

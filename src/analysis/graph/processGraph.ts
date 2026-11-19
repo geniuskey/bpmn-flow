@@ -97,31 +97,46 @@ function linkDefinition(el: ModdleElement): ModdleElement | undefined {
 /**
  * A link throw event continues at its link catch event ("off-page connector").
  * They are paired by the definition's `target`/`source` references or, as most
- * tools do, by name (the definition's, else the event's). The pair is added to
- * the adjacency (not to `edges`, which are real sequence flows).
+ * tools do, by name (the definition's, else the event's). Returns the catch
+ * events each throw event of the graph is paired with (BPMN 2.0.2 requires
+ * exactly one, PDF p. 288).
  */
-function linkEvents(graph: ProcessGraph): void {
+export function linkPairs(graph: ProcessGraph): Map<string, string[]> {
   const nodes = [...graph.nodes.values()];
   const catches = nodes.filter(
     (n) => is(n.element, 'bpmn:IntermediateCatchEvent') && linkDefinition(n.element),
   );
   const nameOf = (n: GraphNode) => linkDefinition(n.element)?.name ?? n.name;
+  const pairs = new Map<string, string[]>();
   for (const thrower of nodes) {
     if (!is(thrower.element, 'bpmn:IntermediateThrowEvent')) continue;
     const def = linkDefinition(thrower.element);
     if (!def) continue;
     const target = getRef(def, 'target');
     const name = nameOf(thrower);
-    for (const c of catches) {
-      const cdef = linkDefinition(c.element)!;
-      const paired =
-        target === cdef ||
-        getMany(cdef, 'source').includes(def) ||
-        (!target && !!name && nameOf(c) === name);
-      if (paired) {
-        graph.out.get(thrower.id)!.push(c.id);
-        graph.in.get(c.id)!.push(thrower.id);
-      }
+    pairs.set(
+      thrower.id,
+      catches
+        .filter((c) => {
+          const cdef = linkDefinition(c.element)!;
+          return (
+            target === cdef ||
+            getMany(cdef, 'source').includes(def) ||
+            (!target && !!name && nameOf(c) === name)
+          );
+        })
+        .map((c) => c.id),
+    );
+  }
+  return pairs;
+}
+
+/** The link pairs are added to the adjacency (not to `edges`, which are real sequence flows). */
+function linkEvents(graph: ProcessGraph): void {
+  for (const [thrower, targets] of linkPairs(graph)) {
+    for (const c of targets) {
+      graph.out.get(thrower)!.push(c);
+      graph.in.get(c)!.push(thrower);
     }
   }
 }

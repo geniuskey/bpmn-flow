@@ -71,6 +71,13 @@ export function addShape(m: SemanticModel, shape: Shape, log: ChangeLog): void {
       m.insertInto(container, 'flowElements', dataObject, log);
       log.set(element, 'dataObjectRef', dataObject);
     }
+    if (is(element, 'bpmn:DataStoreReference') && !getRef(element, 'dataStoreRef')) {
+      const dataStore = m.created(shape, 'dataStore', () =>
+        m.factory.createModdle('bpmn:DataStore', element.name ? { name: element.name } : {}),
+      );
+      m.ensureRootElement(dataStore, log);
+      log.set(element, 'dataStoreRef', dataStore);
+    }
     m.insertInto(container, 'flowElements', element, log);
     if (is(element, 'bpmn:ChoreographyActivity')) addBands(m, shape, element, log);
     if (is(element, 'bpmn:BoundaryEvent')) {
@@ -121,6 +128,7 @@ export function removeShape(m: SemanticModel, shape: Shape, log: ChangeLog): voi
   if (is(element, 'bpmn:ChoreographyTask')) removeUnusedMessageFlows(m, element, log);
   if (is(element, 'bpmn:Group')) removeUnusedCategory(m, element, log);
   if (is(element, 'bpmn:DataObjectReference')) removeUnusedDataObject(m, element, log);
+  if (is(element, 'bpmn:DataStoreReference')) removeUnusedDataStore(m, element, log);
   if (is(element, 'bpmn:FlowNode')) {
     for (const lane of allLanes(parent)) {
       log.remove(lane.get('flowNodeRef') as ModdleElement[], element);
@@ -297,6 +305,21 @@ export function removeUnusedDataObject(
     }
   });
   if (!used) log.remove(container.get('flowElements') as ModdleElement[], dataObject);
+}
+
+/** A data store no other reference points to is removed with its last reference. */
+export function removeUnusedDataStore(
+  m: SemanticModel,
+  reference: ModdleElement,
+  log: ChangeLog,
+): void {
+  const dataStore = getRef(reference, 'dataStoreRef');
+  if (!dataStore || dataStore.$parent !== m.definitions) return;
+  let used = false;
+  walkContainment(m.definitions, (el) => {
+    if (el !== reference && getRef(el, 'dataStoreRef') === dataStore) used = true;
+  });
+  if (!used) log.remove(m.definitions.get('rootElements') as ModdleElement[], dataStore);
 }
 
 export function removeUnusedCategory(m: SemanticModel, group: ModdleElement, log: ChangeLog): void {

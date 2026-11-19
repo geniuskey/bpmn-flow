@@ -111,7 +111,7 @@
       <bpmndi:BPMNEdge id="s8_di" bpmnElement="s8"><di:waypoint x="320" y="258" /><di:waypoint x="320" y="310" /><di:waypoint x="402" y="310" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Dia_ticket_di" bpmnElement="Dia_ticket"><di:waypoint x="198" y="125" /><di:waypoint x="260" y="160" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Doa_report_di" bpmnElement="Doa_report"><di:waypoint x="270" y="240" /><di:waypoint x="251" y="285" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Mf_request_di" bpmnElement="Mf_request"><di:waypoint x="180" y="420" /><di:waypoint x="180" y="218" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Mf_request_di" bpmnElement="Mf_request" messageVisibleKind="initiating"><di:waypoint x="180" y="420" /><di:waypoint x="180" y="218" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Mf_reply_di" bpmnElement="Mf_reply" messageVisibleKind="non_initiating"><di:waypoint x="750" y="218" /><di:waypoint x="750" y="420" /></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

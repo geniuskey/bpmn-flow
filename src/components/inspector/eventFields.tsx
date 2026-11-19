@@ -1,5 +1,5 @@
 /** Event fields: trigger type, timer, condition and the referenced message/signal/error/escalation. */
-import { canBeParallelMultiple, DEFINITION_REQUIRED, humanizeType } from '@/bpmn/model/elements';
+import { canBeParallelMultiple, definitionRequired, humanizeType } from '@/bpmn/model/elements';
 import { getMany, getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -97,6 +97,21 @@ export function EventDetailFields({
       </Row>
     );
   }
+  if (is(definition, 'bpmn:LinkEventDefinition')) {
+    const name = (definition.get('name') as string | undefined) ?? '';
+    return (
+      <Row label={rowLabel('Link name')}>
+        <TextField
+          key={`${elementId}:${definitionIndex}:link:${name}`}
+          label="Link name"
+          value={name}
+          disabled={readOnly}
+          placeholder="Pairs a throwing and a catching link"
+          onCommit={(v) => update({ kind: 'link', name: v })}
+        />
+      </Row>
+    );
+  }
   const reference = REFERENCES[definition.$type];
   if (!reference) return null;
   const current = getRef(definition, reference[0]);
@@ -134,7 +149,7 @@ export function EventTriggerFields({
   const types = getMany(event, 'eventDefinitions').map((d) => d.$type);
   const multiple = types.length > 1;
   const remaining = allowed.filter((t) => !types.includes(t));
-  const required = DEFINITION_REQUIRED.includes(event.$type);
+  const required = definitionRequired(event) && types.length > 0;
   const set = (next: string[]) => controller?.setEventDefinitions(elementId, next);
   return (
     <>

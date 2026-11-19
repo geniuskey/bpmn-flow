@@ -381,8 +381,7 @@
   stroke: var(--bf-shape-stroke);
   stroke-width: 1.25px;
 }
-.bf-cancel-marker,
-.bf-cancel-marker-filled {
+.bf-cancel-marker {
   fill: none;
   stroke: var(--bf-shape-stroke);
   stroke-width: 3px;
@@ -394,9 +393,16 @@
 .bf-call-conversation {
   stroke-width: 3.5px;
 }
+/* Double thin line: a wide stroke with a background-colored core. */
 .bf-connection.bf-conversation-link {
-  stroke-width: 4px;
+  stroke-width: 4.5px;
   stroke: var(--bf-shape-stroke);
+}
+.bf-conversation-link-gap {
+  fill: none;
+  stroke: var(--canvas, #fff);
+  stroke-width: 2px;
+  pointer-events: none;
 }
 .bf-choreography {
   filter: none;

@@ -112,6 +112,10 @@ export class AddLaneHandler {
     if (!getRef(bo(participant), 'processRef')) {
       throw new Error('A black-box pool has no process and therefore no lanes.');
     }
+    // Vertical pools (DI isHorizontal=false) are shown, but lane editing is horizontal only.
+    if ((participant as Partial<BpmnData>).di?.get('isHorizontal') === false) {
+      throw new Error('Adding lanes to a vertical pool is not supported yet.');
+    }
     const lanes = lanesOf(participant);
     const laneX = participant.x + POOL_BAND;
     const laneWidth = participant.width - POOL_BAND;

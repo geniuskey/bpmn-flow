@@ -85,12 +85,21 @@ export const EDITABLE_ARTIFACT_TYPES = [
  * Event definitions allowed per event type. An event with more than one is a
  * BPMN "Multiple" event (or "Parallel Multiple" when `parallelMultiple` is set).
  */
+const TOP_LEVEL_START = [
+  'bpmn:MessageEventDefinition',
+  'bpmn:TimerEventDefinition',
+  'bpmn:SignalEventDefinition',
+  'bpmn:ConditionalEventDefinition',
+] as const;
+
+/** Every trigger a start event may have somewhere (see allowedEventDefinitions). */
 export const EVENT_DEFINITIONS: Record<string, readonly string[]> = {
   'bpmn:StartEvent': [
-    'bpmn:MessageEventDefinition',
-    'bpmn:TimerEventDefinition',
-    'bpmn:SignalEventDefinition',
-    'bpmn:ConditionalEventDefinition',
+    ...TOP_LEVEL_START,
+    // Event sub-process triggers (BPMN 2.0.2 §10.5.2, PDF 271–272).
+    'bpmn:ErrorEventDefinition',
+    'bpmn:EscalationEventDefinition',
+    'bpmn:CompensateEventDefinition',
   ],
   'bpmn:EndEvent': [
     'bpmn:MessageEventDefinition',
@@ -130,11 +139,99 @@ export const EVENT_DEFINITIONS: Record<string, readonly string[]> = {
 /** Event types that require a definition (a "none" variant does not exist). */
 export const DEFINITION_REQUIRED = ['bpmn:IntermediateCatchEvent', 'bpmn:BoundaryEvent'];
 
-export const START_EVENT_DEFINITIONS = EVENT_DEFINITIONS['bpmn:StartEvent']!;
+export const START_EVENT_DEFINITIONS = TOP_LEVEL_START;
 export const END_EVENT_DEFINITIONS = EVENT_DEFINITIONS['bpmn:EndEvent']!;
 
+/**
+ * Every trigger an event type may have in some position. Files are editable when
+ * their events stay within these; `allowedEventDefinitions` narrows the list to
+ * what the event's position allows, for editing.
+ */
 export function supportedEventDefinitions(eventType: string): readonly string[] {
   return EVENT_DEFINITIONS[eventType] ?? [];
+}
+
+export function isEventSubProcess(el: ModdleElement | undefined): boolean {
+  return is(el, 'bpmn:SubProcess') && el!.get('triggeredByEvent') === true;
+}
+
+function insideTransaction(el: ModdleElement): boolean {
+  for (let p = el.$parent; p; p = p.$parent) {
+    if (is(p, 'bpmn:Transaction')) return true;
+    if (is(p, 'bpmn:Process')) return false;
+  }
+  return false;
+}
+
+/** Triggers that always interrupt (BPMN 2.0.2 Table 10.92 / PDF 272): error, cancel, compensation. */
+const ALWAYS_INTERRUPTING = [
+  'bpmn:ErrorEventDefinition',
+  'bpmn:CancelEventDefinition',
+  'bpmn:CompensateEventDefinition',
+];
+
+/**
+ * Triggers the event may have where it is (BPMN 2.0.2 §10.5):
+ * - start events: top level message/timer/signal/conditional; event sub-process
+ *   additionally error/escalation/compensation (non-interrupting: escalation
+ *   only); embedded sub-process: none only (PDF 271)
+ * - non-interrupting boundary events: no error, cancel or compensation (PDF 287)
+ * - cancel end / boundary events only in / on a transaction (PDF 287, 291)
+ */
+export function allowedEventDefinitions(event: ModdleElement): readonly string[] {
+  const all = supportedEventDefinitions(event.$type);
+  if (is(event, 'bpmn:StartEvent')) {
+    const container = event.$parent;
+    if (isEventSubProcess(container)) {
+      return event.get('isInterrupting') === false
+        ? all.filter((t) => !ALWAYS_INTERRUPTING.includes(t))
+        : all;
+    }
+    if (is(container, 'bpmn:SubProcess')) return [];
+    return TOP_LEVEL_START;
+  }
+  if (is(event, 'bpmn:BoundaryEvent')) {
+    let list = all;
+    if (event.get('cancelActivity') === false) {
+      list = list.filter((t) => !ALWAYS_INTERRUPTING.includes(t));
+    }
+    const host = event.get('attachedToRef') as ModdleElement | undefined;
+    if (!is(host, 'bpmn:Transaction'))
+      list = list.filter((t) => t !== 'bpmn:CancelEventDefinition');
+    return list;
+  }
+  if (is(event, 'bpmn:EndEvent') && !insideTransaction(event)) {
+    return all.filter((t) => t !== 'bpmn:CancelEventDefinition');
+  }
+  return all;
+}
+
+/** Whether the event needs a trigger: catch / boundary events, and event sub-process starts (PDF 204). */
+export function definitionRequired(event: ModdleElement): boolean {
+  return (
+    DEFINITION_REQUIRED.includes(event.$type) ||
+    (is(event, 'bpmn:StartEvent') && isEventSubProcess(event.$parent))
+  );
+}
+
+/** Error, cancel and compensation triggers always interrupt: the toggle does not apply. */
+export function interruptingIsFixed(event: ModdleElement): boolean {
+  return getMany(event, 'eventDefinitions').some((d) => ALWAYS_INTERRUPTING.includes(d.$type));
+}
+
+/** Whether a sequence flow condition is allowed from `source` (BPMN 2.0.2 §10.5.1, PDF 125). */
+export function conditionAllowedFrom(source: ModdleElement | undefined): boolean {
+  return (
+    is(source, 'bpmn:Activity') ||
+    is(source, 'bpmn:ExclusiveGateway') ||
+    is(source, 'bpmn:InclusiveGateway') ||
+    is(source, 'bpmn:ComplexGateway')
+  );
+}
+
+/** Elements that may have a default flow (PDF 126): activities, exclusive / inclusive / complex gateways. */
+export function canHaveDefaultFlow(el: ModdleElement | undefined): boolean {
+  return conditionAllowedFrom(el);
 }
 
 export const CONTAINER_TYPES = [
@@ -151,6 +248,8 @@ export const CONTAINER_TYPES = [
  * preserved untouched by the editor.
  */
 export const PASSIVE_TYPES = [
+  // Multi-instance pools / bands (marker drawn, values preserved).
+  'bpmn:ParticipantMultiplicity',
   'bpmn:Definitions',
   'bpmn:Documentation',
   'bpmn:MessageEventDefinition',
@@ -230,6 +329,8 @@ export function isEditableFlowNode(el: ModdleElement | undefined): boolean {
   if (!(EDITABLE_FLOW_NODE_TYPES as readonly string[]).includes(el.$type)) return false;
   // Events support none, one, or several ("Multiple") definitions from the supported list.
   if (is(el, 'bpmn:Event')) {
+    // Shared definitions (eventDefinitionRef) are not shown or edited yet.
+    if (getMany(el, 'eventDefinitionRef').length) return false;
     const allowed = supportedEventDefinitions(el.$type);
     if (getMany(el, 'eventDefinitions').some((d) => !allowed.includes(d.$type))) return false;
   }

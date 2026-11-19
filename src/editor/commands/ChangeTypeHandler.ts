@@ -8,7 +8,7 @@ import type { BpmnModdleInstance, ModdleElement } from '@/bpmn/model/moddle';
 import { containedChildren, getRef, is, walkContainment } from '@/bpmn/model/moddle';
 import { diReferencing } from '@/bpmn/di/di';
 import type Canvas from 'diagram-js/lib/core/Canvas';
-import { bo, type BpmnShape } from '../model';
+import { bo, canExpand, type BpmnData, type BpmnShape } from '../model';
 import { ChangeLog } from '../modeling/ChangeLog';
 
 export const CHANGE_TYPE = 'element.changeType';
@@ -137,6 +137,15 @@ export default class ChangeTypeHandler {
       }
     }
     if (is(next, 'bpmn:ExclusiveGateway')) log.set(shape.di, 'isMarkerVisible', true);
+    // Write isExpanded explicitly: other tools read a missing value as collapsed
+    // (BPMN 2.0.2 Table 12.10). Only sub-process kinds carry it.
+    if (canExpand(next)) {
+      if (typeof shape.di.get('isExpanded') !== 'boolean') {
+        log.set(shape.di, 'isExpanded', (shape as Partial<BpmnData>).expandedByContent === true);
+      }
+    } else if (shape.di.get('isExpanded') !== undefined) {
+      log.set(shape.di, 'isExpanded', undefined);
+    }
     const oldType = shape.type;
     log.apply(
       () => {

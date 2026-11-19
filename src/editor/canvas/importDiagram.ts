@@ -12,7 +12,7 @@ import type { Element } from 'diagram-js/lib/model/Types';
 import { connectionEnds, indexDi, readBounds, readWaypoints } from '@/bpmn/di/di';
 import { isEditableConnection, isEditableShapeElement } from '@/bpmn/model/elements';
 import { getMany, getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
-import type { BpmnRoot, BpmnShape } from '../model';
+import { canExpand, type BpmnRoot, type BpmnShape } from '../model';
 
 import type { CanvasImportResult } from '../types';
 
@@ -119,6 +119,14 @@ export function importDiagram(
       .filter((s): s is { diShape: ModdleElement; index: number; bo: ModdleElement } => !!s.bo)
       .sort((a, b) => shapeOrder(a.bo) - shapeOrder(b.bo) || a.index - b.index);
 
+    // No DI isExpanded: collapsed per the spec (Table 12.10), unless this diagram
+    // draws the content inside the shape.
+    const drawnHere = new Set(shapes.map((s) => s.bo));
+    const expandedByContent = (bo: ModdleElement, diShape: ModdleElement) =>
+      canExpand(bo) &&
+      typeof diShape.get('isExpanded') !== 'boolean' &&
+      [...getMany(bo, 'flowElements'), ...getMany(bo, 'artifacts')].some((c) => drawnHere.has(c));
+
     for (const { diShape, bo } of shapes) {
       const id = bo.id;
       if (!id || elementRegistry.get(id)) {
@@ -132,6 +140,7 @@ export function importDiagram(
         businessObject: bo,
         di: diShape,
         unsupported: !isSupportedShape(bo),
+        ...(expandedByContent(bo, diShape) ? { expandedByContent: true } : {}),
         ...(bandsByActivity.has(diShape) ? { bands: bandsByActivity.get(diShape) } : {}),
         ...bounds,
       }) as BpmnShape;

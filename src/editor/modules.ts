@@ -30,6 +30,7 @@ import ChoreographyParticipantHandler, {
   SET_CHOREOGRAPHY_PARTICIPANT,
 } from './commands/ChoreographyParticipantHandler';
 import EventDetailHandler, { UPDATE_EVENT_DETAIL } from './commands/EventDetailHandler';
+import ElementDetailHandler, { UPDATE_ELEMENT_DETAIL } from './commands/ElementDetailHandler';
 import {
   ADD_LANE,
   SET_POOL_BLACK_BOX,
@@ -63,6 +64,7 @@ class BpmnFlowCommands {
     commandStack.registerHandler(SET_LOOP, LoopHandler);
     commandStack.registerHandler(SET_CHOREOGRAPHY_PARTICIPANT, ChoreographyParticipantHandler);
     commandStack.registerHandler(UPDATE_EVENT_DETAIL, EventDetailHandler);
+    commandStack.registerHandler(UPDATE_ELEMENT_DETAIL, ElementDetailHandler);
     commandStack.registerHandler(ROOT_TO_COLLABORATION, RootToCollaborationHandler);
     commandStack.registerHandler(UPDATE_LANES, UpdateLanesHandler);
     commandStack.registerHandler(ADD_LANE, AddLaneHandler);

@@ -38,6 +38,7 @@ import { SET_EVENT_DEFINITION } from './commands/EventDefinitionHandler';
 import { SET_LOOP } from './commands/LoopHandler';
 import { SET_CHOREOGRAPHY_PARTICIPANT } from './commands/ChoreographyParticipantHandler';
 import { UPDATE_EVENT_DETAIL } from './commands/EventDetailHandler';
+import { UPDATE_ELEMENT_DETAIL } from './commands/ElementDetailHandler';
 import { ADD_LANE, SET_POOL_BLACK_BOX, blackBoxBlocker } from './commands/StructureHandlers';
 import { APPLY_LAYOUT } from './layout/ApplyLayoutHandler';
 import { deletable } from './interaction/BpmnFlowRules';
@@ -53,6 +54,7 @@ import type {
   CanvasImportResult,
   DiagramInfo,
   EditorOptions,
+  ElementDetail,
   EditorSnapshot,
   EditorTool,
   EventDetail,
@@ -390,6 +392,12 @@ export class EditorController {
   updateEventDetail(id: string, detail: EventDetail, definitionIndex = 0): void {
     const element = this.getElement(id);
     if (element) this.exec(UPDATE_EVENT_DETAIL, { element, detail, definitionIndex });
+  }
+
+  /** Message flow message, loop / multi-instance attributes (see `ElementDetail`). */
+  updateElementDetail(id: string, detail: ElementDetail): void {
+    const element = this.getElement(id);
+    if (element) this.exec(UPDATE_ELEMENT_DETAIL, { element, detail });
   }
 
   setChoreographyParticipant(

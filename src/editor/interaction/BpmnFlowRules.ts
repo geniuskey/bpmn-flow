@@ -12,8 +12,9 @@ import {
   isEditableConnection,
   isEditableFlowNode,
   isEditableShapeElement,
+  isEventSubProcess,
 } from '@/bpmn/model/elements';
-import { getMany, is } from '@/bpmn/model/moddle';
+import { getMany, is, type ModdleElement } from '@/bpmn/model/moddle';
 import { bo, childrenOf, type BpmnData } from '../model';
 import {
   containerAt,
@@ -132,6 +133,13 @@ export function canContain(target: Element | undefined, type: string): boolean {
     return false;
   }
   if (is(targetBo, 'bpmn:Choreography')) return !target.parent;
+  // "MUST NOT be used in an Ad-Hoc Sub-Process: Start Event, End Event" (BPMN 2.0.2 PDF 211).
+  if (
+    is(targetBo, 'bpmn:AdHocSubProcess') &&
+    (type === 'bpmn:StartEvent' || type === 'bpmn:EndEvent')
+  ) {
+    return false;
+  }
   if (ARTIFACT_SHAPES.includes(type)) {
     return (
       !target.parent ||
@@ -145,9 +153,40 @@ export function canContain(target: Element | undefined, type: string): boolean {
   return isExpandedContainer(target) && !isUnsupported(target);
 }
 
-/** Boundary events attach to activities (tasks, call activities, sub-processes). */
+/**
+ * Boundary events attach to activities (tasks, call activities, sub-processes);
+ * cancel boundary events only to transactions (PDF 287). Event sub-processes
+ * have no boundary events: they are not part of the normal flow.
+ */
 export function canAttach(shapes: Element[], target: Element | undefined): boolean {
-  return shapes.length === 1 && is(bo(shapes[0]!), 'bpmn:BoundaryEvent') && isActivity(target);
+  if (shapes.length !== 1 || !is(bo(shapes[0]!), 'bpmn:BoundaryEvent') || !isActivity(target)) {
+    return false;
+  }
+  const host = bo(target!)!;
+  if (isEventSubProcess(host)) return false;
+  return !hasTrigger(bo(shapes[0]!)!, 'bpmn:CancelEventDefinition') || is(host, 'bpmn:Transaction');
+}
+
+function hasTrigger(el: ModdleElement, type: string): boolean {
+  return getMany(el, 'eventDefinitions').some((d) => is(d, type));
+}
+
+/** Only these triggers may follow an event-based gateway (PDF 327), alone or combined. */
+const EVENT_GATEWAY_TRIGGERS = [
+  'bpmn:MessageEventDefinition',
+  'bpmn:SignalEventDefinition',
+  'bpmn:TimerEventDefinition',
+  'bpmn:ConditionalEventDefinition',
+];
+
+function validEventGatewayTarget(t: ModdleElement): boolean {
+  if (is(t, 'bpmn:ReceiveTask')) return true;
+  const defs = getMany(t, 'eventDefinitions');
+  return (
+    is(t, 'bpmn:IntermediateCatchEvent') &&
+    defs.length > 0 &&
+    defs.every((d) => EVENT_GATEWAY_TRIGGERS.includes(d.$type))
+  );
 }
 
 /**
@@ -161,11 +200,12 @@ export function canBeFlowSource(source: Element | undefined): source is Shape {
   const s = bo(source)!;
   if (is(s, 'bpmn:EndEvent')) return false;
   if (is(s, 'bpmn:Activity') && s.get('isForCompensation')) return false;
-  const def = getMany(s, 'eventDefinitions')[0];
-  if (is(s, 'bpmn:IntermediateThrowEvent') && def && is(def, 'bpmn:LinkEventDefinition')) {
+  // "An Event Sub-Process MUST NOT have any incoming or outgoing Sequence Flows" (PDF 204).
+  if (isEventSubProcess(s)) return false;
+  if (is(s, 'bpmn:IntermediateThrowEvent') && hasTrigger(s, 'bpmn:LinkEventDefinition')) {
     return false;
   }
-  if (is(s, 'bpmn:BoundaryEvent') && def && is(def, 'bpmn:CompensateEventDefinition')) return false;
+  if (is(s, 'bpmn:BoundaryEvent') && hasTrigger(s, 'bpmn:CompensateEventDefinition')) return false;
   return !!processOf(source.parent);
 }
 
@@ -173,6 +213,16 @@ export function canConnect(source: Element | undefined, target: Element | undefi
   if (!canBeFlowSource(source) || !editableNode(target) || source === target) return false;
   const t = bo(target)!;
   if (is(t, 'bpmn:StartEvent') || is(t, 'bpmn:BoundaryEvent')) return false;
+  // Outside the normal flow: event sub-processes, compensation activities (PDF 204, 268).
+  if (isEventSubProcess(t) || (is(t, 'bpmn:Activity') && t.get('isForCompensation'))) return false;
+  // A catching link event has no incoming sequence flows (PDF 268).
+  if (is(t, 'bpmn:IntermediateCatchEvent') && hasTrigger(t, 'bpmn:LinkEventDefinition')) {
+    return false;
+  }
+  // An instantiating event-based gateway has no incoming sequence flows (PDF 328).
+  if (is(t, 'bpmn:EventBasedGateway') && t.get('instantiate') === true) return false;
+  // Event-based gateway targets: catch events with message/signal/timer/conditional, or receive tasks (PDF 327).
+  if (is(bo(source)!, 'bpmn:EventBasedGateway') && !validEventGatewayTarget(t)) return false;
   return processOf(source.parent) === processOf(target.parent);
 }
 
@@ -181,14 +231,38 @@ export function canAppend(source: Element | undefined, type: string): boolean {
   return canBeFlowSource(source) && canContain(source.parent, type);
 }
 
-/** Message flows connect different pools (or nodes in them); gateways do not send messages. */
+/**
+ * Message flow ends (BPMN 2.0.2 Table 7.4, PDF 72): pools and activities on both
+ * ends; message throw / end events send, message start / catch / boundary events
+ * receive. Gateways never take part.
+ */
+export function canSendMessage(el: ModdleElement): boolean {
+  if (is(el, 'bpmn:Participant')) return true;
+  if (is(el, 'bpmn:Activity')) return !isEventSubProcess(el);
+  return (
+    (is(el, 'bpmn:IntermediateThrowEvent') || is(el, 'bpmn:EndEvent')) &&
+    hasTrigger(el, 'bpmn:MessageEventDefinition')
+  );
+}
+
+export function canReceiveMessage(el: ModdleElement): boolean {
+  if (is(el, 'bpmn:Participant')) return true;
+  if (is(el, 'bpmn:Activity')) return !isEventSubProcess(el);
+  return (
+    (is(el, 'bpmn:StartEvent') ||
+      is(el, 'bpmn:IntermediateCatchEvent') ||
+      is(el, 'bpmn:BoundaryEvent')) &&
+    hasTrigger(el, 'bpmn:MessageEventDefinition')
+  );
+}
+
+/** Message flows connect different pools (or nodes in them). */
 export function canMessageFlow(source: Element | undefined, target: Element | undefined): boolean {
   if (!source || !target || source === target) return false;
   const ok = (el: Element) =>
-    !isUnsupported(el) &&
-    (is(bo(el), 'bpmn:Participant') || (isEditableFlowNode(bo(el)) && !is(bo(el), 'bpmn:Gateway')));
+    !isUnsupported(el) && (is(bo(el), 'bpmn:Participant') || isEditableFlowNode(bo(el)));
   if (!ok(source) || !ok(target)) return false;
-  if (is(bo(source), 'bpmn:StartEvent') || is(bo(target), 'bpmn:EndEvent')) return false;
+  if (!canSendMessage(bo(source)!) || !canReceiveMessage(bo(target)!)) return false;
   const a = participantOf(source);
   const b = participantOf(target);
   return !!a && !!b && a !== b;
@@ -200,12 +274,14 @@ export function canAssociate(source: Element | undefined, target: Element | unde
   if (!editableShape(source) || !editableShape(target)) return false;
   // Compensation: a compensation boundary event is associated with its compensation activity.
   const s = bo(source)!;
-  if (
-    is(s, 'bpmn:BoundaryEvent') &&
-    getMany(s, 'eventDefinitions')[0]?.$type === 'bpmn:CompensateEventDefinition' &&
-    isActivity(target)
-  ) {
-    return true;
+  // The target is the compensation activity (marked "for compensation", PDF 332)
+  // of the same process.
+  if (is(s, 'bpmn:BoundaryEvent') && hasTrigger(s, 'bpmn:CompensateEventDefinition')) {
+    return (
+      isActivity(target) &&
+      bo(target)!.get('isForCompensation') === true &&
+      processOf(source.parent) === processOf(target.parent)
+    );
   }
   return is(s, 'bpmn:TextAnnotation') !== is(bo(target), 'bpmn:TextAnnotation');
 }

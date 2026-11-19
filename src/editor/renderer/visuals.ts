@@ -108,6 +108,4 @@ export function isThrowing(el: ModdleElement): boolean {
 }
 
 /** Expanded sub-processes show their content; collapsed ones show a [+] marker. */
-export function isExpanded(el: ModdleElement, di: ModdleElement | undefined): boolean {
-  return is(el, 'bpmn:SubProcess') && di?.get('isExpanded') !== false;
-}
+export { isExpandedShape as isExpanded } from '../model';

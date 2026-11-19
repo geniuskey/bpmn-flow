@@ -45,6 +45,24 @@ export class ChangeLog {
     });
   }
 
+  /**
+   * Like `set`, but writes the value even when it equals the moddle default
+   * (which `set` sees through the prototype and skips) — for attributes whose
+   * absence means something else (DI messageVisibleKind).
+   */
+  setExplicit(element: ModdleElement, key: string, value: unknown): void {
+    const record = element as unknown as Record<string, unknown>;
+    const had = Object.prototype.hasOwnProperty.call(record, key);
+    const old = record[key];
+    if (had && old === value) return;
+    if (!had && value === undefined) return;
+    element.set(key, value);
+    this.ops.push(() => {
+      if (had) element.set(key, old);
+      else delete record[key];
+    });
+  }
+
   setParent(element: ModdleElement, parent: ModdleElement | undefined): void {
     const old = element.$parent;
     if (old === parent) return;

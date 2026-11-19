@@ -218,3 +218,17 @@ export function writeWaypoints(
   diEdge.set('waypoint', points);
   return true;
 }
+
+/**
+ * DI messageVisibleKind as written in the file. bpmn-moddle reports a default
+ * of "initiating" for a missing attribute, but BPMN 2.0.2 Table 12.35 gives
+ * "unspecified" its own meaning: no envelope.
+ */
+export function messageVisibleKind(
+  diEdge: ModdleElement | undefined,
+): 'initiating' | 'non_initiating' | undefined {
+  if (!diEdge || !Object.prototype.hasOwnProperty.call(diEdge, 'messageVisibleKind'))
+    return undefined;
+  const value = diEdge.get('messageVisibleKind');
+  return value === 'initiating' || value === 'non_initiating' ? value : undefined;
+}

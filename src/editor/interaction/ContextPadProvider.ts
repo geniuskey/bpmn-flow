@@ -128,7 +128,12 @@ export default class BpmnContextPadProvider {
         'edit',
       );
     }
-    if ((is(b, 'bpmn:Participant') && getRef(b, 'processRef')) || is(b, 'bpmn:Lane')) {
+    const horizontal =
+      (element as { di?: { get(n: string): unknown } }).di?.get('isHorizontal') !== false;
+    if (
+      horizontal &&
+      ((is(b, 'bpmn:Participant') && getRef(b, 'processRef')) || is(b, 'bpmn:Lane'))
+    ) {
       entries['lane.add'] = entry(
         ICONS.laneBelow,
         'Add lane below',

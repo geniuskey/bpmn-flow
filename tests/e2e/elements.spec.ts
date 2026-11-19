@@ -131,13 +131,14 @@ test('boundary events, sub-processes, data, annotations and groups', async ({ pa
   await page
     .getByTestId('inspector')
     .getByLabel('Event definition')
-    .selectOption('bpmn:ErrorEventDefinition');
+    .selectOption('bpmn:EscalationEventDefinition');
+  // Error boundary events always interrupt (BPMN 2.0.2 PDF 288); escalation may not.
   await page.getByTestId('inspector').getByLabel('Interrupting').uncheck();
   xml = await exportXml(page);
   expect(xml).toMatch(/<bpmn:sendTask id="Task_check"/);
   expect(xml).toMatch(
     new RegExp(
-      `<bpmn:boundaryEvent id="${boundary}" cancelActivity="false" attachedToRef="Task_check">\\s*<bpmn:errorEventDefinition`,
+      `<bpmn:boundaryEvent id="${boundary}" cancelActivity="false" attachedToRef="Task_check">\\s*<bpmn:escalationEventDefinition`,
     ),
   );
   // The data input association moved with the type change.
@@ -218,8 +219,8 @@ test('transactions, ad-hoc sub-processes, compensation and loop markers', async 
   // Loop markers: switch the standard loop to a parallel multi-instance and back to none.
   await el(page, 'Collect').click();
   const inspector = page.getByTestId('inspector');
-  await expect(inspector.getByLabel('Loop')).toHaveValue('standard');
-  await inspector.getByLabel('Loop').selectOption('parallel');
+  await expect(inspector.getByLabel('Loop', { exact: true })).toHaveValue('standard');
+  await inspector.getByLabel('Loop', { exact: true }).selectOption('parallel');
   let xml = await exportXml(page);
   expect(/<bpmn:userTask id="Collect"[\s\S]*?<\/bpmn:userTask>/.exec(xml)![0]).toMatch(
     /<bpmn:multiInstanceLoopCharacteristics id="[^"]+" \/>/,
@@ -230,12 +231,10 @@ test('transactions, ad-hoc sub-processes, compensation and loop markers', async 
   expect(xml).toMatch(
     /<bpmn:potentialOwner id="Owner_1">\s*<bpmn:resourceAssignmentExpression id="RAE_1">\s*<bpmn:expression xsi:type="bpmn:tFormalExpression">sales<\/bpmn:expression>/,
   );
-  await inspector.getByLabel('Loop').selectOption('none');
-  await inspector.getByLabel('For compensation').check();
+  await inspector.getByLabel('Loop', { exact: true }).selectOption('none');
+  // Collect is in the normal flow: compensation activities have no sequence flows (PDF 268).
+  await expect(inspector.getByLabel('For compensation')).toBeDisabled();
   xml = await exportXml(page);
-  expect(xml).toMatch(
-    /<bpmn:userTask id="Collect" name="Collect requests" isForCompensation="true">/,
-  );
   expect(xml).not.toContain('standardLoopCharacteristics');
   expect(['valid', 'skipped']).toContain(xsdValidate(xml));
   saveForInterop('e2e-advanced.bpmn', xml);
@@ -287,6 +286,13 @@ test('BPMN 2.0 notation: multiple events, event-based gateway variants, collecti
   await expect(inspector.getByLabel('Event definition')).toHaveValue('__multiple');
 
   // Instantiating parallel event-based gateway.
+  // An instantiating gateway has no incoming sequence flows (PDF 328): remove s2 first.
+  await el(page, 'Gw_event').click();
+  await expect(inspector.getByLabel('Instantiate')).toBeDisabled();
+  // A horizontal flow has a zero-height box, so click its midpoint directly.
+  const s2 = (await el(page, 's2').boundingBox())!;
+  await page.mouse.click(s2.x + s2.width / 2, s2.y + s2.height / 2);
+  await page.keyboard.press('Delete');
   await el(page, 'Gw_event').click();
   await inspector.getByLabel('Instantiate').check();
   await inspector.getByLabel('Event gateway type').selectOption('Parallel');

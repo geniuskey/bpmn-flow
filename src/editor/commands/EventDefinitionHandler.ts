@@ -5,13 +5,19 @@
  * expressions survive. Dropping below two definitions clears `parallelMultiple`.
  */
 import type { Element } from 'diagram-js/lib/model/Types';
-import { supportedEventDefinitions } from '@/bpmn/model/elements';
-import { getMany, type ModdleElement } from '@/bpmn/model/moddle';
+import { allowedEventDefinitions } from '@/bpmn/model/elements';
+import { getMany, is, type ModdleElement } from '@/bpmn/model/moddle';
 import { bo } from '../model';
 import type BpmnElementFactory from '../modeling/BpmnElementFactory';
 import { ChangeLog } from '../modeling/ChangeLog';
 
 export const SET_EVENT_DEFINITION = 'event.setDefinition';
+
+const ALWAYS_INTERRUPTING = [
+  'bpmn:ErrorEventDefinition',
+  'bpmn:CancelEventDefinition',
+  'bpmn:CompensateEventDefinition',
+];
 
 interface Context {
   element: Element;
@@ -32,9 +38,34 @@ export default class EventDefinitionHandler {
     if (!event) return [];
     const types =
       context.definitionTypes ?? (context.definitionType ? [context.definitionType] : []);
-    const allowed = supportedEventDefinitions(event.$type);
+    const allowed = allowedEventDefinitions(event);
+    const present = getMany(event, 'eventDefinitions').map((d) => d.$type);
     for (const type of types) {
-      if (!allowed.includes(type)) throw new Error(`${type} is not supported on ${event.$type}.`);
+      // A trigger the file already has may stay even where it is not allowed (the analyzer reports it).
+      if (!allowed.includes(type) && !present.includes(type)) {
+        throw new Error(`${type} is not allowed on this ${event.$type}.`);
+      }
+    }
+    const shape = context.element as { incoming?: unknown[]; outgoing?: unknown[] };
+    const has = (type: string) => types.includes(type) && !present.includes(type);
+    // BPMN 2.0.2 PDF 268/288: link catch events have no incoming, link throw events
+    // and compensation boundary events no outgoing sequence flows.
+    if (has('bpmn:LinkEventDefinition') || has('bpmn:CompensateEventDefinition')) {
+      const flows = (list: unknown[] | undefined) =>
+        (list ?? []).some((c) =>
+          is((c as { businessObject?: ModdleElement }).businessObject, 'bpmn:SequenceFlow'),
+        );
+      const blocked =
+        (has('bpmn:LinkEventDefinition') &&
+          (is(event, 'bpmn:IntermediateCatchEvent')
+            ? flows(shape.incoming)
+            : flows(shape.outgoing))) ||
+        (has('bpmn:CompensateEventDefinition') &&
+          is(event, 'bpmn:BoundaryEvent') &&
+          flows(shape.outgoing));
+      if (blocked) {
+        throw new Error('Remove the sequence flows that this trigger does not allow first.');
+      }
     }
     if (new Set(types).size !== types.length) {
       throw new Error('An event cannot have the same trigger twice.');
@@ -58,6 +89,11 @@ export default class EventDefinitionHandler {
     }
     if (next.length < 2 && event.get('parallelMultiple') === true) {
       log.set(event, 'parallelMultiple', undefined);
+    }
+    // Error, cancel and compensation triggers always interrupt (PDF 272, 287).
+    if (next.some((d) => ALWAYS_INTERRUPTING.includes(d.$type))) {
+      if (event.get('cancelActivity') === false) log.set(event, 'cancelActivity', undefined);
+      if (event.get('isInterrupting') === false) log.set(event, 'isInterrupting', undefined);
     }
     context.log = log;
     return [context.element];

@@ -1,5 +1,5 @@
 /** Markers and icons drawn inside shapes: gateway and event markers, activity markers, task type icons. */
-import { getMany, getRef, is } from '@/bpmn/model/moddle';
+import { getMany, getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
 import type { BpmnShape } from '../model';
 import { isExpanded, isThrowing } from './visuals';
 import { el, path, pentagonPath } from './svg';
@@ -127,11 +127,21 @@ export function drawEventMarker(gfx: SVGElement, shape: BpmnShape): void {
     );
   } else if (is(def, 'bpmn:CancelEventDefinition')) {
     const t = r * 0.42;
-    path(
-      gfx,
-      `M${cx - t},${cy - t}L${cx + t},${cy + t}M${cx + t},${cy - t}L${cx - t},${cy + t}`,
-      thrown ? 'bf-cancel-marker-filled' : 'bf-cancel-marker',
-    );
+    if (thrown) {
+      // Throwing markers are filled (Table 12.22): a solid X shape.
+      const w = t * 0.32;
+      path(
+        gfx,
+        `M${cx - t},${cy - t + w}L${cx - t + w},${cy - t}L${cx},${cy - w}L${cx + t - w},${cy - t}L${cx + t},${cy - t + w}L${cx + w},${cy}L${cx + t},${cy + t - w}L${cx + t - w},${cy + t}L${cx},${cy + w}L${cx - t + w},${cy + t}L${cx - t},${cy + t - w}L${cx - w},${cy}z`,
+        'bf-event-marker-filled',
+      );
+    } else {
+      path(
+        gfx,
+        `M${cx - t},${cy - t}L${cx + t},${cy + t}M${cx + t},${cy - t}L${cx - t},${cy + t}`,
+        'bf-cancel-marker',
+      );
+    }
   } else if (is(def, 'bpmn:LinkEventDefinition')) {
     const t = r * 0.5;
     path(
@@ -152,8 +162,9 @@ export function drawActivityMarkers(
   extra: ('collapsed' | 'adhoc')[],
 ): void {
   const bo = shape.businessObject;
+  // Order per BPMN 2.0.2 §12 / PDF 202–203: loop or multi-instance and
+  // compensation left of the collapsed [+]; the ad-hoc tilde to its right.
   const markers: string[] = [];
-  if (is(bo, 'bpmn:SubProcess') && !isExpanded(bo, shape.di)) markers.push('collapsed');
   const loop = getRef(bo, 'loopCharacteristics');
   if (loop) {
     markers.push(
@@ -165,6 +176,14 @@ export function drawActivityMarkers(
     );
   }
   if (bo.get('isForCompensation') === true) markers.push('compensation');
+  if (
+    (is(bo, 'bpmn:SubProcess') && !isExpanded(shape)) ||
+    (is(bo, 'bpmn:CallActivity') &&
+      is(calledElementOf(bo), 'bpmn:Process') &&
+      shape.di.get('isExpanded') !== true)
+  ) {
+    markers.push('collapsed');
+  }
   markers.push(...extra);
   const size = 14;
   const gap = 4;
@@ -198,7 +217,48 @@ export function drawActivityMarkers(
   }
 }
 
-export function drawTaskIcon(gfx: SVGElement, type: string): void {
+/** The process or global task a call activity calls (`calledElement` is an id / QName). */
+export function calledElementOf(bo: ModdleElement): ModdleElement | undefined {
+  const ref = bo.get('calledElement');
+  if (typeof ref !== 'string' || !ref) return undefined;
+  const local = ref.includes(':') ? ref.slice(ref.indexOf(':') + 1) : ref;
+  let defs: ModdleElement | undefined = bo;
+  while (defs?.$parent) defs = defs.$parent;
+  return getMany(defs, 'rootElements').find((r) => r.id === local);
+}
+
+/**
+ * Icon type for an activity. A call activity calling a global task shows that
+ * task's marker (BPMN 2.0.2 Table 12.18): GlobalUserTask → user task, etc.
+ */
+export function iconType(bo: ModdleElement): string {
+  if (!is(bo, 'bpmn:CallActivity')) return bo.$type;
+  const called = calledElementOf(bo);
+  const m = called?.$type.match(/^bpmn:Global(User|Manual|Script|BusinessRule)Task$/);
+  return m ? `bpmn:${m[1]}Task` : bo.$type;
+}
+
+/**
+ * A collapsed event sub-process shows its start event (trigger marker, dashed
+ * when non-interrupting) in the upper left corner (BPMN 2.0.2 PDF 204).
+ */
+export function drawEventSubProcessTrigger(gfx: SVGElement, sub: ModdleElement): void {
+  const start = getMany(sub, 'flowElements').find((f) => is(f, 'bpmn:StartEvent'));
+  if (!start) return;
+  const g = el(gfx, 'g', { transform: 'translate(5, 5)' }, 'bf-event-subprocess-trigger');
+  const nonInterrupting = start.get('isInterrupting') === false;
+  el(
+    g,
+    'circle',
+    { cx: 9, cy: 9, r: 8.5 },
+    nonInterrupting
+      ? 'bf-shape bf-event bf-start-event bf-non-interrupting'
+      : 'bf-shape bf-event bf-start-event',
+  );
+  drawEventMarker(g, { width: 18, height: 18, businessObject: start } as BpmnShape);
+}
+
+export function drawTaskIcon(gfx: SVGElement, type: string, bo?: ModdleElement): void {
   switch (type) {
     case 'bpmn:UserTask':
       return drawUserIcon(gfx);
@@ -206,6 +266,10 @@ export function drawTaskIcon(gfx: SVGElement, type: string): void {
       return drawServiceIcon(gfx);
     case 'bpmn:SendTask':
     case 'bpmn:ReceiveTask': {
+      // An instantiating receive task looks like a message start event (PDF 189).
+      if (type === 'bpmn:ReceiveTask' && bo?.get('instantiate') === true) {
+        el(gfx, 'circle', { cx: 16, cy: 14, r: 10 }, 'bf-icon-stroke');
+      }
       const g = el(gfx, 'g', { transform: 'translate(8, 9)' }, 'bf-icon');
       const filled = type === 'bpmn:SendTask';
       path(g, 'M0,0h16v11h-16z', filled ? 'bf-icon-filled' : 'bf-icon-stroke');

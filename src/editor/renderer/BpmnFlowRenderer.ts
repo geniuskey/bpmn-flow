@@ -9,12 +9,18 @@ import BaseRenderer from 'diagram-js/lib/draw/BaseRenderer';
 import type EventBus from 'diagram-js/lib/core/EventBus';
 import type { Connection, Element, Shape } from 'diagram-js/lib/model/Types';
 import { append as svgAppend, classes as svgClasses } from 'tiny-svg';
-import { readLabelBounds } from '@/bpmn/di/di';
+import { messageVisibleKind, readLabelBounds } from '@/bpmn/di/di';
 import { getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
 import type { BpmnConnection, BpmnShape } from '../model';
 import { arrowHeadPath, outlinePath, polylineMid, polylinePath, startMarkerPath } from './geometry';
 import { hasExternalLabel, isCollection, isExpanded, visualFor } from './visuals';
-import { drawActivityMarkers, drawGatewayMarker, drawTaskIcon } from './markers';
+import {
+  drawActivityMarkers,
+  drawEventSubProcessTrigger,
+  drawGatewayMarker,
+  drawTaskIcon,
+  iconType,
+} from './markers';
 import { drawBlackBoxPool, drawChoreography, drawEvent, drawPool } from './shapes';
 import { el, path } from './svg';
 import { TEXT, drawCaption, drawCenteredText, drawExternalLabel, drawTitle } from './text';
@@ -55,7 +61,7 @@ export default class BpmnFlowRenderer extends BaseRenderer {
       case 'activity': {
         const call = is(bo, 'bpmn:CallActivity') ? ' bf-call-activity' : '';
         main = path(gfx, outlinePath('roundRect', box), `bf-shape bf-activity${call}`);
-        drawTaskIcon(gfx, bo.$type);
+        drawTaskIcon(gfx, iconType(bo), bo);
         drawCenteredText(gfx, bo.name, box, 'bf-label');
         drawActivityMarkers(gfx, shape, []);
         break;
@@ -82,7 +88,8 @@ export default class BpmnFlowRenderer extends BaseRenderer {
         const extra: ('collapsed' | 'adhoc')[] = [];
         if (is(bo, 'bpmn:AdHocSubProcess')) extra.push('adhoc');
         drawActivityMarkers(gfx, shape, extra);
-        if (isExpanded(bo, shape.di)) {
+        if (eventSub && !isExpanded(shape)) drawEventSubProcessTrigger(gfx, bo);
+        if (isExpanded(shape)) {
           drawCenteredText(
             gfx,
             bo.name,
@@ -216,10 +223,12 @@ export default class BpmnFlowRenderer extends BaseRenderer {
       el(gfx, 'circle', { cx: a.x, cy: a.y, r: 4 }, 'bf-message-start');
       const head = arrowHeadPath(points);
       if (head) path(gfx, head, 'bf-message-arrow');
-      if (getRef(bo, 'messageRef')) {
-        // Envelope at the middle; shaded for a non-initiating (reply) message.
+      const kind = messageVisibleKind(connection.di);
+      // BPMN 2.0.2 Table 12.35: the envelope decorator is shown only when DI
+      // messageVisibleKind is set; shaded for a non-initiating (reply) message.
+      if (kind === 'initiating' || kind === 'non_initiating') {
         const mid = polylineMid(points);
-        const shaded = connection.di?.get('messageVisibleKind') === 'non_initiating';
+        const shaded = kind === 'non_initiating';
         const g = el(
           gfx,
           'g',
@@ -233,13 +242,20 @@ export default class BpmnFlowRenderer extends BaseRenderer {
     if (unsupported) drawTitle(gfx, `${bo.$type} — not editable in BPMN Flow yet`);
     if (visual.kind === 'association') {
       svgClasses(line).add('bf-association');
-      if (bo.get('associationDirection') === 'One' || bo.get('associationDirection') === 'Both') {
+      const direction = bo.get('associationDirection');
+      if (direction === 'One' || direction === 'Both') {
         const head = arrowHeadPath(points, 9, 5);
         if (head) path(gfx, head, 'bf-open-arrow');
       }
+      if (direction === 'Both') {
+        const tail = arrowHeadPath([...points].reverse(), 9, 5);
+        if (tail) path(gfx, tail, 'bf-open-arrow');
+      }
     }
     if (visual.kind === 'conversationLink') {
+      // "Conversation Links MUST be drawn with double thin lines" (PDF 161).
       svgClasses(line).add('bf-conversation-link');
+      path(gfx, polylinePath(points), 'bf-conversation-link-gap');
     }
     if (visual.kind === 'dataAssociation') {
       svgClasses(line).add('bf-association');

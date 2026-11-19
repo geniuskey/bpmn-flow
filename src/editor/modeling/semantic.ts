@@ -3,7 +3,7 @@
  */
 import type { Element, Shape } from 'diagram-js/lib/model/Types';
 import { getMany, getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
-import { bo, childrenOf } from '../model';
+import { bo, childrenOf, isExpandedShape } from '../model';
 
 /**
  * The flow container (process or sub-process) that owns flow content placed
@@ -82,12 +82,7 @@ export function artifactContainerOf(
 
 /** Sub-process shapes that show their content (BPMN DI isExpanded). */
 export function isExpandedContainer(el: Element): boolean {
-  const b = bo(el);
-  return (
-    !!b &&
-    (is(b, 'bpmn:SubProcess') || is(b, 'bpmn:SubChoreography')) &&
-    (el as { di?: ModdleElement }).di?.get('isExpanded') !== false
-  );
+  return isExpandedShape(el);
 }
 
 /** Shapes that can hold flow content: pools and expanded sub-processes (and lanes via their pool). */

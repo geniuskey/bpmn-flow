@@ -58,7 +58,7 @@
       <bpmndi:BPMNEdge id="c2_di" bpmnElement="c2"><di:waypoint x="390" y="150" /><di:waypoint x="462" y="150" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="s1_di" bpmnElement="s1"><di:waypoint x="358" y="410" /><di:waypoint x="430" y="410" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="s2_di" bpmnElement="s2"><di:waypoint x="530" y="410" /><di:waypoint x="602" y="410" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="MF_order_di" bpmnElement="MF_order"><di:waypoint x="340" y="190" /><di:waypoint x="340" y="392" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_order_di" bpmnElement="MF_order" messageVisibleKind="initiating"><di:waypoint x="340" y="190" /><di:waypoint x="340" y="392" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="MF_invoice_di" bpmnElement="MF_invoice"><di:waypoint x="480" y="370" /><di:waypoint x="480" y="240" /></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

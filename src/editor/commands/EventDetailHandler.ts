@@ -5,6 +5,7 @@
  * - message / signal / error / escalation: reference to a root element by name
  *   (an existing one with that name is reused, otherwise one is created)
  * - conditional: the condition expression
+ * - link: the name that pairs a throwing and a catching link event
  */
 import type { Element } from 'diagram-js/lib/model/Types';
 import {
@@ -85,6 +86,8 @@ export default class EventDetailHandler {
         'condition',
         detail.value.trim() ? this.expression(definition, detail.value.trim()) : undefined,
       );
+    } else if (detail.kind === 'link' && is(definition, 'bpmn:LinkEventDefinition')) {
+      log.set(definition, 'name', detail.name.trim() || undefined);
     } else if (detail.kind === 'reference' && REFERENCES[definition.$type]) {
       const [property, rootType] = REFERENCES[definition.$type]!;
       const name = detail.name.trim();
