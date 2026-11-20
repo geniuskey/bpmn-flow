@@ -16,6 +16,7 @@ import { alternativeTypes } from '@/editor/commands/ChangeTypeHandler';
 import { hasDataState } from '@/editor/commands/ElementDetailHandler';
 import { useEditorStore } from '@/stores/editorStore';
 import { MetadataSection } from './MetadataSection';
+import { ColorFields } from './colorFields';
 import { EventDetailFields, EventTriggerFields } from './eventFields';
 import { NameField, Row, Section, TextField } from './fields';
 import {
@@ -62,6 +63,9 @@ export function ElementDetails({ id }: { id: string }) {
   const docs = getMany<ModdleElement & { text?: string }>(bo, 'documentation');
   const attrs = Object.entries(bo.$attrs ?? {}).filter(([k]) => !k.startsWith('xmlns'));
   const bounds = readBounds(element.di);
+  // Colors are a DI extension: any drawn element may have them, editable when supported.
+  const colorable =
+    supported && (is(element.di, 'bpmndi:BPMNShape') || is(element.di, 'bpmndi:BPMNEdge'));
   const source = getRef(bo, 'sourceRef');
   const target = getRef(bo, 'targetRef');
   // Only types the element may become where it is (start events have no incoming flows, ...).
@@ -275,18 +279,23 @@ export function ElementDetails({ id }: { id: string }) {
         <MetadataSection elementId={bo.id} />
       )}
 
-      {bounds && (
+      {(bounds || colorable) && (
         <Section title="Diagram">
-          <Row label="Position">
-            <span className="tabular-nums">
-              {bounds.x}, {bounds.y}
-            </span>
-          </Row>
-          <Row label="Size">
-            <span className="tabular-nums">
-              {bounds.width} × {bounds.height}
-            </span>
-          </Row>
+          {bounds && (
+            <>
+              <Row label="Position">
+                <span className="tabular-nums">
+                  {bounds.x}, {bounds.y}
+                </span>
+              </Row>
+              <Row label="Size">
+                <span className="tabular-nums">
+                  {bounds.width} × {bounds.height}
+                </span>
+              </Row>
+            </>
+          )}
+          {colorable && <ColorFields elementId={element.id} di={element.di} readOnly={readOnly} />}
         </Section>
       )}
     </>

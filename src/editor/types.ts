@@ -138,6 +138,13 @@ export type ElementDetail =
    * found or created by name; several groups may share one Category.
    */
   | { kind: 'groupCategory'; name: string }
+  /**
+   * Fill / stroke color of the element's DI, written as both the OMG
+   * non-normative `color:*` and the bpmn.io `bioc:*` extension attributes
+   * (BPMN 2.0.2 defines no colors). Undefined leaves a color as it is, null
+   * removes it. Edges have a stroke only.
+   */
+  | { kind: 'colors'; fill?: string | null; stroke?: string | null }
   /** Adds (true) or removes a CategoryValue from a flow element's categoryValueRef (Table 8.44). */
   | { kind: 'categoryValue'; id: string; assigned: boolean }
   /**

@@ -131,5 +131,6 @@ editor had no time expression (now editable, and flagged by
 - Vendor color extensions are rendered and preserved: `color:background-color` /
   `color:border-color` / `color:color` (OMG non-normative) and `bioc:fill` / `bioc:stroke`
   (bpmn.io); the OMG attributes win when both are present. BPMN 2.0.2 itself defines no
-  colors (§7.5). The editor has no UI to set colors, and labels outside a shape keep the
-  theme color unless `color:color` is set.
+  colors (§7.5). The Inspector's Diagram section sets fill / stroke (presets or any
+  color), writing both vocabularies; labels outside a shape keep the theme color unless
+  `color:color` is set (not editable in the Inspector).

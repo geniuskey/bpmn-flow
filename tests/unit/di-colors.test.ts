@@ -124,3 +124,52 @@ describe('rendering DI colors', () => {
     expect(visual('Flow_yes').style.getPropertyValue('--bf-connection')).toBe('#205022');
   });
 });
+
+describe('editing DI colors', () => {
+  async function open(source: string) {
+    const doc = await loadBpmnDocument(source);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const controller = new EditorController(host);
+    controller.open(doc);
+    const visual = (id: string) =>
+      host.querySelector<SVGGElement>(`[data-element-id="${id}"] .djs-visual`)!;
+    return { controller, visual };
+  }
+
+  it('writes color:* and bioc:*, redraws, undoes and exports with namespaces', async () => {
+    const { controller, visual } = await open(xml('', ''));
+    controller.updateElementDetail('T', { kind: 'colors', fill: '#bbdefb', stroke: '#0d4372' });
+    expect(visual('T').style.getPropertyValue('--bf-activity-fill')).toBe('#bbdefb');
+
+    const exported = await controller.exportXml();
+    expect(exported).toContain(
+      'xmlns:color="http://www.omg.org/spec/BPMN/non-normative/color/1.0"',
+    );
+    expect(exported).toContain('xmlns:bioc="http://bpmn.io/schema/bpmn/biocolor/1.0"');
+    expect(exported).toMatch(/bpmnElement="T"[^>]*bioc:fill="#bbdefb"/);
+    expect(exported).toMatch(/bpmnElement="T"[^>]*color:border-color="#0d4372"/);
+    expect(await colorsOf(exported, 'T')).toEqual({ fill: '#bbdefb', stroke: '#0d4372' });
+
+    controller.updateElementDetail('T', { kind: 'colors', fill: null });
+    expect(visual('T').style.getPropertyValue('--bf-activity-fill')).toBe('');
+    expect(await colorsOf(await controller.exportXml(), 'T')).toEqual({ stroke: '#0d4372' });
+
+    controller.undo();
+    controller.undo();
+    expect(visual('T').getAttribute('style') ?? '').toBe('');
+    expect(await controller.exportXml()).not.toContain('bioc:');
+    controller.redo();
+    expect(visual('T').style.getPropertyValue('--bf-shape-stroke')).toBe('#0d4372');
+  });
+
+  it('gives edges a stroke only and rejects non-color values', async () => {
+    const { controller } = await open(xml('', ''));
+    controller.updateElementDetail('F', { kind: 'colors', stroke: '#831311' });
+    expect(await colorsOf(await controller.exportXml(), 'F')).toEqual({ stroke: '#831311' });
+    const before = await controller.exportXml();
+    controller.updateElementDetail('F', { kind: 'colors', fill: '#ffcdd2' });
+    controller.updateElementDetail('T', { kind: 'colors', fill: 'url(#x)' });
+    expect(await controller.exportXml()).toBe(before);
+  });
+});

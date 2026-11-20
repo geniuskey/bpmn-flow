@@ -7,6 +7,7 @@
  * - exclusive gateway marker visibility (DI isMarkerVisible)
  * - the Data Object a Data Object Reference shows (several references, one object)
  * - participant multiplicity of a pool, partition element of a lane
+ * - DI fill / stroke colors (color:* and bioc:* extensions)
  */
 import type ElementRegistry from 'diagram-js/lib/core/ElementRegistry';
 import type { Connection, Element, Shape } from 'diagram-js/lib/model/Types';
@@ -19,7 +20,7 @@ import {
   type BpmnModdleInstance,
   type ModdleElement,
 } from '@/bpmn/model/moddle';
-import { messageVisibleKind } from '@/bpmn/di/di';
+import { isCssColor, messageVisibleKind } from '@/bpmn/di/di';
 import { bo } from '../model';
 import type BpmnElementFactory from '../modeling/BpmnElementFactory';
 import { ChangeLog } from '../modeling/ChangeLog';
@@ -202,6 +203,8 @@ export default class ElementDetailHandler {
           called,
         );
       }
+    } else if (detail.kind === 'colors') {
+      this.setColors(context.element, detail, log);
     } else if (detail.kind === 'expression') {
       this.setExpression(target, detail, log);
     } else if (detail.kind === 'groupCategory' && is(target, 'bpmn:Group')) {
@@ -227,6 +230,38 @@ export default class ElementDetailHandler {
     }
     context.log = log;
     return [context.element, ...(context.affected ?? [])];
+  }
+
+  /** DI fill / stroke colors, in both extension vocabularies (see readDiColors). */
+  private setColors(
+    element: Element,
+    detail: Extract<ElementDetail, { kind: 'colors' }>,
+    log: ChangeLog,
+  ): void {
+    const di = (element as { di?: ModdleElement }).di;
+    const shape = is(di, 'bpmndi:BPMNShape');
+    if (!di || !(shape || is(di, 'bpmndi:BPMNEdge'))) throw new Error('The element is not drawn.');
+    const attributes = {
+      fill: shape ? ['color:background-color', 'bioc:fill'] : [],
+      stroke: ['color:border-color', 'bioc:stroke'],
+    };
+    for (const key of ['fill', 'stroke'] as const) {
+      const value = detail[key];
+      if (value === undefined) continue;
+      if (key === 'fill' && !shape) throw new Error('Connections have no fill color.');
+      if (value !== null && !isCssColor(value)) throw new Error(`"${value}" is not a color.`);
+      // Through moddle's get/set: it stores `bioc:fill` as `fill`, so ChangeLog.set
+      // (which reads the raw key) cannot see the current value.
+      for (const name of attributes[key]) {
+        const old = di.get(name);
+        const next = value ?? undefined;
+        if (old !== next)
+          log.apply(
+            () => di.set(name, next),
+            () => di.set(name, old),
+          );
+      }
+    }
   }
 
   /**
