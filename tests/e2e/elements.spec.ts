@@ -292,7 +292,8 @@ test('BPMN 2.0 notation: multiple events, event-based gateway variants, collecti
   expect(end).toContain('messageEventDefinition id="End_multi_msg"');
   expect(end).not.toContain('signalEventDefinition');
   await expect(inspector.getByLabel('Event definition')).toHaveValue('bpmn:MessageEventDefinition');
-  await inspector.getByLabel('Add trigger').selectOption('bpmn:SignalEventDefinition');
+  await inspector.getByRole('button', { name: 'Add trigger' }).click();
+  await page.getByRole('menuitem', { name: 'Signal', exact: true }).click();
   xml = await exportXml(page);
   end = /<bpmn:endEvent id="End_multi"[\s\S]*?<\/bpmn:endEvent>/.exec(xml)![0];
   expect(end).toContain('signalEventDefinition');

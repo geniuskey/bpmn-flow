@@ -13,7 +13,7 @@ import type { LoopField } from '@/editor/types';
 import { isExpandedShape } from '@/editor/model';
 import type { Element } from 'diagram-js/lib/model/Types';
 import { useEditorStore } from '@/stores/editorStore';
-import { Row, Section, TextField } from './fields';
+import { CheckField, Row, Section, TextField } from './fields';
 import { inputClass, standardAttributes } from './shared';
 import { NewCalledElementField, SequenceFlowFields } from './specFields';
 
@@ -515,21 +515,34 @@ export function InterruptingField({
   const controller = useEditorStore((s) => s.controller);
   return (
     <Row label="Interrupting">
-      <input
-        type="checkbox"
-        aria-label="Interrupting"
+      <CheckField
+        label="Interrupting"
+        text={
+          is(bo, 'bpmn:BoundaryEvent')
+            ? 'Cancels the activity it is attached to'
+            : 'Cancels the enclosing process'
+        }
         checked={
           bo.get(is(bo, 'bpmn:BoundaryEvent') ? 'cancelActivity' : 'isInterrupting') !== false
         }
         disabled={readOnly}
-        onChange={(e) =>
+        onChange={(checked) =>
           controller?.updateProperties(elementId, {
-            [is(bo, 'bpmn:BoundaryEvent') ? 'cancelActivity' : 'isInterrupting']: e.target.checked,
+            [is(bo, 'bpmn:BoundaryEvent') ? 'cancelActivity' : 'isInterrupting']: checked,
           })
         }
       />
     </Row>
   );
+}
+
+/** "attachedToRef" -> "Attached to", "cancelActivity" -> "Cancel activity". */
+function attributeLabel(name: string): string {
+  const words = name
+    .replace(/Ref$/, '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 /** Attributes FlowProperties edits itself (not repeated as read-only rows). */
@@ -543,6 +556,15 @@ const FLOW_FIELDS = [
   'processType',
   'isClosed',
   'isExecutable',
+  // Edited by the event, activity, gateway and data fields above.
+  'cancelActivity',
+  'isInterrupting',
+  'parallelMultiple',
+  'eventGatewayType',
+  'instantiate',
+  'isCollection',
+  'isForCompensation',
+  'triggeredByEvent',
 ];
 
 /** Connection ends, condition and default flow, and the standard attributes that are set. */
@@ -561,7 +583,7 @@ export function FlowProperties({
   const source = getRef(bo, 'sourceRef');
   const target = getRef(bo, 'targetRef');
   return (
-    <Section title="BPMN properties">
+    <Section id="connection" title={source || target ? 'Connection' : 'BPMN attributes'}>
       {source && <Row label="Source">{source.name || source.id}</Row>}
       {target && <Row label="Target">{target.name || target.id}</Row>}
       {is(bo, 'bpmn:SequenceFlow') && (
@@ -644,7 +666,7 @@ export function FlowProperties({
       {standardAttributes(bo)
         .filter(([k]) => !FLOW_FIELDS.includes(k))
         .map(([k, v]) => (
-          <Row key={k} label={k}>
+          <Row key={k} label={attributeLabel(k)} title={k}>
             <code className="font-mono text-xs">{v}</code>
           </Row>
         ))}

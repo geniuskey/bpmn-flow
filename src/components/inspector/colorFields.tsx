@@ -59,6 +59,49 @@ const subscribeTheme = (onChange: () => void) => {
 };
 const isDark = () => document.documentElement.classList.contains('dark');
 
+/**
+ * One click sets both colors of a preset (connections: the line color only);
+ * the first swatch goes back to the theme colors.
+ */
+export function ColorPresetSwatches({
+  shape,
+  disabled,
+  canReset,
+  onPick,
+}: {
+  /** Shapes take fill and stroke; connections only the stroke. */
+  shape: boolean;
+  disabled: boolean;
+  canReset: boolean;
+  onPick: (colors: { fill?: string | null; stroke?: string | null }) => void;
+}) {
+  const swatch = 'size-5 rounded-full border-2 disabled:opacity-60';
+  return (
+    <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Color presets">
+      <button
+        type="button"
+        aria-label="Default colors"
+        title="Default (theme colors)"
+        disabled={disabled || !canReset}
+        className={`${swatch} border-border bg-[linear-gradient(135deg,transparent_45%,var(--muted-foreground)_45%,var(--muted-foreground)_55%,transparent_55%)]`}
+        onClick={() => onPick({ ...(shape ? { fill: null } : {}), stroke: null })}
+      />
+      {COLOR_PRESETS.map((p) => (
+        <button
+          key={p.name}
+          type="button"
+          aria-label={`${p.name} colors`}
+          title={p.name}
+          disabled={disabled}
+          className={swatch}
+          style={{ background: shape ? p.fill : p.stroke, borderColor: p.stroke }}
+          onClick={() => onPick(shape ? { fill: p.fill, stroke: p.stroke } : { stroke: p.stroke })}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function ColorFields({
   elementId,
   di,
@@ -79,7 +122,6 @@ export function ColorFields({
   const rendered = controller?.getRenderedColors(elementId) ?? {};
   const set = (detail: { fill?: string | null; stroke?: string | null }) =>
     controller?.updateElementDetail(elementId, { kind: 'colors', ...detail });
-  const swatch = 'size-5 rounded-full border-2 disabled:opacity-60';
 
   const channel = (key: 'fill' | 'stroke', label: string) => (
     <Row label={label}>
@@ -111,28 +153,12 @@ export function ColorFields({
   return (
     <>
       <Row label="Colors">
-        <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Color presets">
-          <button
-            type="button"
-            aria-label="Default colors"
-            title="Default (theme colors)"
-            disabled={readOnly || (!colors.fill && !colors.stroke)}
-            className={`${swatch} border-border bg-[linear-gradient(135deg,transparent_45%,var(--muted-foreground)_45%,var(--muted-foreground)_55%,transparent_55%)]`}
-            onClick={() => set({ ...(shape ? { fill: null } : {}), stroke: null })}
-          />
-          {COLOR_PRESETS.map((p) => (
-            <button
-              key={p.name}
-              type="button"
-              aria-label={`${p.name} colors`}
-              title={p.name}
-              disabled={readOnly}
-              className={swatch}
-              style={{ background: shape ? p.fill : p.stroke, borderColor: p.stroke }}
-              onClick={() => set(shape ? { fill: p.fill, stroke: p.stroke } : { stroke: p.stroke })}
-            />
-          ))}
-        </div>
+        <ColorPresetSwatches
+          shape={shape}
+          disabled={readOnly}
+          canReset={!!(colors.fill || colors.stroke)}
+          onPick={set}
+        />
       </Row>
       {shape && channel('fill', 'Fill')}
       {channel('stroke', shape ? 'Stroke' : 'Line')}

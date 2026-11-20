@@ -83,6 +83,8 @@ test('conversation diagrams: create conversations and link them to pools', async
   const bank = (await el(page, 'Bank').boundingBox())!;
   const x = (seller.x + seller.width + bank.x) / 2;
   const y = seller.y + seller.height + 80;
+  // Conversations start collapsed in the library.
+  await page.getByTestId('shape-library').getByRole('button', { name: 'Conversations' }).click();
   await page.getByTestId('create-Conversation').click();
   await page.mouse.move(x, y, { steps: 3 });
   await page.mouse.click(x, y);
@@ -136,6 +138,8 @@ test('choreography diagrams: tasks with participant bands', async ({ page }) => 
 
   // A new choreography task gets the choreography's participants as bands.
   const end = (await el(page, 'End_c').boundingBox())!;
+  // Choreography starts collapsed in the library.
+  await page.getByTestId('shape-library').getByRole('button', { name: 'Choreography' }).click();
   await page.getByTestId('create-ChoreographyTask').click();
   await page.mouse.move(end.x + 200, end.y + 20, { steps: 3 });
   await page.mouse.click(end.x + 200, end.y + 20);

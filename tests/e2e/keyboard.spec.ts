@@ -79,8 +79,11 @@ test('shape library arrow keys keep the column across groups', async ({ page }) 
   await expect(search).toBeFocused();
   // From the first column of the first group's last row, down lands in the
   // first column of the next group.
-  const count = await first.count();
-  const lastRowStart = Math.floor((count - 1) / 6) * 6;
+  // The grid fills the library width: read the entries per row from the layout.
+  const tops = await first.evaluateAll((els) => els.map((e) => (e as HTMLElement).offsetTop));
+  const columns = tops.filter((t) => t === tops[0]).length;
+  const count = tops.length;
+  const lastRowStart = Math.floor((count - 1) / columns) * columns;
   await first.nth(lastRowStart).focus();
   await page.keyboard.press('ArrowDown');
   await expect(second.first()).toBeFocused();

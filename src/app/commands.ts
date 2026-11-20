@@ -282,9 +282,17 @@ export const COMMANDS: AppCommand[] = [
     },
   },
   {
+    id: 'view.library',
+    label: 'Toggle shape library',
+    group: 'View',
+    keys: 'Mod+B',
+    run: () => useUiStore.getState().toggleLibrary(),
+  },
+  {
     id: 'view.inspector',
     label: 'Toggle properties panel',
     group: 'View',
+    keys: 'Mod+Alt+B',
     run: () => useUiStore.getState().toggleInspector(),
   },
   {

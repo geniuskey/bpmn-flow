@@ -2,6 +2,7 @@ import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react';
 import { useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useDocumentStore, type Notice } from '@/stores/documentStore';
+import { useUiStore } from '@/stores/uiStore';
 
 const ICON = { error: XCircle, warning: AlertTriangle, info: Info, success: CheckCircle2 };
 const COLOR = {
@@ -46,8 +47,15 @@ function NoticeItem({ notice }: { notice: Notice }) {
 
 export function Notices() {
   const notices = useDocumentStore((s) => s.notices);
+  // Over the canvas, not the properties panel (its fields stay reachable).
+  const inspectorOpen = useUiStore((s) => s.inspectorOpen);
+  const inspectorWidth = useUiStore((s) => s.inspectorWidth);
+  const right = inspectorOpen ? `calc(min(${inspectorWidth}px, 45vw) + 1rem)` : '1rem';
   return (
-    <div className="pointer-events-none fixed right-4 bottom-4 z-50 flex flex-col items-end gap-2">
+    <div
+      className="pointer-events-none fixed bottom-4 z-50 flex flex-col items-end gap-2"
+      style={{ right, maxWidth: `calc(100vw - ${right} - 1rem)` }}
+    >
       {notices.map((n) => (
         <NoticeItem key={n.id} notice={n} />
       ))}

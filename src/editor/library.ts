@@ -565,3 +565,58 @@ export function searchLibrary(query: string): LibraryGroup[] {
     }),
   })).filter((g) => g.entries.length);
 }
+
+/** The shapes most diagrams are made of, shown first in the palette. */
+const COMMON_IDS = [
+  'start-none',
+  'task',
+  'user-task',
+  'service-task',
+  'sub-process',
+  'exclusive-gateway',
+  'parallel-gateway',
+  'catch-timer',
+  'catch-message',
+  'end-none',
+  'data-object',
+  'data-store',
+  'text-annotation',
+  'pool',
+  'lane',
+];
+
+export const COMMON_GROUP: LibraryGroup = {
+  id: 'common',
+  label: 'Common',
+  entries: COMMON_IDS.map((id) => LIBRARY_ENTRIES.find((e) => e.id === id)).filter(
+    (e): e is LibraryEntry => !!e,
+  ),
+};
+
+/**
+ * The library entry that draws like an element (same type and triggers, and
+ * the same interrupting / instantiating flags), for its icon.
+ */
+export function entryForElement(b: {
+  $type: string;
+  get(name: string): unknown;
+}): LibraryEntry | undefined {
+  const defs = ((b.get('eventDefinitions') as { $type: string }[] | undefined) ?? [])
+    .map((d) => d.$type)
+    .sort()
+    .join();
+  const flag = (preset: ShapePreset, key: keyof ShapePreset, attr = key as string) =>
+    (preset[key] ?? true) === (b.get(attr) ?? true);
+  const candidates = LIBRARY_ENTRIES.filter(
+    (e) =>
+      e.preset.type === b.$type && [...(e.preset.eventDefinitions ?? [])].sort().join() === defs,
+  );
+  return (
+    candidates.find(
+      (e) =>
+        flag(e.preset, 'cancelActivity') &&
+        flag(e.preset, 'isInterrupting') &&
+        (e.preset.triggeredByEvent ?? false) === (b.get('triggeredByEvent') ?? false),
+    ) ?? candidates[0]
+  );
+}

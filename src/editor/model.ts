@@ -7,6 +7,7 @@
  */
 import type { Connection, Element, Root, Shape } from 'diagram-js/lib/model/Types';
 import { is, type ModdleElement } from '@/bpmn/model/moddle';
+import { isEditableConnection, isEditableShapeElement } from '@/bpmn/model/elements';
 
 export interface BpmnData {
   businessObject: ModdleElement;
@@ -63,4 +64,20 @@ export function isExpandedShape(el: Element): boolean {
   const value = (el as Partial<BpmnData>).di?.get('isExpanded');
   if (typeof value === 'boolean') return value;
   return (el as Partial<BpmnData>).expandedByContent === true;
+}
+
+/** Elements the properties panel edits (the rest is shown read-only). */
+export function isEditableElement(b: ModdleElement | undefined): boolean {
+  return (
+    !!b &&
+    (isEditableShapeElement(b) ||
+      isEditableConnection(b) ||
+      ['bpmn:Participant', 'bpmn:Lane', 'bpmn:Process', 'bpmn:Collaboration'].includes(b.$type))
+  );
+}
+
+/** Drawn, editable elements: they may carry DI fill / stroke colors. */
+export function isColorable(el: Element): boolean {
+  const di = (el as { di?: ModdleElement }).di;
+  return isEditableElement(bo(el)) && (is(di, 'bpmndi:BPMNShape') || is(di, 'bpmndi:BPMNEdge'));
 }

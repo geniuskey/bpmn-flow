@@ -16,7 +16,7 @@ import { CALLABLE_TYPES, categoryValues } from '@/editor/commands/ElementDetailH
 import { compensableActivities } from '@/editor/commands/EventDetailHandler';
 import type { ElementDetail } from '@/editor/types';
 import { useEditorStore } from '@/stores/editorStore';
-import { Row, TextField } from './fields';
+import { CheckField, Row, TextField } from './fields';
 import { inputClass } from './shared';
 
 type Props = { elementId: string; bo: ModdleElement; readOnly: boolean };
@@ -263,14 +263,12 @@ export function ProcessFields({ elementId, bo, readOnly }: Props) {
         </label>
       </Row>
       <Row label="Executable">
-        <input
-          type="checkbox"
-          aria-label="Executable process"
+        <CheckField
+          label="Executable process"
+          text="Can be run by a process engine"
           checked={process.get('isExecutable') === true}
           disabled={readOnly}
-          onChange={(e) =>
-            controller?.updateProperties(elementId, { isExecutable: e.target.checked })
-          }
+          onChange={(checked) => controller?.updateProperties(elementId, { isExecutable: checked })}
         />
       </Row>
     </>

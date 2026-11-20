@@ -57,6 +57,7 @@ import { UPDATE_ELEMENT_DETAIL } from './commands/ElementDetailHandler';
 import { ADD_LANE, SET_POOL_BLACK_BOX, blackBoxBlocker } from './commands/StructureHandlers';
 import { SET_POOL_BOUNDARY, hideBoundaryBlocker } from './commands/PoolBoundaryHandler';
 import { APPLY_LAYOUT } from './layout/ApplyLayoutHandler';
+import { SET_COLORS } from './commands/ColorsHandler';
 import { arrangeable, deletable } from './interaction/BpmnFlowRules';
 import {
   ARRANGE_ELEMENTS,
@@ -68,7 +69,7 @@ import type DirectEditing from './interaction/DirectEditing';
 import type Clipboard from './interaction/Clipboard';
 import { guardCommandStack } from './commands/guardCommandStack';
 import type ConnectTool from './interaction/ConnectTool';
-import { bo, childrenOf, rootOf, type BpmnData } from './model';
+import { bo, childrenOf, isColorable, rootOf, type BpmnData } from './model';
 import { labelOf } from '@/bpmn/model/elements';
 import { getMany, getRef, is } from '@/bpmn/model/moddle';
 import { coreModule, EDITING_MODULES } from './modules';
@@ -505,6 +506,55 @@ export class EditorController {
     );
     if (allowed.length) this.exec(ARRANGE_ELEMENTS, { moves: allowed });
     return allowed.length;
+  }
+
+  /**
+   * Fill / stroke of every selected drawn element that can be edited, as one
+   * undo step (connections take the stroke only). Returns how many changed.
+   */
+  setSelectionColors(colors: { fill?: string | null; stroke?: string | null }): number {
+    if (this.snapshot.readOnly) return 0;
+    const changes = this.selected()
+      .filter((e) => isColorable(e))
+      .map((element) => {
+        const edge = !!(element as Connection).waypoints;
+        return { element, ...(edge ? {} : { fill: colors.fill }), stroke: colors.stroke };
+      })
+      .filter((c) => c.fill !== undefined || c.stroke !== undefined);
+    if (changes.length) this.exec(SET_COLORS, { changes });
+    return changes.length;
+  }
+
+  /** Whether the inspector may edit the size of a shape (activities, pools, lanes, ...). */
+  canResize(id: string): boolean {
+    const shape = this.getElement(id);
+    const rules = this.get<Rules>('rules');
+    if (this.snapshot.readOnly || !shape || (shape as Connection).waypoints || !rules) return false;
+    return rules.allowed('shape.resize', { shape }) === true;
+  }
+
+  /**
+   * Moves and / or resizes a shape to exact bounds, under the same rules as a
+   * drag or a resize with the mouse. Returns false when the rules refuse it.
+   */
+  setBounds(id: string, bounds: { x: number; y: number; width: number; height: number }): boolean {
+    const shape = this.getElement(id) as Shape | undefined;
+    const modeling = this.get<Modeling>('modeling');
+    const rules = this.get<Rules>('rules');
+    if (this.snapshot.readOnly || !shape || (shape as unknown as Connection).waypoints)
+      return false;
+    if (!modeling || !rules) return false;
+    const delta = { x: bounds.x - shape.x, y: bounds.y - shape.y };
+    const resized = bounds.width !== shape.width || bounds.height !== shape.height;
+    if (resized) {
+      if (rules.allowed('shape.resize', { shape, newBounds: bounds }) !== true) return false;
+      modeling.resizeShape(shape, bounds);
+      return true;
+    }
+    if (!delta.x && !delta.y) return true;
+    if (!rules.allowed('elements.move', { shapes: [shape], delta })) return false;
+    modeling.moveElements([shape], delta);
+    return true;
   }
 
   nudge(dx: number, dy: number): void {

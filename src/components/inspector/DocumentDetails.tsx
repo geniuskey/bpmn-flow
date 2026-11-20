@@ -1,4 +1,5 @@
-/** Shown when nothing is selected: the document and its compatibility status. */
+/** Shown when nothing is selected: the document and the properties of its process / collaboration. */
+import { MousePointerClick } from 'lucide-react';
 import { type ModdleElement } from '@/bpmn/model/moddle';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useEditorStore } from '@/stores/editorStore';
@@ -17,13 +18,23 @@ export function DocumentDetails() {
   const rootId = controller?.getRootId();
   return (
     <>
-      <Section title="Document">
+      <p className="flex gap-2 border-b bg-muted/40 px-4 py-2.5 text-xs text-muted-foreground">
+        <MousePointerClick className="mt-px size-3.5 shrink-0" />
+        <span>
+          Nothing selected. Click an element on the canvas to edit it; below are the document and
+          the diagram it shows.
+        </span>
+      </p>
+      <Section id="document" title="Document">
+        <Row label="File">
+          <span className="truncate">{doc.fileName}</span>
+        </Row>
         <Row label="Definitions">
           <code className="font-mono text-xs">{defs.id}</code>
         </Row>
         {defs.targetNamespace && (
           <Row label="Namespace">
-            <code className="font-mono text-xs">{defs.targetNamespace}</code>
+            <code className="font-mono text-xs break-all">{defs.targetNamespace}</code>
           </Row>
         )}
         {defs.exporter && (
@@ -33,9 +44,6 @@ export function DocumentDetails() {
         )}
       </Section>
       {rootId && controller?.getElement(rootId) && <ElementDetails id={rootId} />}
-      <p className="px-4 py-3 text-muted-foreground">
-        Select an element on the canvas to inspect it.
-      </p>
     </>
   );
 }

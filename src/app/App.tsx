@@ -7,7 +7,7 @@ import { Notices } from '@/components/Notices';
 import { CommandPalette } from '@/components/CommandPalette';
 import { Palette } from '@/components/Palette';
 import { ResizeHandle } from '@/components/ResizeHandle';
-import { useUiStore } from '@/stores/uiStore';
+import { DEFAULT_ANALYSIS_HEIGHT, DEFAULT_INSPECTOR_WIDTH, useUiStore } from '@/stores/uiStore';
 import { useDocumentStore } from '@/stores/documentStore';
 import { persistence } from '@/persistence/db';
 import { newDocument, openXml, restoreSession } from './actions';
@@ -85,6 +85,7 @@ export function App() {
               <ResizeHandle
                 direction="vertical"
                 label="Resize analysis panel"
+                onReset={() => setAnalysisHeight(DEFAULT_ANALYSIS_HEIGHT)}
                 onResize={(delta, start) => {
                   if (start) startSize.current = analysisHeight;
                   else setAnalysisHeight(startSize.current - delta);
@@ -101,6 +102,7 @@ export function App() {
             <ResizeHandle
               direction="horizontal"
               label="Resize properties panel"
+              onReset={() => setInspectorWidth(DEFAULT_INSPECTOR_WIDTH)}
               onResize={(delta, start) => {
                 if (start) startSize.current = inspectorWidth;
                 else setInspectorWidth(startSize.current - delta);

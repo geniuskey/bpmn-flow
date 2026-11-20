@@ -20,18 +20,30 @@ interface UiState {
   libraryOpen: boolean;
   /** Library groups the user collapsed. */
   libraryCollapsed: string[];
+  libraryWidth: number;
+  /** Properties panel sections the user collapsed. */
+  inspectorCollapsed: string[];
   toggleLibrary(open?: boolean): void;
   toggleLibraryGroup(id: string): void;
+  setLibraryWidth(width: number): void;
+  toggleInspectorSection(id: string): void;
   setCommandPaletteOpen(open: boolean): void;
   setSnapToGrid(on: boolean): void;
   setTheme(theme: ThemePreference): void;
   setTool(tool: EditorTool): void;
-  toggleInspector(): void;
+  toggleInspector(open?: boolean): void;
   toggleAnalysis(open?: boolean): void;
   setInspectorWidth(width: number): void;
   setAnalysisHeight(height: number): void;
   setAnalysisTab(tab: AnalysisTab): void;
 }
+
+export const DEFAULT_INSPECTOR_WIDTH = 300;
+export const DEFAULT_ANALYSIS_HEIGHT = 220;
+export const DEFAULT_LIBRARY_WIDTH = 220;
+
+const toggled = (list: string[], id: string) =>
+  list.includes(id) ? list.filter((g) => g !== id) : [...list, id];
 
 /** Storage that never throws (private mode, blocked storage). */
 const safeStorage = createJSONStorage(() => ({
@@ -65,25 +77,28 @@ export const useUiStore = create<UiState>()(
       tool: 'select',
       inspectorOpen: true,
       analysisOpen: true,
-      inspectorWidth: 300,
-      analysisHeight: 220,
+      inspectorWidth: DEFAULT_INSPECTOR_WIDTH,
+      analysisHeight: DEFAULT_ANALYSIS_HEIGHT,
       analysisTab: 'overview',
       commandPaletteOpen: false,
       snapToGrid: true,
       libraryOpen: true,
-      libraryCollapsed: [],
+      // Rarely used notation starts collapsed.
+      libraryCollapsed: ['conversations', 'choreography'],
+      libraryWidth: DEFAULT_LIBRARY_WIDTH,
+      inspectorCollapsed: [],
       toggleLibrary: (open) => set((s) => ({ libraryOpen: open ?? !s.libraryOpen })),
       toggleLibraryGroup: (id) =>
-        set((s) => ({
-          libraryCollapsed: s.libraryCollapsed.includes(id)
-            ? s.libraryCollapsed.filter((g) => g !== id)
-            : [...s.libraryCollapsed, id],
-        })),
+        set((s) => ({ libraryCollapsed: toggled(s.libraryCollapsed, id) })),
+      setLibraryWidth: (libraryWidth) =>
+        set({ libraryWidth: Math.round(Math.min(400, Math.max(180, libraryWidth))) }),
+      toggleInspectorSection: (id) =>
+        set((s) => ({ inspectorCollapsed: toggled(s.inspectorCollapsed, id) })),
       setCommandPaletteOpen: (commandPaletteOpen) => set({ commandPaletteOpen }),
       setSnapToGrid: (snapToGrid) => set({ snapToGrid }),
       setTheme: (theme) => set({ theme }),
       setTool: (tool) => set({ tool }),
-      toggleInspector: () => set((s) => ({ inspectorOpen: !s.inspectorOpen })),
+      toggleInspector: (open) => set((s) => ({ inspectorOpen: open ?? !s.inspectorOpen })),
       toggleAnalysis: (open) => set((s) => ({ analysisOpen: open ?? !s.analysisOpen })),
       setInspectorWidth: (inspectorWidth) =>
         set({ inspectorWidth: Math.round(Math.min(520, Math.max(240, inspectorWidth))) }),
@@ -103,9 +118,13 @@ export const useUiStore = create<UiState>()(
         analysisTab,
         libraryOpen,
         libraryCollapsed,
+        libraryWidth,
+        inspectorCollapsed,
       }) => ({
         libraryOpen,
         libraryCollapsed,
+        libraryWidth,
+        inspectorCollapsed,
         theme,
         inspectorOpen,
         analysisOpen,

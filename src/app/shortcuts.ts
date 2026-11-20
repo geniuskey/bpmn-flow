@@ -26,6 +26,8 @@ export const SHORTCUTS: Record<string, Shortcut> = {
   fit: { keys: 'Shift+1', label: 'Fit to view' },
   layout: { keys: 'Mod+Shift+L', label: 'Auto layout' },
   palette: { keys: 'Mod+K', label: 'Command palette' },
+  library: { keys: 'Mod+B', label: 'Toggle shape library' },
+  inspector: { keys: 'Mod+Alt+B', label: 'Toggle properties panel' },
 };
 
 export const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
@@ -120,6 +122,8 @@ export function useKeyboardShortcuts(): void {
       }
       if (isTyping(e.target) || !ctrl || ctrl.isEditingText()) return;
 
+      // e.code: with Alt held, macOS reports a different character in e.key.
+      if (mod && e.code === 'KeyB') return run(e.altKey ? 'view.inspector' : 'view.library');
       if (mod && key === 'z') return run(e.shiftKey ? 'edit.redo' : 'edit.undo');
       if (mod && key === 'y') return run('edit.redo');
       if (mod && key === 'a') return run('edit.selectAll');

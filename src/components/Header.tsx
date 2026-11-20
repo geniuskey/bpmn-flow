@@ -1,12 +1,5 @@
 import {
-  AlignCenterHorizontal,
-  AlignCenterVertical,
-  AlignEndHorizontal,
-  AlignEndVertical,
-  AlignHorizontalDistributeCenter,
-  AlignStartHorizontal,
   AlignStartVertical,
-  AlignVerticalDistributeCenter,
   BetweenHorizontalEnd,
   ClipboardPaste,
   Command,
@@ -46,6 +39,7 @@ import {
   pickFile,
 } from '@/app/actions';
 import { formatKeys, SHORTCUTS } from '@/app/shortcuts';
+import { ARRANGE_ITEMS } from './arrangeItems';
 import { ToolbarMenu, type ToolbarMenuItem } from '@/components/ToolbarMenu';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -116,17 +110,6 @@ const EDIT_ITEMS: [string, LucideIcon][] = [
 ];
 
 const ZOOM_PRESETS = [0.5, 0.75, 1, 1.5, 2];
-
-const ARRANGE_ITEMS: { id: string; icon: LucideIcon; separated?: boolean }[] = [
-  { id: 'arrange.alignLeft', icon: AlignStartVertical },
-  { id: 'arrange.alignCenter', icon: AlignCenterVertical },
-  { id: 'arrange.alignRight', icon: AlignEndVertical },
-  { id: 'arrange.alignTop', icon: AlignStartHorizontal, separated: true },
-  { id: 'arrange.alignMiddle', icon: AlignCenterHorizontal },
-  { id: 'arrange.alignBottom', icon: AlignEndHorizontal },
-  { id: 'arrange.distributeHorizontal', icon: AlignHorizontalDistributeCenter, separated: true },
-  { id: 'arrange.distributeVertical', icon: AlignVerticalDistributeCenter },
-];
 
 export function Header() {
   const doc = useDocumentStore((s) => s.doc);
@@ -351,9 +334,10 @@ export function Header() {
         <Button
           size="icon"
           variant={inspectorOpen ? 'active' : 'ghost'}
-          title="Toggle properties panel"
+          title={tip('Toggle properties panel', 'inspector')}
           aria-label="Toggle properties panel"
-          onClick={toggleInspector}
+          aria-pressed={inspectorOpen}
+          onClick={() => toggleInspector()}
         >
           <PanelRight />
         </Button>
@@ -362,6 +346,7 @@ export function Header() {
           variant={analysisOpen ? 'active' : 'ghost'}
           title="Toggle analysis panel"
           aria-label="Toggle analysis panel"
+          aria-pressed={analysisOpen}
           onClick={() => toggleAnalysis()}
         >
           <PanelBottom />

@@ -1,6 +1,8 @@
 /** Event fields: trigger type, timer, condition and the referenced message/signal/error/escalation. */
 import { canBeParallelMultiple, definitionRequired, humanizeType } from '@/bpmn/model/elements';
 import { getMany, getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
+import { Plus } from 'lucide-react';
+import { ToolbarMenu } from '@/components/ToolbarMenu';
 import { Badge } from '@/components/ui/badge';
 import {
   REFERENCES,
@@ -198,22 +200,23 @@ export function EventTriggerFields({
       )}
       {types.length > 0 && remaining.length > 0 && (
         <Row label={multiple ? 'Add trigger' : 'Multiple'}>
-          <select
-            aria-label="Add trigger"
-            className={inputClass}
-            value=""
+          <ToolbarMenu
+            label="Add trigger"
+            title={multiple ? 'Add another trigger' : 'Make it a Multiple event'}
+            variant="outline"
+            className="h-8 w-full justify-between px-2.5 font-normal"
             disabled={readOnly}
-            onChange={(e) => {
-              if (e.target.value) set([...types, e.target.value]);
-            }}
-          >
-            <option value="">Add trigger…</option>
-            {remaining.map((t) => (
-              <option key={t} value={t}>
-                {triggerLabel(t)}
-              </option>
-            ))}
-          </select>
+            trigger={
+              <span className="flex items-center gap-1.5">
+                <Plus className="size-3.5" />
+                Add trigger
+              </span>
+            }
+            items={remaining.map((t) => ({
+              label: triggerLabel(t),
+              onSelect: () => set([...types, t]),
+            }))}
+          />
         </Row>
       )}
       {multiple && canBeParallelMultiple(event) && (

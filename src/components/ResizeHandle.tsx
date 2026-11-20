@@ -1,14 +1,19 @@
 import { useRef } from 'react';
 import { cn } from '@/lib/utils';
 
-/** Pointer-driven splitter. `onResize` receives the delta since drag start. */
+/**
+ * Pointer-driven splitter. `onResize` receives the delta since drag start;
+ * a double click calls `onReset` (back to the default size).
+ */
 export function ResizeHandle({
   direction,
   onResize,
+  onReset,
   label,
 }: {
   direction: 'horizontal' | 'vertical';
   onResize: (delta: number, start: boolean) => void;
+  onReset?: () => void;
   label: string;
 }) {
   const origin = useRef<number | null>(null);
@@ -17,6 +22,7 @@ export function ResizeHandle({
     <div
       role="separator"
       aria-label={label}
+      title={onReset ? `${label} (double-click to reset)` : undefined}
       aria-orientation={horizontal ? 'vertical' : 'horizontal'}
       className={cn(
         'group relative z-10 shrink-0 touch-none',
@@ -32,6 +38,7 @@ export function ResizeHandle({
         onResize((horizontal ? e.clientX : e.clientY) - origin.current, false);
       }}
       onPointerUp={() => (origin.current = null)}
+      onDoubleClick={onReset}
     >
       <div
         className={cn(

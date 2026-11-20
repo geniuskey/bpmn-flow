@@ -1,21 +1,22 @@
 /** Properties of the selected element: identity, type, semantics specific to its kind, and DI. */
-import { Lock } from 'lucide-react';
+import { Check, Copy, Lock } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { readBounds } from '@/bpmn/di/di';
 import {
   humanizeType,
-  isEditableConnection,
-  isEditableShapeElement,
   labelOf,
   allowedEventDefinitions,
   interruptingIsFixed,
 } from '@/bpmn/model/elements';
 import { getMany, getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
 import { Badge } from '@/components/ui/badge';
-import { canExpand, type BpmnData } from '@/editor/model';
+import { canExpand, isColorable, isEditableElement, type BpmnData } from '@/editor/model';
 import { alternativeTypes } from '@/editor/commands/ChangeTypeHandler';
 import { hasDataState } from '@/editor/commands/ElementDetailHandler';
 import { useEditorStore } from '@/stores/editorStore';
 import { MetadataSection } from './MetadataSection';
+import { BoundsFields } from './boundsFields';
 import { ColorFields } from './colorFields';
 import { EventDetailFields, EventTriggerFields } from './eventFields';
 import { NameField, Row, Section, TextField } from './fields';
@@ -56,16 +57,12 @@ export function ElementDetails({ id }: { id: string }) {
   const element = controller?.getElement(id) as (BpmnData & { id: string }) | undefined;
   if (!element?.businessObject) return null;
   const bo = element.businessObject;
-  const supported =
-    isEditableShapeElement(bo) ||
-    isEditableConnection(bo) ||
-    ['bpmn:Participant', 'bpmn:Lane', 'bpmn:Process', 'bpmn:Collaboration'].includes(bo.$type);
+  const supported = isEditableElement(bo);
   const docs = getMany<ModdleElement & { text?: string }>(bo, 'documentation');
   const attrs = Object.entries(bo.$attrs ?? {}).filter(([k]) => !k.startsWith('xmlns'));
   const bounds = readBounds(element.di);
   // Colors are a DI extension: any drawn element may have them, editable when supported.
-  const colorable =
-    supported && (is(element.di, 'bpmndi:BPMNShape') || is(element.di, 'bpmndi:BPMNEdge'));
+  const colorable = isColorable(element as unknown as Parameters<typeof isColorable>[0]);
   const source = getRef(bo, 'sourceRef');
   const target = getRef(bo, 'targetRef');
   // Only types the element may become where it is (start events have no incoming flows, ...).
@@ -87,17 +84,14 @@ export function ElementDetails({ id }: { id: string }) {
 
   return (
     <>
-      <Section title="Element">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold">{humanizeType(bo.$type)}</span>
-          {!supported && (
-            <Badge variant="warning">
-              <Lock className="size-3" /> Not editable
-            </Badge>
-          )}
-        </div>
+      <Section id="general" title="General">
+        {!supported && (
+          <Badge variant="warning">
+            <Lock className="size-3" /> Not editable
+          </Badge>
+        )}
         <Row label="ID">
-          <code className="font-mono text-xs">{bo.id}</code>
+          <IdValue id={bo.id ?? ''} />
         </Row>
         <Row label="Name">
           <NameField
@@ -124,6 +118,25 @@ export function ElementDetails({ id }: { id: string }) {
             </select>
           </Row>
         )}
+        <Row label="Description">
+          <TextField
+            key={`${element.id}:doc:${docs[0]?.text ?? ''}`}
+            label="Description"
+            multiline
+            value={docs[0]?.text ?? ''}
+            disabled={readOnly || !supported}
+            placeholder="Add a description"
+            onCommit={(v) => controller?.updateDocumentation(element.id, v)}
+          />
+        </Row>
+        {docs.slice(1).map((doc, i) => (
+          <Row key={i} label={`Description ${i + 2}`}>
+            <p className="text-xs whitespace-pre-wrap text-muted-foreground">{doc.text}</p>
+          </Row>
+        ))}
+      </Section>
+
+      <Section id="details" title={detailsTitle(bo)}>
         {eventDefs.length > 0 && (
           <EventTriggerFields
             elementId={element.id}
@@ -240,30 +253,31 @@ export function ElementDetails({ id }: { id: string }) {
           !interruptingIsFixed(bo) && (
             <InterruptingField elementId={element.id} bo={bo} readOnly={readOnly} />
           )}
-        <Row label="Description">
-          <TextField
-            key={`${element.id}:doc:${docs[0]?.text ?? ''}`}
-            label="Description"
-            multiline
-            value={docs[0]?.text ?? ''}
-            disabled={readOnly || !supported}
-            placeholder="Add a description"
-            onCommit={(v) => controller?.updateDocumentation(element.id, v)}
-          />
-        </Row>
-        {docs.slice(1).map((doc, i) => (
-          <Row key={i} label={`Description ${i + 2}`}>
-            <p className="text-xs whitespace-pre-wrap text-muted-foreground">{doc.text}</p>
-          </Row>
-        ))}
       </Section>
 
       {(source || target || standardAttributes(bo).length > 0) && (
         <FlowProperties elementId={element.id} bo={bo} readOnly={readOnly} supported={supported} />
       )}
 
+      {(bounds || colorable) && (
+        <Section id="appearance" title="Appearance">
+          {colorable && <ColorFields elementId={element.id} di={element.di} readOnly={readOnly} />}
+          {bounds && (
+            <BoundsFields
+              elementId={element.id}
+              bounds={bounds}
+              readOnly={readOnly || !supported}
+            />
+          )}
+        </Section>
+      )}
+
+      {(is(bo, 'bpmn:FlowNode') || is(bo, 'bpmn:Participant') || is(bo, 'bpmn:Lane')) && bo.id && (
+        <MetadataSection elementId={bo.id} />
+      )}
+
       {attrs.length > 0 && (
-        <Section title="Extension attributes">
+        <Section id="extensions" title="Extension attributes">
           {attrs.map(([k, v]) => (
             <Row key={k} label={k}>
               <code className="font-mono text-xs">{v}</code>
@@ -274,30 +288,61 @@ export function ElementDetails({ id }: { id: string }) {
           </p>
         </Section>
       )}
-
-      {(is(bo, 'bpmn:FlowNode') || is(bo, 'bpmn:Participant') || is(bo, 'bpmn:Lane')) && bo.id && (
-        <MetadataSection elementId={bo.id} />
-      )}
-
-      {(bounds || colorable) && (
-        <Section title="Diagram">
-          {bounds && (
-            <>
-              <Row label="Position">
-                <span className="tabular-nums">
-                  {bounds.x}, {bounds.y}
-                </span>
-              </Row>
-              <Row label="Size">
-                <span className="tabular-nums">
-                  {bounds.width} × {bounds.height}
-                </span>
-              </Row>
-            </>
-          )}
-          {colorable && <ColorFields elementId={element.id} di={element.di} readOnly={readOnly} />}
-        </Section>
-      )}
     </>
+  );
+}
+
+/** Title of the section with the fields specific to the element's kind. */
+function detailsTitle(b: ModdleElement): string {
+  const kinds: [string, string][] = [
+    ['bpmn:Event', 'Event'],
+    ['bpmn:Gateway', 'Gateway'],
+    ['bpmn:SubProcess', 'Sub-process'],
+    ['bpmn:ChoreographyActivity', 'Choreography'],
+    ['bpmn:Activity', 'Activity'],
+    ['bpmn:Participant', 'Pool'],
+    ['bpmn:Lane', 'Lane'],
+    ['bpmn:DataObjectReference', 'Data'],
+    ['bpmn:DataStoreReference', 'Data'],
+    ['bpmn:DataInput', 'Data'],
+    ['bpmn:DataOutput', 'Data'],
+    ['bpmn:TextAnnotation', 'Annotation'],
+    ['bpmn:Group', 'Group'],
+    ['bpmn:ConversationNode', 'Conversation'],
+    ['bpmn:Process', 'Process'],
+    ['bpmn:Choreography', 'Choreography'],
+    ['bpmn:Collaboration', 'Collaboration'],
+  ];
+  return kinds.find(([type]) => is(b, type))?.[1] ?? 'Details';
+}
+
+/** The element id, with a button that copies it. */
+function IdValue({ id }: { id: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(t);
+  }, [copied]);
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-1">
+      <code className="min-w-0 flex-1 truncate font-mono text-xs" title={id}>
+        {id}
+      </code>
+      <Button
+        size="icon-sm"
+        className="size-6 [&_svg]:size-3.5"
+        aria-label="Copy ID"
+        title={copied ? 'Copied' : 'Copy ID'}
+        onClick={() =>
+          void navigator.clipboard
+            ?.writeText(id)
+            .then(() => setCopied(true))
+            .catch(() => undefined)
+        }
+      >
+        {copied ? <Check /> : <Copy />}
+      </Button>
+    </div>
   );
 }
