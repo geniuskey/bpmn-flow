@@ -5,7 +5,7 @@
  * expressions survive. Dropping below two definitions clears `parallelMultiple`.
  */
 import type { Element } from 'diagram-js/lib/model/Types';
-import { allowedEventDefinitions } from '@/bpmn/model/elements';
+import { allowedEventDefinitions, definitionCombinationProblem } from '@/bpmn/model/elements';
 import { getMany, is, type ModdleElement } from '@/bpmn/model/moddle';
 import { bo } from '../model';
 import type BpmnElementFactory from '../modeling/BpmnElementFactory';
@@ -18,6 +18,10 @@ const ALWAYS_INTERRUPTING = [
   'bpmn:CancelEventDefinition',
   'bpmn:CompensateEventDefinition',
 ];
+
+function sameSet(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((t) => b.includes(t));
+}
 
 interface Context {
   element: Element;
@@ -67,6 +71,8 @@ export default class EventDefinitionHandler {
         throw new Error('Remove the sequence flows that this trigger does not allow first.');
       }
     }
+    const combination = definitionCombinationProblem(event.$type, types, event.$parent);
+    if (combination && !sameSet(types, present)) throw new Error(combination);
     if (new Set(types).size !== types.length) {
       throw new Error('An event cannot have the same trigger twice.');
     }

@@ -22,13 +22,48 @@ export function processOf(parent: Element | undefined): ModdleElement | undefine
       return b;
     }
     if (is(b, 'bpmn:Participant')) return getRef(b, 'processRef');
-    if (is(b, 'bpmn:Collaboration')) return undefined;
+    // Content of the pool drawn without its boundary lies on the diagram itself.
+    if (is(b, 'bpmn:Collaboration')) return getRef(boundlessParticipant(p), 'processRef');
   }
   return undefined;
 }
 
+/**
+ * The pool of a collaboration diagram shown without its boundary (BPMN 2.0.2
+ * §9.3, PDF 141-143, Fig 9.5): "one and only one" participant with a process
+ * that has no shape in the diagram; its process content is drawn directly on
+ * the diagram. Undefined when no participant, or more than one, is like that.
+ */
+export function boundlessParticipant(root: Element | undefined): ModdleElement | undefined {
+  const collaboration = root && bo(root);
+  if (
+    !root ||
+    root.parent ||
+    !collaboration ||
+    !is(collaboration, 'bpmn:Collaboration') ||
+    is(collaboration, 'bpmn:Choreography')
+  ) {
+    return undefined;
+  }
+  const plane = (root as { di?: ModdleElement }).di;
+  const withProcess = getMany(collaboration, 'participants').filter((p) => getRef(p, 'processRef'));
+  if (!plane || !withProcess.length) return undefined;
+  const drawn = new Set(getMany(plane, 'planeElement').map((di) => getRef(di, 'bpmnElement')));
+  const boundless = withProcess.filter((p) => !drawn.has(p));
+  return boundless.length === 1 ? boundless[0] : undefined;
+}
+
 export function participantOf(element: Element | undefined): Shape | undefined {
   for (let p = element; p; p = p.parent) if (is(bo(p), 'bpmn:Participant')) return p as Shape;
+  return undefined;
+}
+
+/** The participant (pool) an element belongs to: its pool, or the pool drawn without boundary. */
+export function participantBoOf(element: Element | undefined): ModdleElement | undefined {
+  for (let p = element; p; p = p.parent) {
+    if (is(bo(p), 'bpmn:Participant')) return bo(p);
+    if (!p.parent) return boundlessParticipant(p);
+  }
   return undefined;
 }
 
@@ -103,7 +138,10 @@ export function containerAt(
     contains(s, box.x, box.y) && contains(s, box.x + box.width, box.y + box.height);
   const rootBo = bo(root);
   let best: Element | undefined =
-    is(rootBo, 'bpmn:Process') || is(rootBo, 'bpmn:SubProcess') || is(rootBo, 'bpmn:Choreography')
+    is(rootBo, 'bpmn:Process') ||
+    is(rootBo, 'bpmn:SubProcess') ||
+    is(rootBo, 'bpmn:Choreography') ||
+    boundlessParticipant(root)
       ? root
       : undefined;
   const visit = (parent: Element) => {

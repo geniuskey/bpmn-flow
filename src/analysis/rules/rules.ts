@@ -12,13 +12,18 @@ import { cycles, reachableFrom } from '../graph/algorithms';
 import type { ProcessGraph } from '../graph/processGraph';
 import type { Finding } from '../types';
 import {
+  adHocContentRules,
   invalidSequenceFlowEnds,
   isCompensationActivity,
   isCompensationBoundary,
   isEventSubProcess,
   isInstantiating,
   isLinkThrow,
+  calledElementRules,
+  conversationRules,
+  exclusiveMarkerRules,
   messageFlowRules,
+  participantMultiplicityRules,
   specProcessRules,
 } from './specRules';
 
@@ -293,7 +298,8 @@ export function processRules(graph: ProcessGraph): Finding[] {
           recommendation: 'Set a timer expression (ISO 8601, e.g. PT2H) in the properties panel.',
         });
       }
-      if (is(def, 'bpmn:ConditionalEventDefinition') && !getRef(def, 'condition')) {
+      const condition = getRef<ModdleElement & { body?: string }>(def, 'condition');
+      if (is(def, 'bpmn:ConditionalEventDefinition') && !condition?.body?.trim()) {
         findings.push({
           severity: 'warning',
           ruleId: 'VAL-INCOMPLETE-EVENT',
@@ -392,6 +398,11 @@ export function documentRules(definitions: ModdleElement): Finding[] {
   });
 
   findings.push(...messageFlowRules(definitions));
+  findings.push(...participantMultiplicityRules(definitions));
+  findings.push(...conversationRules(definitions));
+  findings.push(...exclusiveMarkerRules(definitions));
+  findings.push(...calledElementRules(definitions));
+  findings.push(...adHocContentRules(definitions));
 
   const di = indexDi(definitions);
   for (const d of [...di.dangling, ...di.duplicates]) {

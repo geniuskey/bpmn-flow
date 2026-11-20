@@ -11,29 +11,23 @@ import type Rules from 'diagram-js/lib/features/rules/Rules';
 import type { Element, Shape } from 'diagram-js/lib/model/Types';
 import type ElementRegistry from 'diagram-js/lib/core/ElementRegistry';
 import { isEditableFlowNode } from '@/bpmn/model/elements';
-import { getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
+import { is, type ModdleElement } from '@/bpmn/model/moddle';
 import type Canvas from 'diagram-js/lib/core/Canvas';
 import type EventBus from 'diagram-js/lib/core/EventBus';
 import { bo } from '../model';
 import type BpmnElementFactory from '../modeling/BpmnElementFactory';
 import { ADD_LANE } from '../commands/StructureHandlers';
 import type CommandStack from 'diagram-js/lib/command/CommandStack';
-import { canAppend, deletable } from './BpmnFlowRules';
+import { canAddLaneTo, canAppend, deletable } from './BpmnFlowRules';
+import { isHorizontal } from '../modeling/laneLayout';
 import type DirectEditing from './DirectEditing';
 import { ICONS } from './icons';
 import { findFreePosition } from './placement';
-
-/** The extra diagram (drill-down plane) that draws a collapsed sub-process, if any. */
-function canvasRootFor(canvas: Canvas, element: ModdleElement): string | null {
-  if (!is(element, 'bpmn:SubProcess')) return null;
-  const root = canvas
-    .getRootElements()
-    .find(
-      (r) =>
-        r.id !== '__root' && (r as { businessObject?: ModdleElement }).businessObject === element,
-    );
-  return root?.id ?? null;
-}
+import type ReplaceMenu from './ReplaceMenu';
+import { replaceOptions } from '../modeling/replace';
+import { drillDownRootOf } from '../modeling/drillDown';
+import { expandBlocker, SET_EXPANDED } from '../commands/ExpandHandler';
+import { isExpandedShape } from '../model';
 
 function entry(icon: string, title: string, action: (event: Event) => void, group: string) {
   return {
@@ -56,6 +50,8 @@ export default class BpmnContextPadProvider {
     'directEditing',
     'canvas',
     'eventBus',
+    'replaceMenu',
+    'bpmnDefinitions',
   ];
 
   constructor(
@@ -69,6 +65,8 @@ export default class BpmnContextPadProvider {
     private readonly directEditing: DirectEditing,
     private readonly canvas: Canvas,
     private readonly eventBus: EventBus,
+    private readonly replaceMenu: ReplaceMenu,
+    private readonly definitions: ModdleElement,
   ) {
     contextPad.registerProvider(this);
   }
@@ -103,7 +101,18 @@ export default class BpmnContextPadProvider {
         entries[key] = entry(ICON_FOR[type]!, title, () => this.append(shape, type), 'append');
       }
     }
-    if (isEditableFlowNode(b) && !is(b, 'bpmn:EndEvent') && !unsupported) {
+    // Flow nodes start sequence and message flows (end events: message flows, data
+    // associations); data and annotations start (data) associations.
+    const connectable =
+      isEditableFlowNode(b) ||
+      is(b, 'bpmn:DataObjectReference') ||
+      is(b, 'bpmn:DataStoreReference') ||
+      is(b, 'bpmn:DataInput') ||
+      is(b, 'bpmn:DataOutput') ||
+      is(b, 'bpmn:TextAnnotation') ||
+      is(b, 'bpmn:Group') ||
+      is(b, 'bpmn:Message');
+    if (connectable && !unsupported && element.parent) {
       entries.connect = entry(
         ICONS.connect,
         'Connect to… (drag to target)',
@@ -111,12 +120,23 @@ export default class BpmnContextPadProvider {
         'connect',
       );
     }
-    const drillDown = canvasRootFor(this.canvas, b);
-    if (drillDown) {
+    const drillDown = element.parent
+      ? drillDownRootOf(this.canvas, b, this.definitions)?.id
+      : undefined;
+    if (drillDown && !isExpandedShape(element)) {
       entries['drill-down'] = entry(
         ICONS.open,
         'Open sub-process diagram',
         () => this.eventBus.fire('bpmnflow.showDiagram', { rootId: drillDown }),
+        'edit',
+      );
+    }
+    const expand = !isExpandedShape(element);
+    if (!expandBlocker(element, expand)) {
+      entries[expand ? 'expand' : 'collapse'] = entry(
+        expand ? ICONS.expand : ICONS.collapse,
+        expand ? 'Expand (show content here)' : 'Collapse (content in its own diagram)',
+        () => this.commandStack.execute(SET_EXPANDED, { shape: element, expanded: expand }),
         'edit',
       );
     }
@@ -128,18 +148,31 @@ export default class BpmnContextPadProvider {
         'edit',
       );
     }
-    const horizontal =
-      (element as { di?: { get(n: string): unknown } }).di?.get('isHorizontal') !== false;
-    if (
-      horizontal &&
-      ((is(b, 'bpmn:Participant') && getRef(b, 'processRef')) || is(b, 'bpmn:Lane'))
-    ) {
+    if (replaceOptions(element).length) {
+      entries.replace = entry(
+        ICONS.replace,
+        'Change type',
+        (event) => this.replaceMenu.open(element, event),
+        'edit',
+      );
+    }
+    if (!unsupported && canAddLaneTo(element)) {
+      const horizontal = isHorizontal(element);
       entries['lane.add'] = entry(
-        ICONS.laneBelow,
-        'Add lane below',
+        horizontal ? ICONS.laneBelow : ICONS.laneRight,
+        horizontal ? 'Add lane below' : 'Add lane to the right',
         () => this.commandStack.execute(ADD_LANE, { target: element }),
         'edit',
       );
+      // Nested lanes: a lane divided into sub-lanes (childLaneSet, PDF 334).
+      if (is(b, 'bpmn:Lane')) {
+        entries['lane.addSub'] = entry(
+          ICONS.subLane,
+          'Add sub-lane',
+          () => this.commandStack.execute(ADD_LANE, { target: element, inside: true }),
+          'edit',
+        );
+      }
     }
     if (
       deletable([element]).length &&

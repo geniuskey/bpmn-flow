@@ -18,6 +18,7 @@ import type { CanvasImportResult, EditorOptions } from '@/editor/types';
 import { bindKeyboard, type KeyboardOptions } from './keyboard';
 
 export type {
+  BandOp,
   CanvasImportResult,
   DiagramInfo,
   EditorOptions,
@@ -30,8 +31,19 @@ export type {
   LayoutResult,
   LoopKind,
   PropertyValue,
+  ShapePreset,
   TimerType,
 } from '@/editor/types';
+/** The BPMN 2.0.2 shape library (palette entries) and their previews. */
+export {
+  SHAPE_LIBRARY,
+  LIBRARY_ENTRIES,
+  searchLibrary,
+  type LibraryEntry,
+  type LibraryGroup,
+} from '@/editor/library';
+export { renderPreview } from '@/editor/renderer/preview';
+export type { ReplaceOption } from '@/editor/modeling/replace';
 export type { BpmnDocument } from '@/bpmn/document';
 export type { CompatibilityReport } from '@/bpmn/validation/compatibility';
 export { bindKeyboard, type KeyboardOptions } from './keyboard';

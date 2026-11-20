@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { COMMANDS, isEnabled, runCommand } from '@/app/commands';
 import { formatKeys, keyBelongsToFocus } from '@/app/shortcuts';
-import { alternativeTypes } from '@/editor/commands/ChangeTypeHandler';
 import { humanizeType } from '@/bpmn/model/elements';
 import { useEditorStore } from '@/stores/editorStore';
 import { cn } from '@/lib/utils';
@@ -18,6 +17,7 @@ const ELEMENT_ITEMS = [
   'edit.duplicate',
   'edit.delete',
   'arrange.addLane',
+  'arrange.addSubLane',
 ];
 const CANVAS_ITEMS = ['edit.paste', 'edit.selectAll', 'arrange.layout', 'view.fit'];
 
@@ -140,11 +140,18 @@ export function ContextMenu({ host }: { host: HTMLElement | null }) {
   const commands = ids
     .map((id) => COMMANDS.find((c) => c.id === id)!)
     .filter((c) => isEnabled(c))
-    .filter((c) => c.id !== 'arrange.addLane' || isPoolOrLane(selection[0]));
+    .filter((c) => c.id !== 'arrange.addLane' || isPoolOrLane(selection[0]))
+    .filter(
+      (c) =>
+        c.id !== 'arrange.addSubLane' ||
+        controller?.getElement(selection[0] ?? '')?.type === 'bpmn:Lane',
+    );
   const single = selection.length === 1 ? controller?.getElement(selection[0]!) : undefined;
   const type = (single as { type?: string } | undefined)?.type;
   const alternatives =
-    type && !useEditorStore.getState().snapshot.readOnly ? alternativeTypes(type) : [];
+    type && single && !useEditorStore.getState().snapshot.readOnly
+      ? (controller?.typeChangeOptions(single.id) ?? [])
+      : [];
 
   return (
     <div

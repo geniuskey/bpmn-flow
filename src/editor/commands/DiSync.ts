@@ -5,10 +5,11 @@
  */
 import type EventBus from 'diagram-js/lib/core/EventBus';
 import type { Element } from 'diagram-js/lib/model/Types';
-import { readBounds, translateLabel, writeBounds, writeWaypoints } from '@/bpmn/di/di';
+import { readBounds, scaleLabel, translateLabel, writeBounds, writeWaypoints } from '@/bpmn/di/di';
 import type { BpmnModdleInstance } from '@/bpmn/model/moddle';
 import { isConnection, type BpmnData, type BpmnShape } from '../model';
 import { bandsOf, layoutBands } from '../modeling/choreography';
+import { hasExternalLabel } from '../renderer/visuals';
 
 export default class DiSync {
   static $inject = ['eventBus', 'moddle'];
@@ -39,7 +40,11 @@ export function syncElement(moddle: BpmnModdleInstance, element: Element): void 
     width: shape.width,
     height: shape.height,
   });
-  if (changed && previous) translateLabel(di, shape.x - previous.x, shape.y - previous.y);
+  if (changed && previous) {
+    const resized = previous.width !== shape.width || previous.height !== shape.height;
+    if (resized && !hasExternalLabel(shape.businessObject)) scaleLabel(di, previous, shape);
+    else translateLabel(di, shape.x - previous.x, shape.y - previous.y);
+  }
   // Choreography activities: participant bands follow the activity.
   for (const [band, bounds] of layoutBands(shape, bandsOf(shape)))
     writeBounds(moddle, band, bounds);

@@ -28,6 +28,7 @@ test('create elements from the palette, append and connect, then round-trip', as
   await page.mouse.move(start.x, start.y + 200);
   await page.mouse.click(start.x, start.y + 200);
   // Drag-to-place a task.
+  await page.getByTestId('create-Task').scrollIntoViewIfNeeded();
   const button = (await page.getByTestId('create-Task').boundingBox())!;
   await page.mouse.move(button.x + 10, button.y + 10);
   await page.mouse.down();

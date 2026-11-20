@@ -23,7 +23,7 @@ import {
   isEditableShapeElement,
   isProcessDataIo,
 } from '../model/elements';
-import { getRef, is, walkContainment, type ModdleElement } from '../model/moddle';
+import { getMany, getRef, is, walkContainment, type ModdleElement } from '../model/moddle';
 
 export type IssueSeverity = 'info' | 'warning' | 'error';
 
@@ -169,6 +169,20 @@ export function assessCompatibility(
   const unsupported = new Map<string, string[]>();
   let hasExtensions = false;
 
+  // "One and only one" pool of a collaboration may be drawn without its boundary;
+  // its process content is drawn on the diagram (BPMN 2.0.2 §9.3, PDF 141-143).
+  const boundless = new Set<ModdleElement>();
+  for (const plane of di.planes) {
+    const collaboration = getRef(plane, 'bpmnElement');
+    if (!is(collaboration, 'bpmn:Collaboration') || is(collaboration, 'bpmn:Choreography'))
+      continue;
+    const drawn = new Set(getMany(plane, 'planeElement').map((p) => getRef(p, 'bpmnElement')));
+    const shapeless = getMany(collaboration, 'participants').filter(
+      (p) => getRef(p, 'processRef') && !drawn.has(p),
+    );
+    if (shapeless.length === 1) boundless.add(shapeless[0]!);
+  }
+
   walkContainment(definitions, (el) => {
     if (isInsideExtension(el)) return;
     if (getRef(el, 'extensionElements') || Object.keys(el.$attrs ?? {}).some(isVendorAttribute)) {
@@ -179,6 +193,8 @@ export function assessCompatibility(
       (PRESERVED_ROOT_TYPES as readonly string[]).includes(el.$type) &&
       is(el.$parent, 'bpmn:Definitions');
     if (isPreservedRoot) {
+      // A Message drawn as an envelope shape (PDF 121-122) is shown and edited.
+      if (is(el, 'bpmn:Message') && el.id && di.shapes.has(el.id)) return;
       issues.push({
         code: 'PRESERVED_ELEMENT',
         severity: 'info',
@@ -201,7 +217,7 @@ export function assessCompatibility(
       return;
     }
 
-    if (di.plane && needsShape(el) && el.id && !di.shapes.has(el.id)) {
+    if (di.plane && needsShape(el) && el.id && !di.shapes.has(el.id) && !boundless.has(el)) {
       issues.push({
         code: 'MISSING_DI',
         severity: 'warning',

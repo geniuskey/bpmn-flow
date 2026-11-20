@@ -50,9 +50,27 @@ Where the larger pieces live:
 - `src/editor/modeling/SemanticSync.ts` only registers the command hooks; the BPMN
   changes are in `shapeSync.ts` and `connectionSync.ts`, which share the services
   and DI/containment helpers of `semanticModel.ts`.
+- `src/editor/library.ts` is the BPMN shape library (palette entries as
+  `ShapePreset`s); `modeling/presets.ts` builds elements from presets,
+  `renderer/preview.ts` draws their icons with the canvas renderer, and
+  `modeling/replace.ts` decides which variants an element may become
+  (`element.replace`, "Change type" popup menu in `interaction/ReplaceMenu.ts`).
+- `modeling/laneLayout.ts` holds the geometry of horizontal / vertical pools and
+  nested lanes (used by `lane.add`, StructureBehavior and the resize rules);
+  `modeling/dataIo.ts` creates and removes the Data Inputs / Outputs that data
+  associations connect to; `commands/PoolBoundaryHandler.ts` draws the main pool
+  with or without its boundary (`boundlessParticipant` in `modeling/semantic.ts`
+  makes the diagram root stand for that pool's process).
+- `modeling/choreography.ts` lays out the participant bands of choreography
+  activities (upper / lower section, top / middle / bottom kinds);
+  `commands/ChoreographyParticipantHandler.ts` (`choreography.updateBands`)
+  edits participants, initiator, band order, band messages, multi-instance
+  participants and the return message of two-way tasks in one undo step.
 - `src/components/Inspector.tsx` picks the panel; the sections are in
   `src/components/inspector/` (`ElementDetails`, `kindFields`, `eventFields`,
-  `participantFields`, `MetadataSection`, `DocumentDetails`, shared `fields` and
+  `participantFields`, `specFields` (gateway direction, expressions, process /
+  flow / annotation attributes, categories, event codes, compensation, new
+  called elements), `MetadataSection`, `DocumentDetails`, shared `fields` and
   `shared` helpers).
 
 ## Single source of truth
@@ -84,7 +102,14 @@ The `bpmn:Definitions` moddle tree is the only document model.
 - `element.changeType` re-parents every contained child and re-points every
   reference to the replaced object (generic walk over the definitions).
 - `BpmnElementFactory` creates the business object and DI for every element that
-  diagram-js features create (palette, append, paste), with ids from `BpmnIds`.
+  diagram-js features create (palette, append, paste), with ids from `BpmnIds`;
+  a `preset` selects the notation variant (trigger, interrupting, collection...).
+- `element.setExpanded` collapses / expands a sub-process kind: the content's
+  diagram elements and DI move between the shape and the element's drill-down
+  diagram (a diagram-js root per BPMNDiagram, `modeling/drillDown.ts`); a root
+  whose diagram was removed stays registered and is reused.
+- `element.replace` turns an element into another variant in one undo step:
+  `element.changeType`, then the flags, then `event.setDefinition` (nested).
 - Semantic edits from the inspector are commands too (`element.updateProperties`,
   `element.updateDocumentation`, `element.updateCondition`, `element.changeType`).
 - There is no JSON conversion step: export serializes the same moddle tree that

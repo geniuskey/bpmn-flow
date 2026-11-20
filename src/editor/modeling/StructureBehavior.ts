@@ -4,7 +4,8 @@
  * - the first pool on a process diagram converts it to a collaboration and wraps
  *   the existing content
  * - resizing a pool keeps its lanes aligned; resizing a lane grows/shrinks the pool
- * - deleting a lane closes the gap
+ *   and the lanes around it (horizontal and vertical pools, nested lanes)
+ * - deleting a lane deletes its sub-lanes and closes the gap
  * - a pool or expanded sub-process grows to fit a shape created outside it (append, paste)
  * - lane membership (`flowNodeRef`) follows node positions after every change
  */
@@ -12,13 +13,29 @@ import CommandInterceptor from 'diagram-js/lib/command/CommandInterceptor';
 import type CommandStack from 'diagram-js/lib/command/CommandStack';
 import type Canvas from 'diagram-js/lib/core/Canvas';
 import type EventBus from 'diagram-js/lib/core/EventBus';
+import type ElementRegistry from 'diagram-js/lib/core/ElementRegistry';
 import type Modeling from 'diagram-js/lib/features/modeling/Modeling';
 import type { Connection, Element, Shape } from 'diagram-js/lib/model/Types';
+import { connectionEnds } from '@/bpmn/di/di';
 import { is } from '@/bpmn/model/moddle';
 import { bo, childrenOf, rootOf } from '../model';
 import { POOL_BAND, ROOT_TO_COLLABORATION, UPDATE_LANES } from '../commands/StructureHandlers';
 import {
-  center,
+  along,
+  boundsOf,
+  childLanes,
+  contentBounds,
+  cross,
+  crossDelta,
+  crossPosition,
+  end,
+  isHorizontal,
+  isLane,
+  laneAncestors,
+  laneContainer,
+  laneDescendants,
+} from './laneLayout';
+import {
   containerAt,
   isExpandedContainer,
   isFlowNodeShape,
@@ -34,19 +51,20 @@ const WRAP_PADDING = 50;
 const GROW_PADDING = 30;
 
 export default class StructureBehavior extends CommandInterceptor {
-  static override $inject = ['eventBus', 'canvas', 'modeling', 'commandStack'];
+  static override $inject = ['eventBus', 'canvas', 'modeling', 'commandStack', 'elementRegistry'];
 
   constructor(
     eventBus: EventBus,
     private readonly canvas: Canvas,
     private readonly modeling: Modeling,
     private readonly commandStack: CommandStack,
+    private readonly elementRegistry: ElementRegistry,
   ) {
     super(eventBus);
 
     // Lanes are not containers in the diagram: flow content lives in the pool.
     const toContainer = (parent: Element | undefined): Element | undefined =>
-      parent && is(bo(parent), 'bpmn:Lane') ? participantOf(parent) : parent;
+      parent && is(bo(parent), 'bpmn:Lane') ? (participantOf(parent) ?? parent.parent) : parent;
 
     this.preExecute(
       ['shape.create', 'elements.create'],
@@ -68,6 +86,42 @@ export default class StructureBehavior extends CommandInterceptor {
           : rootOf(this.canvas);
       },
     );
+    // An association drawn to a sequence or message flow (PDF 92, 95, Fig 8.28) goes with it ...
+    this.preExecute('connection.delete', (e: { context: { connection: Connection } }) => {
+      const { connection } = e.context;
+      for (const attached of [...(connection.incoming ?? []), ...(connection.outgoing ?? [])]) {
+        if (attached.parent) this.modeling.removeConnection(attached);
+      }
+    });
+    // ... and follows it when the flow is moved or re-routed.
+    this.postExecuted(
+      [
+        'connection.layout',
+        'connection.updateWaypoints',
+        'connection.move',
+        'connection.reconnect',
+      ],
+      (e: { context: { connection: Connection } }) => {
+        const { connection } = e.context;
+        for (const attached of [...(connection.incoming ?? []), ...(connection.outgoing ?? [])]) {
+          if (attached.parent) this.modeling.layoutConnection(attached);
+        }
+      },
+    );
+    // An edge drawn to another shape than its model end (BPMNEdge sourceElement /
+    // targetElement, PDF 405) still goes when that model end is deleted.
+    this.preExecute('shape.delete', (e: { context: { shape: Shape } }) => {
+      const removed = bo(e.context.shape);
+      if (!removed) return;
+      const redirected = this.elementRegistry.filter((el) => {
+        const c = el as Connection;
+        if (!c.waypoints || !c.parent || c.source === e.context.shape) return false;
+        if (c.target === e.context.shape) return false;
+        const ends = connectionEnds(bo(c)!);
+        return ends.source === removed || ends.target === removed;
+      });
+      for (const c of redirected) this.modeling.removeConnection(c as Connection);
+    });
     this.preExecute(
       'elements.move',
       2000,
@@ -121,16 +175,25 @@ export default class StructureBehavior extends CommandInterceptor {
       (e: { context: { shape: Shape; oldBounds: Bounds; hints?: Hints } }) => {
         const { shape, oldBounds, hints } = e.context;
         if (hints?.lanesHandled) return;
-        if (is(bo(shape), 'bpmn:Participant')) this.fitLanesToPool(shape, oldBounds);
-        else if (is(bo(shape), 'bpmn:Lane')) this.growPoolForLane(shape, oldBounds);
+        if (is(bo(shape), 'bpmn:Participant')) this.fitLanes(shape, oldBounds);
+        else if (is(bo(shape), 'bpmn:Lane')) this.resizeLaneEnd(shape, oldBounds);
       },
     );
 
+    // A lane goes with its sub-lanes; the lanes around it close the gap.
+    this.preExecute('shape.delete', (e: { context: { shape: Shape; laneContainer?: Shape } }) => {
+      const { shape } = e.context;
+      if (!isLane(shape)) return;
+      e.context.laneContainer = laneContainer(shape);
+      for (const sub of laneDescendants(shape).reverse()) {
+        if (sub.parent) this.modeling.removeShape(sub, { lanesHandled: true } as never);
+      }
+    });
     this.postExecute(
       'shape.delete',
-      (e: { context: { shape: Shape; oldParent: Shape; hints?: Hints } }) => {
-        const { shape, oldParent, hints } = e.context;
-        if (!hints?.lanesHandled && is(bo(shape), 'bpmn:Lane')) this.closeLaneGap(shape, oldParent);
+      (e: { context: { shape: Shape; hints?: Hints; laneContainer?: Shape } }) => {
+        const { shape, hints, laneContainer: container } = e.context;
+        if (!hints?.lanesHandled && isLane(shape) && container) this.closeLaneGap(shape, container);
       },
     );
 
@@ -150,9 +213,13 @@ export default class StructureBehavior extends CommandInterceptor {
   }
 
   private updateLanes(): void {
-    for (const child of childrenOf(rootOf(this.canvas))) {
-      if (is(bo(child), 'bpmn:Participant') && lanesOf(child as Shape).length) {
-        this.commandStack.execute(UPDATE_LANES, { participant: child });
+    const root = rootOf(this.canvas);
+    // Lanes of pools, and lanes drawn directly on a process diagram.
+    for (const host of [root, ...childrenOf(root)]) {
+      const pool = is(bo(host), 'bpmn:Participant');
+      if (!pool && (host !== root || !is(bo(host), 'bpmn:Process'))) continue;
+      if (lanesOf(host as Shape).length) {
+        this.commandStack.execute(UPDATE_LANES, { participant: host });
       }
     }
   }
@@ -168,13 +235,17 @@ export default class StructureBehavior extends CommandInterceptor {
     const minY = Math.min(...shapes.map((s) => s.y));
     const maxX = Math.max(...shapes.map((s) => s.x + s.width));
     const maxY = Math.max(...shapes.map((s) => s.y + s.height + (isFlowNodeShape(s) ? 30 : 0)));
+    // The name band is on the left of a horizontal pool, on top of a vertical one.
+    const h = isHorizontal(participant);
+    const left = WRAP_PADDING + (h ? POOL_BAND : 0);
+    const top = WRAP_PADDING + (h ? 0 : POOL_BAND);
     this.modeling.resizeShape(
       participant,
       {
-        x: minX - WRAP_PADDING - POOL_BAND,
-        y: minY - WRAP_PADDING,
-        width: maxX - minX + 2 * WRAP_PADDING + POOL_BAND,
-        height: maxY - minY + 2 * WRAP_PADDING,
+        x: minX - left,
+        y: minY - top,
+        width: maxX - minX + WRAP_PADDING + left,
+        height: maxY - minY + WRAP_PADDING + top,
       },
       undefined,
       { lanesHandled: true },
@@ -198,9 +269,12 @@ export default class StructureBehavior extends CommandInterceptor {
       container?.parent &&
       (is(bo(container), 'bpmn:Participant') || isExpandedContainer(container))
     ) {
-      const left = is(bo(container), 'bpmn:Participant') ? POOL_BAND + GROW_PADDING : GROW_PADDING;
+      const pool = is(bo(container), 'bpmn:Participant');
+      const h = isHorizontal(container);
+      const left = pool && h ? POOL_BAND + GROW_PADDING : GROW_PADDING;
+      const top = pool && !h ? POOL_BAND + GROW_PADDING : GROW_PADDING;
       const x = Math.min(container.x, inner.x - left);
-      const y = Math.min(container.y, inner.y - GROW_PADDING);
+      const y = Math.min(container.y, inner.y - top);
       const right = Math.max(container.x + container.width, inner.x + inner.width + GROW_PADDING);
       const bottom = Math.max(
         container.y + container.height,
@@ -221,66 +295,104 @@ export default class StructureBehavior extends CommandInterceptor {
     }
   }
 
-  private fitLanesToPool(pool: Shape, old: Bounds): void {
-    const lanes = lanesOf(pool);
-    if (!lanes.length) return;
-    const dyTop = pool.y - old.y;
-    const dyBottom = pool.y + pool.height - (old.y + old.height);
-    lanes.forEach((lane, i) => {
-      let y = lane.y;
-      let height = lane.height;
+  /**
+   * After a pool or lane was resized, its lanes follow: they keep running its
+   * whole length, the first lane takes a move of its start edge and the last
+   * lane a move of its end edge; the same for their sub-lanes.
+   */
+  private fitLanes(container: Shape, old: Bounds): void {
+    const kids = childLanes(container);
+    if (!kids.length) return;
+    const h = isHorizontal(container);
+    const dStart = cross(container, h).start - cross(old, h).start;
+    const dEnd = end(cross(container, h)) - end(cross(old, h));
+    const main = along(contentBounds(container), h);
+    kids.forEach((lane, i) => {
+      const c = cross(lane, h);
+      let start = c.start;
+      let size = c.size;
       if (i === 0) {
-        y += dyTop;
-        height -= dyTop;
+        start += dStart;
+        size -= dStart;
       }
-      if (i === lanes.length - 1) height += dyBottom;
-      this.modeling.resizeShape(
-        lane,
-        { x: pool.x + POOL_BAND, y, width: pool.width - POOL_BAND, height },
-        undefined,
-        { lanesHandled: true },
-      );
+      if (i === kids.length - 1) size += dEnd;
+      const next = boundsOf(main, { start, size }, h);
+      if (
+        next.x === lane.x &&
+        next.y === lane.y &&
+        next.width === lane.width &&
+        next.height === lane.height
+      ) {
+        return;
+      }
+      const before = { x: lane.x, y: lane.y, width: lane.width, height: lane.height };
+      this.modeling.resizeShape(lane, next, undefined, { lanesHandled: true });
+      this.fitLanes(lane, before);
     });
   }
 
-  private growPoolForLane(lane: Shape, old: Bounds): void {
-    const pool = participantOf(lane.parent);
-    if (!pool) return;
-    const dy = lane.height - old.height;
-    if (!dy) return;
-    const line = old.y + old.height;
-    for (const child of childrenOf(pool)) {
-      if (child === lane || (child as Connection).waypoints) continue;
-      const s = child as Shape;
-      const top = is(bo(s), 'bpmn:Lane') ? s.y : center(s).y;
-      if (top >= line - 1)
-        this.modeling.moveShape(s, { x: 0, y: dy }, undefined, undefined, { lanesHandled: true });
-    }
-    this.modeling.resizeShape(
-      pool,
-      { x: pool.x, y: pool.y, width: pool.width, height: pool.height + dy },
-      undefined,
-      {
-        lanesHandled: true,
-      },
+  /**
+   * A lane was resized at its end edge (bottom, or right in a vertical pool):
+   * what follows it moves, its sub-lanes follow and the lanes around it and the
+   * pool grow or shrink with it.
+   */
+  private resizeLaneEnd(lane: Shape, old: Bounds): void {
+    const host = lane.parent as Shape | undefined;
+    const h = isHorizontal(lane);
+    const d = cross(lane, h).size - cross(old, h).size;
+    if (!d) return;
+    this.fitLanes(lane, old);
+    if (!host) return;
+    const ancestors = laneAncestors(lane);
+    this.shiftAfter(
+      host,
+      h,
+      end(cross(old, h)),
+      d,
+      new Set([lane, ...ancestors, ...laneDescendants(lane)]),
     );
+    // The pool grows too; a process diagram without pools has no bounds.
+    for (const grown of [...ancestors, ...(host.parent ? [host] : [])]) this.growAcross(grown, d);
   }
 
-  private closeLaneGap(lane: Shape, pool: Shape): void {
-    if (!is(bo(pool), 'bpmn:Participant') || !lanesOf(pool).length) return;
-    const line = lane.y + lane.height;
-    for (const child of childrenOf(pool)) {
-      if ((child as Connection).waypoints) continue;
-      const s = child as Shape;
-      const top = is(bo(s), 'bpmn:Lane') ? s.y : center(s).y;
-      if (top >= line - 1)
-        this.modeling.moveShape(s, { x: 0, y: -lane.height }, undefined, undefined, {
-          lanesHandled: true,
-        });
+  /** A lane was deleted from `container` (pool, parent lane or diagram): the rest closes the gap. */
+  private closeLaneGap(lane: Shape, container: Shape): void {
+    // The last lane of a pool or lane leaves its area to it.
+    const remaining = childLanes(container);
+    if (!remaining.length) return;
+    const host = remaining[0]!.parent as Shape;
+    const h = isHorizontal(remaining[0]!);
+    const size = cross(lane, h).size;
+    const ancestors = is(bo(container), 'bpmn:Lane')
+      ? [container, ...laneAncestors(container)]
+      : [];
+    this.shiftAfter(host, h, end(cross(lane, h)), -size, new Set([...ancestors]));
+    for (const shrunk of [...ancestors, ...(host.parent ? [host] : [])]) {
+      this.growAcross(shrunk, -size);
     }
+  }
+
+  /** Moves the shapes of a pool or diagram (lanes by their start edge, others by their center) after `line` by `d`. */
+  private shiftAfter(host: Shape, h: boolean, line: number, d: number, keep: Set<Shape>): void {
+    // A copy: a move re-inserts the shape among its parent's children (at the
+    // same index, so lanes stay below the content).
+    for (const child of [...childrenOf(host)]) {
+      if ((child as Connection).waypoints || keep.has(child as Shape)) continue;
+      const s = child as Shape;
+      if (crossPosition(s, h) >= line - 1) {
+        const index = childrenOf(host).indexOf(s);
+        this.modeling.moveShape(s, crossDelta(d, h), host, index, { lanesHandled: true });
+      }
+    }
+  }
+
+  /** Grows (or shrinks) a pool or lane at its end edge across the lanes, leaving its lanes alone. */
+  private growAcross(shape: Shape, d: number): void {
+    const h = isHorizontal(shape);
+    const c = cross(shape, h);
     this.modeling.resizeShape(
-      pool,
-      { x: pool.x, y: pool.y, width: pool.width, height: pool.height - lane.height },
+      shape,
+      boundsOf(along(shape, h), { start: c.start, size: c.size + d }, h),
       undefined,
       { lanesHandled: true },
     );

@@ -1,8 +1,14 @@
 /**
  * Maps BPMN elements to visual kinds. Pure; shared by the renderer and tests.
  */
-import { humanizeType, isEditableConnection, isEditableShapeElement } from '@/bpmn/model/elements';
-import { getMany, is, type ModdleElement } from '@/bpmn/model/moddle';
+import {
+  humanizeType,
+  isEditableConnection,
+  isEditableShapeElement,
+  isSharedDefinitionEvent,
+} from '@/bpmn/model/elements';
+import { messageVisibleKind } from '@/bpmn/di/di';
+import { getMany, getRef, is, walkContainment, type ModdleElement } from '@/bpmn/model/moddle';
 import type { Outline } from './geometry';
 
 export type VisualKind =
@@ -18,6 +24,7 @@ export type VisualKind =
   | 'dataStore'
   | 'conversation'
   | 'choreography'
+  | 'message'
   | 'conversationLink'
   | 'sequenceFlow'
   | 'messageFlow'
@@ -55,6 +62,7 @@ function shapeKind(el: ModdleElement): VisualKind {
     return 'dataObject';
   }
   if (is(el, 'bpmn:ConversationNode')) return 'conversation';
+  if (is(el, 'bpmn:Message')) return 'message';
   return 'dataStore';
 }
 
@@ -74,6 +82,12 @@ export function visualFor(el: ModdleElement, isEdge: boolean): Visual {
   if (isEditableShapeElement(el)) {
     return { kind: shapeKind(el), outline: outlineFor(el) };
   }
+  // Shown with their notation although they are not edited as shapes: a Data
+  // Object drawn directly (PDF 234) and a Message (envelope, PDF 91).
+  if (is(el, 'bpmn:DataObject')) return { kind: 'dataObject', outline: 'rect' };
+  if (is(el, 'bpmn:Message')) return { kind: 'message', outline: 'rect' };
+  // Shared event definitions (PDF 265-266) give the same marker as own ones.
+  if (isSharedDefinitionEvent(el)) return { kind: 'event', outline: 'circle' };
   const eventDefs = getMany(el, 'eventDefinitions').map((d) =>
     humanizeType(d.$type).replace(/ Event Definition$/, ''),
   );
@@ -87,6 +101,8 @@ export function hasExternalLabel(el: ModdleElement): boolean {
     is(el, 'bpmn:Event') ||
     is(el, 'bpmn:Gateway') ||
     is(el, 'bpmn:DataObjectReference') ||
+    is(el, 'bpmn:DataObject') ||
+    is(el, 'bpmn:Message') ||
     is(el, 'bpmn:DataStoreReference') ||
     is(el, 'bpmn:DataInput') ||
     is(el, 'bpmn:DataOutput') ||
@@ -109,3 +125,39 @@ export function isThrowing(el: ModdleElement): boolean {
 
 /** Expanded sub-processes show their content; collapsed ones show a [+] marker. */
 export { isExpandedShape as isExpanded } from '../model';
+
+/**
+ * A Message sent by the non-initiating participant is shaded (PDF 91, Fig
+ * 8.27): one carried by a choreography task's message flow that does not come
+ * from the initiating participant, or by (or associated with) a message flow
+ * whose envelope is DI non_initiating.
+ */
+export function isNonInitiatingMessage(message: ModdleElement): boolean {
+  let definitions: ModdleElement | undefined = message;
+  while (definitions?.$parent) definitions = definitions.$parent;
+  if (!definitions) return false;
+  const flows = new Set<ModdleElement>();
+  const nonInitiating = new Set<ModdleElement>();
+  walkContainment(definitions, (el) => {
+    if (is(el, 'bpmn:MessageFlow') && getRef(el, 'messageRef') === message) flows.add(el);
+    if (is(el, 'bpmn:Association')) {
+      const [a, b] = [getRef(el, 'sourceRef'), getRef(el, 'targetRef')];
+      if (a === message && is(b, 'bpmn:MessageFlow')) flows.add(b!);
+      if (b === message && is(a, 'bpmn:MessageFlow')) flows.add(a!);
+    }
+    if (is(el, 'bpmn:ChoreographyTask')) {
+      const initiator = getRef(el, 'initiatingParticipantRef');
+      for (const flow of getMany(el, 'messageFlowRef')) {
+        if (initiator && getRef(flow, 'sourceRef') !== initiator) nonInitiating.add(flow);
+      }
+    }
+  });
+  if ([...flows].some((f) => nonInitiating.has(f))) return true;
+  for (const diagram of getMany(definitions, 'diagrams')) {
+    for (const di of getMany(getRef(diagram, 'plane'), 'planeElement')) {
+      const flow = getRef(di, 'bpmnElement');
+      if (flow && flows.has(flow) && messageVisibleKind(di) === 'non_initiating') return true;
+    }
+  }
+  return false;
+}

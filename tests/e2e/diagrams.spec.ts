@@ -49,6 +49,30 @@ test('multiple diagrams: drill into a collapsed sub-process, edit it, delete it'
   await expect(page.getByLabel('Diagram', { exact: true }).locator('option')).toHaveCount(2);
 });
 
+test('collapse and expand a sub-process from its contextual toolbar', async ({ page }) => {
+  await page.goto('/?sample=multi-diagram');
+  await expect(el(page, 'Fulfil')).toBeVisible();
+  await el(page, 'Fulfil').click();
+  await page.locator('.djs-context-pad .entry[aria-label^="Expand"]').click();
+  // The content is drawn inside the sub-process; its own diagram is gone.
+  await expect(el(page, 'Pick')).toBeVisible();
+  await expect(el(page, 'Start_m')).toBeVisible();
+  await expect(page.getByLabel('Diagram', { exact: true })).toHaveCount(0);
+  let xml = await exportXml(page);
+  expect(xml).toMatch(/bpmnElement="Fulfil" isExpanded="true"/);
+  expect(xml).not.toContain('Diagram_fulfil');
+  expect(['valid', 'skipped']).toContain(xsdValidate(xml));
+
+  await el(page, 'Fulfil').click({ position: { x: 20, y: 10 } });
+  await page.locator('.djs-context-pad .entry[aria-label^="Collapse"]').click();
+  await expect(el(page, 'Pick')).toBeHidden();
+  await expect(page.getByLabel('Diagram', { exact: true }).locator('option')).toHaveCount(2);
+  xml = await exportXml(page);
+  expect(xml).toMatch(/bpmnElement="Fulfil" isExpanded="false"/);
+  expect(xml).toMatch(/<bpmndi:BPMNPlane id="Plane_fulfil" bpmnElement="Fulfil">/);
+  expect(['valid', 'skipped']).toContain(xsdValidate(xml));
+});
+
 test('conversation diagrams: create conversations and link them to pools', async ({ page }) => {
   await page.goto('/?sample=conversation');
   await expect(el(page, 'Conv_1')).toBeVisible();
@@ -86,7 +110,12 @@ test('conversation diagrams: create conversations and link them to pools', async
     .getByLabel('Element type')
     .selectOption('bpmn:SubConversation');
   const xml = await exportXml(page);
-  expect(xml).toMatch(new RegExp(`<bpmn:subConversation id="${conv}" />`));
+  // The links keep the conversation's participantRefs in step (BPMN 2.0.2 §9.5.2).
+  expect(xml).toMatch(
+    new RegExp(
+      `<bpmn:subConversation id="${conv}">\\s*<bpmn:participantRef>Seller</bpmn:participantRef>\\s*<bpmn:participantRef>Bank</bpmn:participantRef>`,
+    ),
+  );
   expect(xml).toMatch(
     new RegExp(`<bpmn:conversationLink id="[^"]+" sourceRef="${conv}" targetRef="Seller" />`),
   );
@@ -136,7 +165,7 @@ test('choreography diagrams: tasks with participant bands', async ({ page }) => 
   expect(taskXml).toMatch(/initiatingParticipantRef="Seller"|initiatingParticipantRef="Buyer"/);
   expect(xml).toMatch(/<bpmn:participant id="[^"]+" name="Bank" \/>/);
   const taskBounds = new RegExp(
-    `bpmnElement="${task}">\\s*<dc:Bounds x="([\\d.]+)" y="([\\d.]+)"`,
+    `bpmnElement="${task}">\\s*<dc:Bounds x="([\\d.]+)" y="([\\d.]+)" width="[\\d.]+" height="([\\d.]+)"`,
   ).exec(xml)!;
   const bottomBand = new RegExp(
     `participantBandKind="bottom_non_initiating"[^>]*>\\s*<dc:Bounds x="([\\d.]+)" y="([\\d.]+)" width="[\\d.]+" height="([\\d.]+)"`,
@@ -144,9 +173,9 @@ test('choreography diagrams: tasks with participant bands', async ({ page }) => 
   );
   const bands = [...xml.matchAll(bottomBand)].map((m) => ({ x: +m[1]!, y: +m[2]!, h: +m[3]! }));
   // One of the bottom bands sits at the bottom of the moved task.
-  expect(bands.some((b) => b.x === +taskBounds[1]! && b.y + b.h === +taskBounds[2]! + 80)).toBe(
-    true,
-  );
+  expect(
+    bands.some((b) => b.x === +taskBounds[1]! && b.y + b.h === +taskBounds[2]! + +taskBounds[3]!),
+  ).toBe(true);
   expect(['valid', 'skipped']).toContain(xsdValidate(xml));
   saveForInterop('e2e-choreography.bpmn', xml);
 

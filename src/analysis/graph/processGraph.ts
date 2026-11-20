@@ -106,7 +106,7 @@ export function linkPairs(graph: ProcessGraph): Map<string, string[]> {
   const catches = nodes.filter(
     (n) => is(n.element, 'bpmn:IntermediateCatchEvent') && linkDefinition(n.element),
   );
-  const nameOf = (n: GraphNode) => linkDefinition(n.element)?.name ?? n.name;
+  const nameOf = (n: GraphNode) => linkDefinition(n.element)?.name || n.name;
   const pairs = new Map<string, string[]>();
   for (const thrower of nodes) {
     if (!is(thrower.element, 'bpmn:IntermediateThrowEvent')) continue;

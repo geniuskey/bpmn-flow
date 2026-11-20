@@ -62,3 +62,31 @@ test('analysis tabs follow the WAI-ARIA tabs pattern', async ({ page }) => {
     (await tabs.last().getAttribute('id'))!,
   );
 });
+
+test('shape library arrow keys keep the column across groups', async ({ page }) => {
+  await page.goto('/?sample=simple-process');
+  const toggle = page.getByTestId('toggle-shape-library');
+  if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-controls', 'shape-library-list');
+  const search = page.getByRole('searchbox', { name: 'Search shapes' });
+  const groups = page.locator('#shape-library-list [role="group"]');
+  const first = groups.nth(0).locator('[data-library-entry]');
+  const second = groups.nth(1).locator('[data-library-entry]');
+  await search.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(first.first()).toBeFocused();
+  await page.keyboard.press('ArrowUp');
+  await expect(search).toBeFocused();
+  // From the first column of the first group's last row, down lands in the
+  // first column of the next group.
+  const count = await first.count();
+  const lastRowStart = Math.floor((count - 1) / 6) * 6;
+  await first.nth(lastRowStart).focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(second.first()).toBeFocused();
+  await page.keyboard.press('ArrowUp');
+  await expect(first.nth(lastRowStart)).toBeFocused();
+
+  await toggle.click();
+  await expect(toggle).not.toHaveAttribute('aria-controls', /.+/);
+});

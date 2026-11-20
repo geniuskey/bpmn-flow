@@ -5,11 +5,13 @@
  */
 import type { Element } from 'diagram-js/lib/model/Types';
 import type { BpmnModdleInstance, ModdleElement } from '@/bpmn/model/moddle';
-import { containedChildren, getRef, is, walkContainment } from '@/bpmn/model/moddle';
+import { containedChildren, getMany, getRef, is, walkContainment } from '@/bpmn/model/moddle';
 import { diReferencing } from '@/bpmn/di/di';
 import type Canvas from 'diagram-js/lib/core/Canvas';
 import { bo, canExpand, type BpmnData, type BpmnShape } from '../model';
+import type BpmnElementFactory from '../modeling/BpmnElementFactory';
 import { ChangeLog } from '../modeling/ChangeLog';
+import { choreographyOf } from '../modeling/semanticModel';
 
 export const CHANGE_TYPE = 'element.changeType';
 
@@ -26,7 +28,15 @@ export const TYPE_FAMILIES: string[][] = [
     'bpmn:CallActivity',
   ],
   ['bpmn:SubProcess', 'bpmn:Transaction', 'bpmn:AdHocSubProcess'],
+  // Events in the flow; boundary events stay boundary events (they need a host).
+  [
+    'bpmn:StartEvent',
+    'bpmn:IntermediateCatchEvent',
+    'bpmn:IntermediateThrowEvent',
+    'bpmn:EndEvent',
+  ],
   ['bpmn:Conversation', 'bpmn:SubConversation', 'bpmn:CallConversation'],
+  ['bpmn:ChoreographyTask', 'bpmn:SubChoreography', 'bpmn:CallChoreography'],
   [
     'bpmn:ExclusiveGateway',
     'bpmn:ParallelGateway',
@@ -43,6 +53,8 @@ export function alternativeTypes(type: string): string[] {
 interface Context {
   element: Element;
   newType: string;
+  /** Message flow a new choreography task gets (reused on redo). */
+  messageFlow?: ModdleElement;
   /** Reused on redo so later commands keep referring to the same object. */
   next?: ModdleElement;
   log?: ChangeLog;
@@ -79,17 +91,58 @@ function repointReferences(
 }
 
 export default class ChangeTypeHandler {
-  static $inject = ['moddle', 'bpmnDefinitions', 'canvas'];
+  static $inject = ['moddle', 'bpmnDefinitions', 'canvas', 'elementFactory'];
   constructor(
     private readonly moddle: BpmnModdleInstance,
     private readonly definitions: ModdleElement,
     private readonly canvas: Canvas,
+    private readonly factory?: BpmnElementFactory,
   ) {}
+
+  /**
+   * A choreography task refers to one or more message flows (Table 11.2):
+   * a task that becomes another choreography activity drops the ones only it
+   * used, an activity that becomes a task gets one from its initiator.
+   */
+  private syncTaskMessageFlows(
+    context: Context,
+    old: ModdleElement,
+    next: ModdleElement,
+    log: ChangeLog,
+  ): void {
+    const choreography = choreographyOf(next);
+    if (!choreography) return;
+    const owned = choreography.get('messageFlows') as ModdleElement[];
+    if (is(old, 'bpmn:ChoreographyTask') && !is(next, 'bpmn:ChoreographyTask')) {
+      for (const flow of getMany(old, 'messageFlowRef')) {
+        let used = false;
+        walkContainment(this.definitions, (el) => {
+          if (el !== old && getMany(el, 'messageFlowRef').includes(flow)) used = true;
+        });
+        if (!used) log.remove(owned, flow);
+      }
+    }
+    if (is(next, 'bpmn:ChoreographyTask') && !getMany(next, 'messageFlowRef').length) {
+      const refs = getMany(next, 'participantRef');
+      const from = getRef(next, 'initiatingParticipantRef') ?? refs[0];
+      const to = refs.find((p) => p !== from);
+      if (!from || !to || !this.factory) return;
+      const flow = (context.messageFlow ??= this.factory.createModdle('bpmn:MessageFlow', {
+        sourceRef: from,
+        targetRef: to,
+      }));
+      log.insert(owned, flow);
+      log.setParent(flow, choreography);
+      log.set(next, 'messageFlowRef', [flow]);
+    }
+  }
 
   execute(context: Context): Element[] {
     const shape = context.element as BpmnShape;
     const old = bo(shape);
-    if (!old || !alternativeTypes(old.$type).includes(context.newType)) {
+    // A drill-down diagram root (drawn by its plane) changes through its collapsed shape.
+    const isRoot = is(shape.di as ModdleElement | undefined, 'bpmndi:BPMNPlane');
+    if (!old || isRoot || !alternativeTypes(old.$type).includes(context.newType)) {
       throw new Error(`Cannot change ${old?.$type} to ${context.newType}.`);
     }
     const log = new ChangeLog();
@@ -121,6 +174,7 @@ export default class ChangeTypeHandler {
     log.insert(list, next, index);
     log.setParent(next, container);
     repointReferences(this.definitions, old, next, log);
+    if (is(old, 'bpmn:ChoreographyActivity')) this.syncTaskMessageFlows(context, old, next, log);
     // Re-point DI in every diagram, including a drill-down plane of a sub-process.
     // (`repointReferences` already updated the DI's `bpmnElement`.)
     for (const diagram of diReferencing(this.definitions, next).diagrams) {

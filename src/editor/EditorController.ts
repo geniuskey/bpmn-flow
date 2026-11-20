@@ -33,13 +33,28 @@ import {
   UPDATE_DOCUMENTATION,
   UPDATE_PROPERTIES,
 } from './commands/UpdatePropertiesHandler';
-import { CHANGE_TYPE } from './commands/ChangeTypeHandler';
+import { REPLACE_ELEMENT } from './commands/ReplaceHandler';
+import { SET_EXPANDED, expandBlocker } from './commands/ExpandHandler';
+import { drillDownRootOf } from './modeling/drillDown';
+import {
+  allowedTypeChanges,
+  replaceBlocker,
+  replaceOptions,
+  typeChangePreset,
+  type ReplaceOption,
+} from './modeling/replace';
+import { boundlessParticipant, containerAt } from './modeling/semantic';
+import { canAttach, canAddLaneTo, choreographyBoundarySpot } from './interaction/BpmnFlowRules';
 import { SET_EVENT_DEFINITION } from './commands/EventDefinitionHandler';
 import { SET_LOOP } from './commands/LoopHandler';
-import { SET_CHOREOGRAPHY_PARTICIPANT } from './commands/ChoreographyParticipantHandler';
+import {
+  SET_CHOREOGRAPHY_PARTICIPANT,
+  UPDATE_CHOREOGRAPHY_BANDS,
+} from './commands/ChoreographyParticipantHandler';
 import { UPDATE_EVENT_DETAIL } from './commands/EventDetailHandler';
 import { UPDATE_ELEMENT_DETAIL } from './commands/ElementDetailHandler';
 import { ADD_LANE, SET_POOL_BLACK_BOX, blackBoxBlocker } from './commands/StructureHandlers';
+import { SET_POOL_BOUNDARY, hideBoundaryBlocker } from './commands/PoolBoundaryHandler';
 import { APPLY_LAYOUT } from './layout/ApplyLayoutHandler';
 import { deletable } from './interaction/BpmnFlowRules';
 import type DirectEditing from './interaction/DirectEditing';
@@ -48,10 +63,11 @@ import { guardCommandStack } from './commands/guardCommandStack';
 import type ConnectTool from './interaction/ConnectTool';
 import { bo, childrenOf, rootOf, type BpmnData } from './model';
 import { labelOf } from '@/bpmn/model/elements';
-import { getMany, getRef } from '@/bpmn/model/moddle';
+import { getMany, getRef, is } from '@/bpmn/model/moddle';
 import { coreModule, EDITING_MODULES } from './modules';
 import type {
   CanvasImportResult,
+  BandOp,
   DiagramInfo,
   EditorOptions,
   ElementDetail,
@@ -62,10 +78,11 @@ import type {
   Listener,
   LoopKind,
   PropertyValue,
+  ShapePreset,
 } from './types';
 import type { ELK } from 'elkjs/lib/elk-api';
 
-export type { DiagramInfo, EditorOptions, EditorSnapshot, EditorTool } from './types';
+export type { DiagramInfo, EditorOptions, EditorSnapshot, EditorTool, ShapePreset } from './types';
 
 export class EditorController {
   private diagram: Diagram | null = null;
@@ -169,6 +186,12 @@ export class EditorController {
       });
     }
     eventBus.on('bpmnflow.showDiagram', (e: { rootId: string }) => this.showDiagram(e.rootId));
+    // Commands may switch diagrams too (undoing a collapse shown in its own diagram).
+    eventBus.on('root.set', (e: { element: Element }) => {
+      if (e.element.id !== this.snapshot.activeDiagram) {
+        this.update({ activeDiagram: e.element.id, revision: this.snapshot.revision + 1 });
+      }
+    });
     eventBus.on('tool-manager.update', (e: { tool: string | null }) => {
       if (this.get<ConnectTool>('connectTool')?.isActive()) return;
       const map: Record<string, EditorTool> = { hand: 'pan', lasso: 'lasso' };
@@ -290,12 +313,71 @@ export class EditorController {
     return this.get<Canvas>('canvas')?.getRootElement().id ?? null;
   }
 
-  /** Starts placing a new element (palette click or drag). */
-  startCreate(event: MouseEvent | PointerEvent, type: string): void {
+  /**
+   * Starts placing a new element (palette click or drag). `preset` selects a
+   * notation variant (trigger, interrupting, collection, ...); the drop is
+   * checked by the modeling rules (e.g. error start events only inside an
+   * event sub-process, boundary events on an activity border).
+   */
+  startCreate(event: MouseEvent | PointerEvent, type: string, preset?: ShapePreset): void {
     const create = this.get<Create>('create');
     const factory = this.get<ElementFactory>('elementFactory');
     if (!create || !factory) return;
-    create.start(event as MouseEvent, factory.createShape({ type }));
+    const shape = factory.createShape({ type, ...(preset ? { preset: { ...preset, type } } : {}) });
+    create.start(event as MouseEvent, shape);
+  }
+
+  /**
+   * Places a new element without the mouse (palette from the keyboard): in
+   * the middle of the visible area, inside the container found there; a
+   * boundary event on the selected activity; a lane in the selected pool.
+   * Returns false when the element does not fit there.
+   */
+  createInView(type: string, preset?: ShapePreset): boolean {
+    const canvas = this.get<Canvas>('canvas');
+    const factory = this.get<ElementFactory>('elementFactory');
+    const modeling = this.get<Modeling>('modeling');
+    const rules = this.get<Rules>('rules');
+    if (!canvas || !factory || !modeling || !rules || this.snapshot.readOnly) return false;
+    const full = { ...preset, type };
+    const [selected] = this.selected();
+    if (type === 'bpmn:Lane') {
+      // The selected pool or lane, or a process diagram without pools.
+      const target = selected ?? rootOf(canvas);
+      if (!canAddLaneTo(target)) return false;
+      this.exec(ADD_LANE, { target });
+      return true;
+    }
+    const shape = factory.createShape({ type, preset: full }) as Shape;
+    if (type === 'bpmn:BoundaryEvent') {
+      const host = selected as Shape | undefined;
+      if (!host || !canAttach([shape], host)) return false;
+      // On a choreography activity the trigger decides the band (Table 11.7).
+      const position = is(bo(host), 'bpmn:ChoreographyActivity')
+        ? choreographyBoundarySpot(host, bo(shape)!)
+        : { x: host.x + host.width / 2, y: host.y + host.height };
+      modeling.createShape(shape, position, host, { attach: true } as never);
+      this.select([shape.id], false);
+      return true;
+    }
+    const box = canvas.viewbox();
+    const position = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) return false;
+    const root = rootOf(canvas);
+    // Pools and conversations go on the diagram itself, the rest into the container there.
+    const onRoot = type === 'bpmn:Participant' || /Conversation$/.test(type);
+    const target = onRoot
+      ? root
+      : (containerAt(root, {
+          x: position.x - shape.width / 2,
+          y: position.y - shape.height / 2,
+          width: shape.width,
+          height: shape.height,
+        }) ?? root);
+    if (!rules.allowed('shape.create', { shape, target, position })) return false;
+    modeling.createShape(shape, position, target as Shape);
+    this.select([shape.id], false);
+    return true;
   }
 
   canCreateIn(type: string): boolean {
@@ -373,9 +455,35 @@ export class EditorController {
     if (element) this.exec(UPDATE_CONDITION, { element, body });
   }
 
+  /** Changes the BPMN type (same family); triggers the new type cannot have are dropped. */
   changeType(id: string, newType: string): void {
     const element = this.getElement(id);
-    if (element) this.exec(CHANGE_TYPE, { element, newType });
+    const preset = element && typeChangePreset(element, newType);
+    if (element && preset) this.exec(REPLACE_ELEMENT, { element, preset });
+  }
+
+  /** Types the element may change to where it is (inspector "Type", context menu). */
+  typeChangeOptions(id: string): string[] {
+    const element = this.getElement(id);
+    return element && !this.snapshot.readOnly ? allowedTypeChanges(element) : [];
+  }
+
+  /** Turns the element into another notation variant (one undo step). */
+  replace(id: string, preset: ShapePreset): void {
+    const element = this.getElement(id);
+    if (element) this.exec(REPLACE_ELEMENT, { element, preset });
+  }
+
+  /** Why the element cannot become `preset`, or null when it can. */
+  replaceBlocker(id: string, preset: ShapePreset): string | null {
+    const element = this.getElement(id);
+    return element ? replaceBlocker(element, preset) : 'Not available.';
+  }
+
+  /** The library variants the element can be turned into ("Change type" menu). */
+  replaceOptions(id: string): ReplaceOption[] {
+    const element = this.getElement(id);
+    return element && !this.snapshot.readOnly ? replaceOptions(element) : [];
   }
 
   setEventDefinition(id: string, definitionType: string | undefined): void {
@@ -409,6 +517,12 @@ export class EditorController {
     if (element) this.exec(SET_CHOREOGRAPHY_PARTICIPANT, { element, slot, ...choice });
   }
 
+  /** Participants and bands of a choreography activity (see `BandOp`). One undo step. */
+  updateChoreographyBands(id: string, op: BandOp): void {
+    const element = this.getElement(id);
+    if (element) this.exec(UPDATE_CHOREOGRAPHY_BANDS, { element, op });
+  }
+
   setLoop(id: string, loop: LoopKind): void {
     const element = this.getElement(id);
     if (element) this.exec(SET_LOOP, { element, loop });
@@ -433,9 +547,51 @@ export class EditorController {
     return blackBoxBlocker(element, definitions);
   }
 
-  addLane(targetId: string): void {
+  /**
+   * Collapses (content moves to the element's own drill-down diagram) or
+   * expands (content moves back into the shape) a sub-process, transaction,
+   * ad-hoc sub-process or sub-choreography. One undo step.
+   */
+  /**
+   * Shows the pool `id` without its boundary (BPMN 2.0.2 PDF 141-143), or
+   * (`visible`) draws the pool shown without boundary with one again.
+   */
+  setPoolBoundary(id: string, visible: boolean): void {
+    if (visible) {
+      const participant = this.boundlessPool();
+      if (participant?.id === id) this.exec(SET_POOL_BOUNDARY, { participant, visible: true });
+      return;
+    }
+    const element = this.getElement(id) as Shape | undefined;
+    if (element) this.exec(SET_POOL_BOUNDARY, { element, visible: false });
+  }
+
+  poolBoundaryBlocker(id: string): string | null {
+    if (this.snapshot.readOnly) return 'The document is read-only.';
+    return hideBoundaryBlocker(this.getElement(id));
+  }
+
+  /** The participant of the shown collaboration diagram that is drawn without its pool boundary. */
+  boundlessPool(): ModdleElement | undefined {
+    const canvas = this.get<Canvas>('canvas');
+    return canvas ? boundlessParticipant(canvas.getRootElement() as Element) : undefined;
+  }
+
+  setExpanded(id: string, expanded: boolean): void {
+    const shape = this.getElement(id);
+    if (shape) this.exec(SET_EXPANDED, { shape, expanded });
+  }
+
+  /** Why the element cannot be expanded / collapsed, or null when it can. */
+  expandBlocker(id: string, expanded: boolean): string | null {
+    if (this.snapshot.readOnly) return 'The document is read-only.';
+    return expandBlocker(this.getElement(id), expanded);
+  }
+
+  /** Adds a lane after a lane or at the end of a pool; `inside` adds a sub-lane to a lane. */
+  addLane(targetId: string, inside = false): void {
     const target = this.getElement(targetId);
-    if (target) this.exec(ADD_LANE, { target });
+    if (target) this.exec(ADD_LANE, { target, ...(inside ? { inside: true } : {}) });
   }
 
   applyLayout(layout: LayoutResult): void {
@@ -578,15 +734,9 @@ export class EditorController {
   /** The diagram that draws the content of a collapsed sub-process, if any. */
   drillDownOf(id: string): string | null {
     const element = this.getElement(id) as (Element & BpmnData) | undefined;
-    if (!element) return null;
     const canvas = this.get<Canvas>('canvas');
-    const root = canvas
-      ?.getRootElements()
-      .find(
-        (r) =>
-          (r as unknown as BpmnData).businessObject === element.businessObject && r.id !== '__root',
-      );
-    return root && this.getDiagrams().some((d) => d.rootId === root.id) ? root.id : null;
+    if (!element?.parent || !canvas || !this.document) return null;
+    return drillDownRootOf(canvas, element.businessObject, this.document.definitions)?.id ?? null;
   }
 
   getElement(id: string): Element | undefined {

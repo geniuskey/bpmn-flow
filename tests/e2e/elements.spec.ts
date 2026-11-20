@@ -17,6 +17,9 @@ async function place(page: Page, type: string, at: { x: number; y: number }): Pr
       .evaluateAll((n) => n.map((x) => x.getAttribute('data-element-id')!)),
   );
   await page.getByTestId(`create-${type}`).click();
+  // Jump next to the target first: a path from the shape library across the canvas
+  // edge would auto-scroll the canvas.
+  await page.mouse.move(at.x - 20, at.y);
   await page.mouse.move(at.x, at.y, { steps: 3 });
   await page.mouse.click(at.x, at.y);
   await settle(page);
@@ -112,7 +115,10 @@ test('boundary events, sub-processes, data, annotations and groups', async ({ pa
   expect(xml).toMatch(
     /<bpmn:dataInputAssociation id="[^"]+">\s*<bpmn:sourceRef>[^<]+<\/bpmn:sourceRef>\s*<bpmn:targetRef>[^<]+<\/bpmn:targetRef>/,
   );
-  expect(xml).toContain('name="__targetRef_placeholder"');
+  // The association targets a Data Input of the task's I/O specification (BPMN 2.0.2 PDF 253).
+  expect(xml).toMatch(
+    /<bpmn:ioSpecification id="[^"]+">\s*<bpmn:dataInput id="DataInput_[^"]+" \/>\s*<bpmn:inputSet id="[^"]+">\s*<bpmn:dataInputRefs>DataInput_[^<]+<\/bpmn:dataInputRefs>/,
+  );
   expect(xml).toMatch(
     new RegExp(`<bpmn:association id="[^"]+" sourceRef="${note}" targetRef="Task_check" />`),
   );
@@ -123,6 +129,8 @@ test('boundary events, sub-processes, data, annotations and groups', async ({ pa
   saveForInterop('e2e-elements.bpmn', xml);
 
   // Change the task type and the boundary event's definition.
+  // Deselect first: the annotation's resize handles may cover the task corner.
+  await page.getByTestId('canvas').click({ position: { x: 15, y: 15 } });
   await el(page, 'Task_check').click({ position: { x: 8, y: 8 } });
   await page.getByTestId('inspector').getByLabel('Element type').selectOption('bpmn:SendTask');
   // Deselect first: the task's resize handle sits on top of the boundary event.
@@ -239,13 +247,18 @@ test('transactions, ad-hoc sub-processes, compensation and loop markers', async 
   expect(['valid', 'skipped']).toContain(xsdValidate(xml));
   saveForInterop('e2e-advanced.bpmn', xml);
 
-  // Change the transaction into an ad-hoc sub-process; content stays.
+  // The transaction keeps its type: it has a cancel boundary event and start / end
+  // events, which an ad-hoc sub-process cannot have (BPMN 2.0.2 PDF 211, 287).
   await page.getByTestId('canvas').click({ position: { x: 15, y: 15 } });
   await el(page, 'Book').click({ position: { x: 10, y: 10 } });
-  await inspector.getByLabel('Element type').selectOption('bpmn:AdHocSubProcess');
+  await expect(inspector.getByLabel('Element type')).toHaveCount(0);
+  // Change the ad-hoc sub-process into a transaction; content stays.
+  await page.getByTestId('canvas').click({ position: { x: 15, y: 15 } });
+  await el(page, 'Extras').click({ position: { x: 10, y: 10 } });
+  await inspector.getByLabel('Element type').selectOption('bpmn:Transaction');
   xml = await exportXml(page);
-  expect(/<bpmn:adHocSubProcess id="Book"[\s\S]*?<\/bpmn:adHocSubProcess>/.exec(xml)![0]).toContain(
-    '<bpmn:serviceTask id="Flight"',
+  expect(/<bpmn:transaction id="Extras"[\s\S]*?<\/bpmn:transaction>/.exec(xml)![0]).toContain(
+    '<bpmn:task id="Hotel"',
   );
   expect(['valid', 'skipped']).toContain(xsdValidate(xml));
 });
@@ -365,4 +378,25 @@ test('process data inputs / outputs and black-box pools', async ({ page }) => {
   // A pool with content cannot become a black box.
   await el(page, 'Pool_service').click({ position: { x: 15, y: 60 } });
   await expect(inspector.getByLabel('Black-box pool')).toBeDisabled();
+});
+
+test('an annotation and a data object are associated with a sequence flow (PDF 95, Fig 10.68)', async ({
+  page,
+}) => {
+  await page.goto('/?sample=simple-process');
+  await expect(el(page, 'Flow_b')).toBeVisible();
+  await page.keyboard.press('0');
+  const flow = (await el(page, 'Flow_b').boundingBox())!;
+  const note = await place(page, 'TextAnnotation', { x: flow.x + 60, y: flow.y - 120 });
+  await connect(page, note, 'Flow_b');
+  const data = await place(page, 'DataObjectReference', { x: flow.x + 20, y: flow.y + 140 });
+  await connect(page, data, 'Flow_b');
+  const xml = await exportXml(page);
+  expect(xml).toMatch(
+    new RegExp(`<bpmn:association id="[^"]+" sourceRef="${note}" targetRef="Flow_b" />`),
+  );
+  expect(xml).toMatch(
+    new RegExp(`<bpmn:association id="[^"]+" sourceRef="${data}" targetRef="Flow_b" />`),
+  );
+  expect(['valid', 'skipped']).toContain(xsdValidate(xml));
 });

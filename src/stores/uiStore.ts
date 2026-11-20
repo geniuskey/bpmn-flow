@@ -16,6 +16,12 @@ interface UiState {
   analysisTab: AnalysisTab;
   commandPaletteOpen: boolean;
   snapToGrid: boolean;
+  /** Shape library panel next to the tools. */
+  libraryOpen: boolean;
+  /** Library groups the user collapsed. */
+  libraryCollapsed: string[];
+  toggleLibrary(open?: boolean): void;
+  toggleLibraryGroup(id: string): void;
   setCommandPaletteOpen(open: boolean): void;
   setSnapToGrid(on: boolean): void;
   setTheme(theme: ThemePreference): void;
@@ -64,6 +70,15 @@ export const useUiStore = create<UiState>()(
       analysisTab: 'overview',
       commandPaletteOpen: false,
       snapToGrid: true,
+      libraryOpen: true,
+      libraryCollapsed: [],
+      toggleLibrary: (open) => set((s) => ({ libraryOpen: open ?? !s.libraryOpen })),
+      toggleLibraryGroup: (id) =>
+        set((s) => ({
+          libraryCollapsed: s.libraryCollapsed.includes(id)
+            ? s.libraryCollapsed.filter((g) => g !== id)
+            : [...s.libraryCollapsed, id],
+        })),
       setCommandPaletteOpen: (commandPaletteOpen) => set({ commandPaletteOpen }),
       setSnapToGrid: (snapToGrid) => set({ snapToGrid }),
       setTheme: (theme) => set({ theme }),
@@ -86,7 +101,11 @@ export const useUiStore = create<UiState>()(
         inspectorWidth,
         analysisHeight,
         analysisTab,
+        libraryOpen,
+        libraryCollapsed,
       }) => ({
+        libraryOpen,
+        libraryCollapsed,
         theme,
         inspectorOpen,
         analysisOpen,

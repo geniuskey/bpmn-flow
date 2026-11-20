@@ -120,6 +120,10 @@
   stroke: var(--bf-muted);
   stroke-width: 1.4px;
 }
+.bf-icon-shaded {
+  fill: color-mix(in oklch, var(--bf-muted) 45%, transparent);
+  stroke: none;
+}
 .bf-icon-teeth {
   fill: none;
   stroke: var(--bf-muted);
@@ -163,15 +167,36 @@
   stroke-width: 1.25px;
 }
 
-/* Unsupported elements: visibly not part of the editable model. */
+/*
+ * Unsupported elements: visibly not part of the editable model. Never dashed
+ * or dotted, and no plain thin outline: those styles mean message flow,
+ * association, non-interrupting event or none event (BPMN 2.0.2 PDF 38, 70).
+ * Shapes are hatched; connections get a wide translucent halo.
+ */
 .bf-unsupported {
   stroke: var(--bf-unsupported);
-  stroke-dasharray: 5 3;
+  stroke-width: 2px;
   fill: color-mix(in oklch, var(--bf-unsupported) 8%, var(--bf-shape-fill));
   filter: none;
 }
+.bf-unsupported-hatch {
+  stroke: none;
+  pointer-events: none;
+}
+.bf-hatch-line {
+  stroke: color-mix(in oklch, var(--bf-unsupported) 45%, transparent);
+  stroke-width: 1.5px;
+}
 .bf-connection.bf-unsupported {
   fill: none;
+  stroke-width: 1.5px;
+}
+.bf-unsupported-halo {
+  fill: none;
+  stroke: color-mix(in oklch, var(--bf-unsupported) 30%, transparent);
+  stroke-width: 7px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .bf-caption {
   fill: var(--bf-unsupported);
@@ -381,11 +406,10 @@
   stroke: var(--bf-shape-stroke);
   stroke-width: 1.25px;
 }
-.bf-cancel-marker {
+.bf-timer-tick {
   fill: none;
   stroke: var(--bf-shape-stroke);
-  stroke-width: 3px;
-  stroke-linecap: round;
+  stroke-width: 1px;
 }
 .bf-conversation {
   stroke-width: 1.75px;
@@ -443,6 +467,83 @@
   stroke: var(--bf-connection);
   stroke-width: 1.2px;
 }
+/* Message drawn as a shape: a single thin line (PDF 91). */
+.bf-message-shape .bf-envelope-body,
+.bf-message-shape .bf-envelope-flap {
+  stroke: var(--bf-shape-stroke);
+  stroke-width: 1px;
+}
 .bf-non-initiating .bf-envelope-body {
   fill: color-mix(in oklch, var(--bf-shape-stroke) 22%, var(--bf-shape-fill));
+}
+
+/* Shape previews (palette, replace menu): drawn by the canvas renderer. */
+.bf-preview {
+  display: block;
+  overflow: visible;
+}
+.bf-preview * {
+  vector-effect: non-scaling-stroke;
+}
+/* Task icons are drawn in user units (the cog's teeth are a dash pattern, the
+   business-rule table has 4-unit rows): they scale with the preview, strokes
+   included, so they keep their shape. */
+.bf-preview .bf-icon,
+.bf-preview .bf-icon * {
+  vector-effect: none;
+}
+/* The event-based gateway's double ring stays two rings at preview size. */
+.bf-preview .bf-marker-thin {
+  stroke-width: 1px;
+}
+.bf-preview .bf-activity {
+  filter: none;
+}
+
+/* "Change type" popup menu (diagram-js) in the app's colors, light and dark. */
+.bf-canvas-host .djs-popup {
+  --popup-background-color: var(--popover, var(--card));
+  --popup-border-color: var(--border);
+  --popup-font-family: inherit;
+  --popup-font-size: 13px;
+  --popup-entry-title-color: var(--foreground);
+  --popup-description-color: var(--muted-foreground);
+  --popup-no-results-color: var(--muted-foreground);
+  --popup-header-group-divider-color: var(--border);
+  --popup-search-border-color: var(--border);
+  --popup-search-focus-background-color: var(--background);
+  --popup-search-focus-border-color: var(--ring);
+  --popup-entry-selected-background-color: var(--accent);
+  --popup-entry-selected-color: var(--accent-foreground, var(--foreground));
+  --popup-shadow-color: oklch(0 0 0 / 0.2);
+  color: var(--foreground);
+  border-radius: 10px;
+  max-width: 340px;
+}
+.bf-canvas-host .djs-popup-search input {
+  background: var(--background);
+  color: var(--foreground);
+}
+.bf-canvas-host .djs-popup .djs-popup-entry-icon {
+  width: auto;
+  height: auto;
+  font-size: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+}
+
+/* Choreography band message decorator (Table 12.33): dotted tether to the band. */
+.bf-band-tether {
+  fill: none;
+  stroke: var(--bf-shape-stroke);
+  stroke-width: 1px;
+  stroke-dasharray: 1 3;
+  stroke-linecap: round;
+}
+.bf-band-message .bf-envelope-body,
+.bf-band-message .bf-envelope-flap {
+  stroke: var(--bf-shape-stroke);
+  stroke-width: 1px;
 }

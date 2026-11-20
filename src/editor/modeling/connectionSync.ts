@@ -5,7 +5,71 @@ import { bo } from '../model';
 import type { ChangeLog } from './ChangeLog';
 import { allLanes, artifactContainerOf, processOf } from './semantic';
 import type { SemanticModel } from './semanticModel';
+import { addAssociationIo, removeAssociationIo } from './dataIo';
 import { TARGET_REF_PLACEHOLDER, collaborationOf, isArtifact, listProperty } from './semanticModel';
+
+/** The pool an interaction node belongs to: itself, or the participant of its process. */
+function participantOfNode(
+  el: ModdleElement | undefined,
+  collaboration: ModdleElement | undefined,
+): ModdleElement | undefined {
+  if (is(el, 'bpmn:Participant')) return el;
+  for (let p = el; p; p = p.$parent) {
+    if (is(p, 'bpmn:Process')) {
+      return getMany(collaboration, 'participants').find((x) => getRef(x, 'processRef') === p);
+    }
+  }
+  return undefined;
+}
+
+/** The conversation node and the participant (pool) a conversation link connects. */
+function conversationEnds(
+  source: ModdleElement | undefined,
+  target: ModdleElement | undefined,
+  collaboration: ModdleElement | undefined,
+): { node: ModdleElement; participant: ModdleElement } | undefined {
+  const node = is(source, 'bpmn:ConversationNode') ? source : target;
+  const other = node === source ? target : source;
+  const participant = participantOfNode(other, collaboration);
+  return node && is(node, 'bpmn:ConversationNode') && participant
+    ? { node, participant }
+    : undefined;
+}
+
+/**
+ * A conversation node's participantRefs are the pools its links reach (BPMN
+ * 2.0.2 §9.5.2, Table 9.10): a new link adds the pool, removing the last link
+ * to a pool removes it.
+ */
+function linkParticipant(flow: ModdleElement, log: ChangeLog): void {
+  const collaboration = flow.$parent;
+  const ends = conversationEnds(
+    getRef(flow, 'sourceRef'),
+    getRef(flow, 'targetRef'),
+    collaboration,
+  );
+  if (!ends) return;
+  const refs = ends.node.get('participantRef') as ModdleElement[];
+  if (!refs.includes(ends.participant)) log.insert(refs, ends.participant);
+}
+
+function unlinkParticipant(
+  flow: ModdleElement,
+  source: ModdleElement | undefined,
+  target: ModdleElement | undefined,
+  log: ChangeLog,
+): void {
+  const collaboration = flow.$parent;
+  const ends = conversationEnds(source, target, collaboration);
+  if (!ends) return;
+  const stillLinked = getMany(collaboration, 'conversationLinks').some((l) => {
+    if (l === flow) return false;
+    const other = conversationEnds(getRef(l, 'sourceRef'), getRef(l, 'targetRef'), collaboration);
+    return other?.node === ends.node && other.participant === ends.participant;
+  });
+  if (!stillLinked)
+    log.remove(ends.node.get('participantRef') as ModdleElement[], ends.participant);
+}
 
 export function addConnection(m: SemanticModel, connection: Connection, log: ChangeLog): void {
   const flow = bo(connection);
@@ -17,6 +81,7 @@ export function addConnection(m: SemanticModel, connection: Connection, log: Cha
     m.insertInto(collaborationOf(m.root()), 'conversationLinks', flow, log);
     log.set(flow, 'sourceRef', source);
     log.set(flow, 'targetRef', target);
+    linkParticipant(flow, log);
   } else if (is(flow, 'bpmn:MessageFlow')) {
     // Message flows live in the collaboration and have no incoming/outgoing refs.
     const collaboration = bo(m.root());
@@ -32,21 +97,34 @@ export function addConnection(m: SemanticModel, connection: Connection, log: Cha
     m.insertInto(container, 'artifacts', flow, log);
     log.set(flow, 'sourceRef', source);
     log.set(flow, 'targetRef', target);
+    // A compensation association points at the compensation activity (PDF 32, 63).
+    const isCompensation =
+      is(source, 'bpmn:BoundaryEvent') &&
+      getMany(source, 'eventDefinitions').some((d) => is(d, 'bpmn:CompensateEventDefinition')) &&
+      target.get('isForCompensation') === true;
+    if (isCompensation && !Object.prototype.hasOwnProperty.call(flow, 'associationDirection')) {
+      log.set(flow, 'associationDirection', 'One');
+    }
+    // A Message associated with a message flow is the message it carries
+    // (PDF 122, Fig 8.28), unless the flow already names one.
+    const [message, messageFlow] = is(source, 'bpmn:Message') ? [source, target] : [target, source];
+    if (
+      is(message, 'bpmn:Message') &&
+      is(messageFlow, 'bpmn:MessageFlow') &&
+      !getRef(messageFlow, 'messageRef')
+    ) {
+      log.set(messageFlow, 'messageRef', message);
+    }
   } else if (is(flow, 'bpmn:DataInputAssociation')) {
-    // data → activity. BPMN requires a target; use a placeholder property of the activity.
+    // data → activity or throw event: the target is a Data Input of the activity's
+    // I/O specification, or of the event (BPMN 2.0.2 PDF 253-254).
     m.insertInto(target, 'dataInputAssociations', flow, log);
     log.set(flow, 'sourceRef', [source]);
-    let property = getMany(target, 'properties').find((p) => p.name === TARGET_REF_PLACEHOLDER);
-    if (!property) {
-      property = m.created(connection, 'property', () =>
-        m.factory.createModdle('bpmn:Property', { name: TARGET_REF_PLACEHOLDER }),
-      );
-      m.insertInto(target, 'properties', property, log);
-    }
-    log.set(flow, 'targetRef', property);
+    log.set(flow, 'targetRef', addAssociationIo(m, connection, target, source, 'input', log));
   } else if (is(flow, 'bpmn:DataOutputAssociation')) {
-    // activity → data
+    // activity or catch event → data, from a Data Output of the activity / event.
     m.insertInto(source, 'dataOutputAssociations', flow, log);
+    log.set(flow, 'sourceRef', [addAssociationIo(m, connection, source, target, 'output', log)]);
     log.set(flow, 'targetRef', target);
   } else {
     const process = processOf(connection.parent) ?? source.$parent;
@@ -72,6 +150,7 @@ export function removeConnection(m: SemanticModel, connection: Connection, log: 
     return;
   }
   if (is(flow, 'bpmn:ConversationLink')) {
+    unlinkParticipant(flow, getRef(flow, 'sourceRef'), getRef(flow, 'targetRef'), log);
     if (owner) log.remove(owner.get('conversationLinks') as ModdleElement[], flow);
     return;
   }
@@ -86,13 +165,17 @@ export function removeConnection(m: SemanticModel, connection: Connection, log: 
     const stillUsed = getMany(owner, 'dataInputAssociations').some(
       (a) => getRef(a, 'targetRef') === property,
     );
+    // Files from other tools may target a placeholder property instead of a Data Input.
     if (property && property.name === TARGET_REF_PLACEHOLDER && !stillUsed) {
       log.remove(owner.get('properties') as ModdleElement[], property);
     }
+    removeAssociationIo(m, flow, owner, 'input', log);
     return;
   }
   if (is(flow, 'bpmn:DataOutputAssociation')) {
-    if (owner) log.remove(owner.get('dataOutputAssociations') as ModdleElement[], flow);
+    if (!owner) return;
+    log.remove(owner.get('dataOutputAssociations') as ModdleElement[], flow);
+    removeAssociationIo(m, flow, owner, 'output', log);
     return;
   }
   if (owner) log.remove(owner.get('flowElements') as ModdleElement[], flow);
@@ -112,13 +195,18 @@ export function reconnect(connection: Connection, log: ChangeLog): void {
   if (!flow || !newSource || !newTarget) return;
   const oldSource = getRef(flow, 'sourceRef');
   const oldTarget = getRef(flow, 'targetRef');
-  if (
-    is(flow, 'bpmn:MessageFlow') ||
-    is(flow, 'bpmn:Association') ||
-    is(flow, 'bpmn:ConversationLink')
-  ) {
+  if (is(flow, 'bpmn:ConversationLink')) {
+    unlinkParticipant(flow, oldSource, oldTarget, log);
     log.set(flow, 'sourceRef', newSource);
     log.set(flow, 'targetRef', newTarget);
+    linkParticipant(flow, log);
+    syncDrawnEnds(connection, log);
+    return;
+  }
+  if (is(flow, 'bpmn:MessageFlow') || is(flow, 'bpmn:Association')) {
+    log.set(flow, 'sourceRef', newSource);
+    log.set(flow, 'targetRef', newTarget);
+    syncDrawnEnds(connection, log);
     return;
   }
   if (oldSource !== newSource) {
@@ -133,6 +221,26 @@ export function reconnect(connection: Connection, log: ChangeLog): void {
     if (oldTarget) log.remove(oldTarget.get('incoming') as ModdleElement[], flow);
     log.insert(newTarget.get('incoming') as ModdleElement[], flow);
     log.set(flow, 'targetRef', newTarget);
+  }
+  syncDrawnEnds(connection, log);
+}
+
+/**
+ * BPMNEdge sourceElement / targetElement (PDF 405, 440) name the shapes an edge
+ * is drawn between. After a reconnect the edge is drawn between its model ends,
+ * so a value the file had follows the new end's shape.
+ */
+function syncDrawnEnds(connection: Connection, log: ChangeLog): void {
+  const di = (connection as { di?: ModdleElement }).di;
+  if (!di) return;
+  const ends = [
+    ['sourceElement', connection.source],
+    ['targetElement', connection.target],
+  ] as const;
+  for (const [key, end] of ends) {
+    if (!getRef(di, key)) continue;
+    const endDi = (end as { di?: ModdleElement } | undefined)?.di;
+    if (endDi && getRef(di, key) !== endDi) log.set(di, key, endDi);
   }
 }
 

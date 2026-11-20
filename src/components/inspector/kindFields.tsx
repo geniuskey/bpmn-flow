@@ -1,18 +1,34 @@
 /** Properties specific to one kind of element: gateways, data, activities, events, flows. */
-import { canHaveDefaultFlow, conditionAllowedFrom } from '@/bpmn/model/elements';
+import { canHaveDefaultFlow, humanizeType } from '@/bpmn/model/elements';
 import { messageVisibleKind } from '@/bpmn/di/di';
 import { getMany, getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
 import { isCollection } from '@/editor/renderer/visuals';
 import { loopKindOf, type LoopKind } from '@/editor/commands/LoopHandler';
-import { loopFieldValue, MI_BEHAVIORS } from '@/editor/commands/ElementDetailHandler';
+import {
+  dataObjectsFor,
+  loopFieldValue,
+  MI_BEHAVIORS,
+} from '@/editor/commands/ElementDetailHandler';
 import type { LoopField } from '@/editor/types';
+import { isExpandedShape } from '@/editor/model';
+import type { Element } from 'diagram-js/lib/model/Types';
 import { useEditorStore } from '@/stores/editorStore';
 import { Row, Section, TextField } from './fields';
 import { inputClass, standardAttributes } from './shared';
+import { NewCalledElementField, SequenceFlowFields } from './specFields';
 
 /** Instantiating gateways and compensation activities have no sequence flows there (PDF 268, 328). */
 function hasSequenceFlows(el: ModdleElement, key: 'incoming' | 'outgoing'): boolean {
   return getMany(el, key).some((f) => is(f, 'bpmn:SequenceFlow'));
+}
+
+/** Root elements a call activity may call: processes and global tasks. */
+function callableElements(activity: ModdleElement): ModdleElement[] {
+  let defs: ModdleElement | undefined = activity;
+  while (defs?.$parent) defs = defs.$parent;
+  return getMany(defs, 'rootElements').filter(
+    (r) => !!r.id && (is(r, 'bpmn:Process') || is(r, 'bpmn:GlobalTask')),
+  );
 }
 
 /** Event-based gateway: whether it instantiates the process, and how. */
@@ -71,6 +87,66 @@ export function EventGatewayFields({
   );
 }
 
+/**
+ * Sub-process kinds: expanded or collapsed (BPMN DI isExpanded; collapsed
+ * content is drawn in its own diagram), and for a plain sub-process whether
+ * it is an event sub-process (`triggeredByEvent`, BPMN 2.0.2 PDF 204).
+ */
+export function SubProcessFields({
+  elementId,
+  bo,
+  readOnly,
+}: {
+  elementId: string;
+  bo: ModdleElement;
+  readOnly: boolean;
+}) {
+  const controller = useEditorStore((s) => s.controller);
+  useEditorStore((s) => s.snapshot.revision);
+  const element = controller?.getElement(elementId) as Element | undefined;
+  const expanded = !!element && isExpandedShape(element);
+  const expandBlocker = controller?.expandBlocker(elementId, !expanded) ?? 'Not available.';
+  const eventSub = bo.get('triggeredByEvent') === true;
+  const eventPreset = { type: bo.$type, triggeredByEvent: !eventSub || undefined };
+  const eventBlocker =
+    is(bo, 'bpmn:SubProcess') && bo.$type === 'bpmn:SubProcess'
+      ? (controller?.replaceBlocker(elementId, eventPreset) ?? 'Not available.')
+      : null;
+  return (
+    <>
+      {bo.$type === 'bpmn:SubProcess' && (
+        <Row label="Event sub-process">
+          <label className="flex items-center gap-2" title={eventBlocker ?? undefined}>
+            <input
+              type="checkbox"
+              aria-label="Event sub-process"
+              checked={eventSub}
+              disabled={readOnly || !!eventBlocker}
+              onChange={() => controller?.replace(elementId, eventPreset)}
+            />
+            <span className="text-muted-foreground">Triggered by an event</span>
+          </label>
+        </Row>
+      )}
+      <Row label="Collapsed">
+        <label
+          className="flex items-center gap-2"
+          title={readOnly ? undefined : (expandBlocker ?? undefined)}
+        >
+          <input
+            type="checkbox"
+            aria-label="Collapsed"
+            checked={!expanded}
+            disabled={readOnly || !!expandBlocker}
+            onChange={() => controller?.setExpanded(elementId, !expanded)}
+          />
+          <span className="text-muted-foreground">Content in its own diagram</span>
+        </label>
+      </Row>
+    </>
+  );
+}
+
 /** Data object / input / output: collection marker. */
 export function CollectionField({
   elementId,
@@ -102,6 +178,154 @@ export function CollectionField({
   );
 }
 
+/** Data object / store reference, data input / output: state shown as "[state]" (PDF 234, 243). */
+export function DataStateField({
+  elementId,
+  bo,
+  readOnly,
+}: {
+  elementId: string;
+  bo: ModdleElement;
+  readOnly: boolean;
+}) {
+  const controller = useEditorStore((s) => s.controller);
+  const state = (getRef(bo, 'dataState')?.name as string | undefined) ?? '';
+  return (
+    <Row label="State">
+      <TextField
+        key={`${elementId}:state:${state}`}
+        label="Data state"
+        value={state}
+        disabled={readOnly}
+        placeholder="e.g. approved"
+        onCommit={(v) => controller?.updateElementDetail(elementId, { kind: 'dataState', name: v })}
+      />
+    </Row>
+  );
+}
+
+/**
+ * Data object reference: which Data Object it shows. Several references may
+ * show the same Data Object (PDF 234: "visual representations of Data
+ * Objects"); "New data object" gives the reference one of its own.
+ */
+export function DataObjectField({
+  elementId,
+  bo,
+  readOnly,
+}: {
+  elementId: string;
+  bo: ModdleElement;
+  readOnly: boolean;
+}) {
+  const controller = useEditorStore((s) => s.controller);
+  const current = getRef(bo, 'dataObjectRef');
+  const options = dataObjectsFor(bo);
+  const references = (d: ModdleElement) =>
+    getMany(d.$parent, 'flowElements').filter(
+      (f) => is(f, 'bpmn:DataObjectReference') && getRef(f, 'dataObjectRef') === d,
+    ).length;
+  return (
+    <Row label="Data object">
+      <select
+        aria-label="Data object"
+        className={inputClass}
+        value={current?.id ?? ''}
+        disabled={readOnly}
+        onChange={(e) =>
+          controller?.updateElementDetail(elementId, {
+            kind: 'dataObject',
+            id: e.target.value === '__new' ? null : e.target.value,
+          })
+        }
+      >
+        {!current && <option value="">(none)</option>}
+        {options.map((d) => {
+          const n = references(d);
+          return (
+            <option key={d.id} value={d.id}>
+              {`${d.name || d.id}${n > 1 ? ` (${n} references)` : ''}`}
+            </option>
+          );
+        })}
+        <option value="__new">New data object</option>
+      </select>
+    </Row>
+  );
+}
+
+/** Lane: what it partitions by, a resource such as a role or department (Table 10.135). */
+export function LanePartitionField({
+  elementId,
+  bo,
+  readOnly,
+}: {
+  elementId: string;
+  bo: ModdleElement;
+  readOnly: boolean;
+}) {
+  const controller = useEditorStore((s) => s.controller);
+  const ref = getRef(bo, 'partitionElementRef');
+  const value = (ref?.name as string | undefined) ?? ref?.id ?? '';
+  let definitions: ModdleElement | undefined = bo;
+  while (definitions?.$parent) definitions = definitions.$parent;
+  const resources = getMany(definitions, 'rootElements').filter(
+    (r) => is(r, 'bpmn:Resource') && r.name,
+  );
+  // An imported partitionElementRef to something else than a named resource stays as it is.
+  const editable = !ref || (is(ref, 'bpmn:Resource') && !!ref.name);
+  return (
+    <Row label="Partition">
+      <TextField
+        key={`${elementId}:partition:${value}`}
+        label="Partition element"
+        value={value}
+        disabled={readOnly || !editable}
+        placeholder="Resource, e.g. Sales"
+        list={`${elementId}-resources`}
+        onCommit={(v) => controller?.updateElementDetail(elementId, { kind: 'partition', name: v })}
+      />
+      <datalist id={`${elementId}-resources`}>
+        {resources.map((r) => (
+          <option key={r.id} value={r.name} />
+        ))}
+      </datalist>
+    </Row>
+  );
+}
+
+/** Exclusive gateway: the optional "X" marker (DI isMarkerVisible, Table 12.23). */
+export function GatewayMarkerField({
+  elementId,
+  di,
+  readOnly,
+}: {
+  elementId: string;
+  di: ModdleElement | undefined;
+  readOnly: boolean;
+}) {
+  const controller = useEditorStore((s) => s.controller);
+  return (
+    <Row label="Marker">
+      <label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          aria-label="Show X marker"
+          checked={di?.get('isMarkerVisible') === true}
+          disabled={readOnly || !di}
+          onChange={(e) =>
+            controller?.updateElementDetail(elementId, {
+              kind: 'markerVisible',
+              value: e.target.checked,
+            })
+          }
+        />
+        <span className="text-muted-foreground">Show the “X” inside the diamond</span>
+      </label>
+    </Row>
+  );
+}
+
 /** Activity: loop / multi-instance and compensation. */
 export function ActivityFields({
   elementId,
@@ -124,8 +348,41 @@ export function ActivityFields({
             value={String(bo.get('calledElement') ?? '')}
             disabled={readOnly}
             placeholder="Process or global task id"
+            list={`${elementId}-callable`}
             onCommit={(v) => controller?.updateProperties(elementId, { calledElement: v })}
           />
+          {/* Processes and global tasks of this file (BPMN 2.0.2 §10.3.5). */}
+          <datalist id={`${elementId}-callable`}>
+            {callableElements(bo).map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name ? `${r.name} (${humanizeType(r.$type)})` : humanizeType(r.$type)}
+              </option>
+            ))}
+          </datalist>
+        </Row>
+      )}
+      {is(bo, 'bpmn:CallActivity') && (
+        <NewCalledElementField elementId={elementId} readOnly={readOnly} />
+      )}
+      {is(bo, 'bpmn:ReceiveTask') && (
+        <Row label="Instantiate">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              aria-label="Instantiate"
+              checked={bo.get('instantiate') === true}
+              // An instantiating receive task has no incoming sequence flows (BPMN 2.0.2 PDF 189).
+              disabled={
+                readOnly || (bo.get('instantiate') !== true && hasSequenceFlows(bo, 'incoming'))
+              }
+              onChange={(e) =>
+                controller?.updateProperties(elementId, {
+                  instantiate: e.target.checked || undefined,
+                })
+              }
+            />
+            <span className="text-muted-foreground">Starts the process</span>
+          </label>
         </Row>
       )}
       <Row label="Loop">
@@ -276,7 +533,17 @@ export function InterruptingField({
 }
 
 /** Attributes FlowProperties edits itself (not repeated as read-only rows). */
-const FLOW_FIELDS = ['messageRef', 'associationDirection', 'calledElement'];
+const FLOW_FIELDS = [
+  'messageRef',
+  'associationDirection',
+  'calledElement',
+  'isImmediate',
+  'gatewayDirection',
+  'textFormat',
+  'processType',
+  'isClosed',
+  'isExecutable',
+];
 
 /** Connection ends, condition and default flow, and the standard attributes that are set. */
 export function FlowProperties({
@@ -291,24 +558,14 @@ export function FlowProperties({
   supported: boolean;
 }) {
   const controller = useEditorStore((s) => s.controller);
-  const condition = getRef<ModdleElement & { body?: string }>(bo, 'conditionExpression');
   const source = getRef(bo, 'sourceRef');
   const target = getRef(bo, 'targetRef');
   return (
     <Section title="BPMN properties">
       {source && <Row label="Source">{source.name || source.id}</Row>}
       {target && <Row label="Target">{target.name || target.id}</Row>}
-      {is(bo, 'bpmn:SequenceFlow') && (conditionAllowedFrom(source) || !!condition) && (
-        <Row label="Condition">
-          <TextField
-            key={`${elementId}:cond:${condition?.body ?? ''}`}
-            label="Condition expression"
-            value={condition?.body ?? ''}
-            disabled={readOnly || !supported}
-            placeholder="e.g. ${approved}"
-            onCommit={(v) => controller?.updateCondition(elementId, v)}
-          />
-        </Row>
+      {is(bo, 'bpmn:SequenceFlow') && (
+        <SequenceFlowFields elementId={elementId} bo={bo} readOnly={readOnly || !supported} />
       )}
       {source && is(bo, 'bpmn:SequenceFlow') && canHaveDefaultFlow(source) && (
         <Row label="Default flow">

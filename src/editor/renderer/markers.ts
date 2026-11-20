@@ -1,6 +1,7 @@
 /** Markers and icons drawn inside shapes: gateway and event markers, activity markers, task type icons. */
 import { getMany, getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
 import type { BpmnShape } from '../model';
+import { eventTriggers } from '@/bpmn/model/elements';
 import { isExpanded, isThrowing } from './visuals';
 import { el, path, pentagonPath } from './svg';
 
@@ -21,11 +22,13 @@ export function drawGatewayMarker(gfx: SVGElement, shape: BpmnShape): void {
       'bf-marker',
     );
   } else if (is(bo, 'bpmn:EventBasedGateway')) {
-    // Event-based: double ring + pentagon. Instantiating: single ring + pentagon,
-    // or single ring + open cross for the parallel variant.
+    // Event-based: double thin ring (as an intermediate event) + pentagon.
+    // Instantiating: single ring + pentagon, or single ring + open cross for
+    // the parallel variant (BPMN 2.0.2 PDF 297-300). The rings are far enough
+    // apart to stay two rings in the small palette previews.
     const instantiate = bo.get('instantiate') === true;
-    el(gfx, 'circle', { cx, cy, r: s * 1.2 }, 'bf-marker-thin');
-    if (!instantiate) el(gfx, 'circle', { cx, cy, r: s * 0.95 }, 'bf-marker-thin');
+    el(gfx, 'circle', { cx, cy, r: s * 1.3 }, 'bf-marker-thin');
+    if (!instantiate) el(gfx, 'circle', { cx, cy, r: s * 0.9 }, 'bf-marker-thin');
     if (instantiate && bo.get('eventGatewayType') === 'Parallel') {
       const a = s * 0.75;
       const b = s * 0.22;
@@ -50,7 +53,7 @@ export function drawGatewayMarker(gfx: SVGElement, shape: BpmnShape): void {
 
 /** Marker for the (single) event definition: message envelope, timer clock, terminate dot. */
 export function drawEventMarker(gfx: SVGElement, shape: BpmnShape): void {
-  const defs = getMany(shape.businessObject, 'eventDefinitions');
+  const defs = eventTriggers(shape.businessObject);
   const def = defs[0];
   if (!def) return;
   const cx = shape.width / 2;
@@ -86,7 +89,20 @@ export function drawEventMarker(gfx: SVGElement, shape: BpmnShape): void {
       thrown ? 'bf-event-marker-inverse' : 'bf-event-marker',
     );
   } else if (is(def, 'bpmn:TimerEventDefinition')) {
-    el(gfx, 'circle', { cx, cy, r: r * 0.62 }, 'bf-event-marker');
+    // Clock face with twelve hour ticks and two hands (Fig 10.96, PDF 303).
+    const face = r * 0.62;
+    el(gfx, 'circle', { cx, cy, r: face }, 'bf-event-marker');
+    const ticks: string[] = [];
+    for (let h = 0; h < 12; h++) {
+      const a = (h * Math.PI) / 6;
+      const [sin, cos] = [Math.sin(a), Math.cos(a)];
+      const inner = face * (h % 3 === 0 ? 0.7 : 0.8);
+      const f = (n: number) => Math.round(n * 100) / 100;
+      ticks.push(
+        `M${f(cx + sin * inner)},${f(cy - cos * inner)}L${f(cx + sin * face)},${f(cy - cos * face)}`,
+      );
+    }
+    path(gfx, ticks.join(''), 'bf-timer-tick');
     path(gfx, `M${cx},${cy - r * 0.45}V${cy}L${cx + r * 0.32},${cy + r * 0.18}`, 'bf-event-marker');
   } else if (is(def, 'bpmn:TerminateEventDefinition')) {
     el(gfx, 'circle', { cx, cy, r: r * 0.55 }, 'bf-event-marker-filled');
@@ -126,22 +142,15 @@ export function drawEventMarker(gfx: SVGElement, shape: BpmnShape): void {
       cls,
     );
   } else if (is(def, 'bpmn:CancelEventDefinition')) {
+    // The same X outline for both: filled when thrown (end event), unfilled
+    // when caught (boundary event) (Fig 10.74, PDF 292; Table 12.22).
     const t = r * 0.42;
-    if (thrown) {
-      // Throwing markers are filled (Table 12.22): a solid X shape.
-      const w = t * 0.32;
-      path(
-        gfx,
-        `M${cx - t},${cy - t + w}L${cx - t + w},${cy - t}L${cx},${cy - w}L${cx + t - w},${cy - t}L${cx + t},${cy - t + w}L${cx + w},${cy}L${cx + t},${cy + t - w}L${cx + t - w},${cy + t}L${cx},${cy + w}L${cx - t + w},${cy + t}L${cx - t},${cy + t - w}L${cx - w},${cy}z`,
-        'bf-event-marker-filled',
-      );
-    } else {
-      path(
-        gfx,
-        `M${cx - t},${cy - t}L${cx + t},${cy + t}M${cx + t},${cy - t}L${cx - t},${cy + t}`,
-        'bf-cancel-marker',
-      );
-    }
+    const w = t * 0.32;
+    path(
+      gfx,
+      `M${cx - t},${cy - t + w}L${cx - t + w},${cy - t}L${cx},${cy - w}L${cx + t - w},${cy - t}L${cx + t},${cy - t + w}L${cx + w},${cy}L${cx + t},${cy + t - w}L${cx + t - w},${cy + t}L${cx},${cy + w}L${cx - t + w},${cy + t}L${cx - t},${cy + t - w}L${cx - w},${cy}z`,
+      thrown ? 'bf-event-marker-filled' : 'bf-event-marker',
+    );
   } else if (is(def, 'bpmn:LinkEventDefinition')) {
     const t = r * 0.5;
     path(
@@ -286,7 +295,9 @@ export function drawTaskIcon(gfx: SVGElement, type: string, bo?: ModdleElement):
       return;
     }
     case 'bpmn:BusinessRuleTask': {
+      // A small table with a shaded header row (BPMN 2.0.2 Fig 10.19).
       const g = el(gfx, 'g', { transform: 'translate(8, 9)' }, 'bf-icon');
+      path(g, 'M0,0h16v4h-16z', 'bf-icon-shaded');
       path(g, 'M0,0h16v12h-16z', 'bf-icon-stroke');
       path(g, 'M0,4h16M0,8h16M5,4v8', 'bf-icon-stroke');
       return;

@@ -3,12 +3,16 @@
  * Waypoints are cropped to the shape outlines so DI ends on the shape border.
  */
 import BaseLayouter from 'diagram-js/lib/layout/BaseLayouter';
-import { getElementLineIntersection, getMid } from 'diagram-js/lib/layout/LayoutUtil';
+import {
+  getConnectionMid,
+  getElementLineIntersection,
+  getMid,
+} from 'diagram-js/lib/layout/LayoutUtil';
 import { repairConnection, withoutRedundantPoints } from 'diagram-js/lib/layout/ManhattanLayout';
 import type { Connection, Element, Shape } from 'diagram-js/lib/model/Types';
 import type { Point } from '@/bpmn/di/di';
 import { is } from '@/bpmn/model/moddle';
-import { bo } from '../model';
+import { bo, isConnection } from '../model';
 import { outlinePath, polylinePath } from '../renderer/geometry';
 import { outlineFor } from '../renderer/visuals';
 
@@ -39,6 +43,9 @@ export default class BpmnFlowLayouter extends BaseLayouter {
     const source = (hints.source ?? connection.source) as Shape | undefined;
     const target = (hints.target ?? connection.target) as Shape | undefined;
     if (!source || !target) return connection.waypoints;
+    if (isConnection(source) || isConnection(target)) {
+      return layoutToConnection(source, target);
+    }
 
     const start = getMid(source);
     const end = getMid(target);
@@ -51,4 +58,20 @@ export default class BpmnFlowLayouter extends BaseLayouter {
     }) as Point[];
     return cropWaypoints(withoutRedundantPoints(raw) as Point[], source, target);
   }
+}
+
+/**
+ * An association ending at a sequence or message flow (BPMN 2.0.2 PDF 95, Fig
+ * 10.68): a straight line from the shape to the middle of the flow.
+ */
+function layoutToConnection(source: Element, target: Element): Point[] {
+  const end = (el: Element) =>
+    isConnection(el) ? getConnectionMid(el as Connection) : getMid(el as Shape);
+  const points = [end(source), end(target)];
+  const line = polylinePath(points);
+  const crop = (el: Element, first: boolean, fallback: Point) =>
+    isConnection(el)
+      ? fallback
+      : (getElementLineIntersection(shapeOutline(el as Shape), line, first) ?? fallback);
+  return [crop(source, true, points[0]!), crop(target, false, points[1]!)];
 }

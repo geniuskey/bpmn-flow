@@ -68,7 +68,9 @@ export function analyze(definitions: ModdleElement): AnalysisResult {
         });
       }
       // Sub-processes are analyzed as their own scope.
-      if (is(n.element, 'bpmn:SubProcess')) visit(n.element);
+      if (is(n.element, 'bpmn:SubProcess') || is(n.element, 'bpmn:SubChoreography')) {
+        visit(n.element);
+      }
     }
   };
   for (const process of processesOf(definitions)) visit(process);

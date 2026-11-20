@@ -5,6 +5,7 @@ import { bo, type BpmnData } from '../model';
 import type { ChangeLog } from './ChangeLog';
 import { allLanes, artifactContainerOf, processOf } from './semantic';
 import { bandsOf } from './choreography';
+import type { LanePlacement } from './laneLayout';
 import type { SemanticModel } from './semanticModel';
 import {
   choreographyOf,
@@ -24,6 +25,11 @@ export function addShape(m: SemanticModel, shape: Shape, log: ChangeLog): void {
     }
     m.insertInto(collaboration, 'participants', element, log);
     let process = getRef(element, 'processRef');
+    // A black-box pool (palette preset) has no process (BPMN 2.0.2 PDF 113).
+    if (!process && (shape as Shape & { blackBox?: boolean }).blackBox) {
+      m.addDi(shape, log);
+      return;
+    }
     if (!process) {
       process = m.created(shape, 'process', () =>
         m.factory.createModdle('bpmn:Process', { isExecutable: false }),
@@ -32,16 +38,13 @@ export function addShape(m: SemanticModel, shape: Shape, log: ChangeLog): void {
     }
     m.ensureRootElement(process, log);
   } else if (is(element, 'bpmn:Lane')) {
-    const process = processOf(shape.parent);
-    if (!process) throw new Error('A lane needs a pool.');
-    let laneSet = getMany(process, 'laneSets')[0];
-    if (!laneSet) {
-      laneSet = m.created(shape, 'laneSet', () => m.factory.createModdle('bpmn:LaneSet'));
-      m.insertInto(process, 'laneSets', laneSet, log);
-    }
-    m.insertInto(laneSet, 'lanes', element, log);
+    addLane(m, shape, element, log);
   } else if (is(element, 'bpmn:ConversationNode')) {
     m.insertInto(collaborationOf(m.root()), 'conversations', element, log);
+    // The collaboration a call conversation preset calls becomes a root element.
+    const called = (shape as Shape & { bfCreated?: Record<string, ModdleElement> }).bfCreated
+      ?.calledElement;
+    if (called) m.ensureRootElement(called, log);
   } else if (is(element, 'bpmn:TextAnnotation') || is(element, 'bpmn:Group')) {
     const container = artifactContainerOf(shape.parent, m.root());
     if (!container) throw new Error('No container for the artifact.');
@@ -57,6 +60,9 @@ export function addShape(m: SemanticModel, shape: Shape, log: ChangeLog): void {
       m.ensureRootElement(category, log);
       log.set(element, 'categoryValueRef', value);
     }
+  } else if (is(element, 'bpmn:Message')) {
+    // A Message is a root element; its envelope shape is only DI (PDF 121-122).
+    m.ensureRootElement(element, log);
   } else if (isProcessDataIoType(element.$type)) {
     addDataIo(m, shape, element, log);
   } else {
@@ -64,12 +70,23 @@ export function addShape(m: SemanticModel, shape: Shape, log: ChangeLog): void {
     if (!container) {
       throw new Error('Flow elements must be placed inside a process, pool or sub-process.');
     }
-    if (is(element, 'bpmn:DataObjectReference') && !getRef(element, 'dataObjectRef')) {
-      const dataObject = m.created(shape, 'dataObject', () =>
-        m.factory.createModdle('bpmn:DataObject'),
-      );
+    const ownDataObject = getRef(element, 'dataObjectRef');
+    // A new reference gets its data object; a preset may have created it already (collection).
+    if (is(element, 'bpmn:DataObjectReference') && (!ownDataObject || !ownDataObject.$parent)) {
+      const dataObject =
+        ownDataObject ??
+        m.created(shape, 'dataObject', () => m.factory.createModdle('bpmn:DataObject'));
       m.insertInto(container, 'flowElements', dataObject, log);
       log.set(element, 'dataObjectRef', dataObject);
+    }
+    // The global task a call activity preset calls becomes a root element.
+    const calledGlobal = (shape as Shape & { bfCreated?: Record<string, ModdleElement> }).bfCreated
+      ?.calledElement;
+    if (
+      (is(element, 'bpmn:CallActivity') || is(element, 'bpmn:CallChoreography')) &&
+      calledGlobal
+    ) {
+      m.ensureRootElement(calledGlobal, log);
     }
     if (is(element, 'bpmn:DataStoreReference') && !getRef(element, 'dataStoreRef')) {
       const dataStore = m.created(shape, 'dataStore', () =>
@@ -117,6 +134,14 @@ export function removeShape(m: SemanticModel, shape: Shape, log: ChangeLog): voi
     }
     return;
   }
+  if (is(element, 'bpmn:Message')) {
+    // The Message stays while a flow, event, task or another diagram still uses it.
+    if (!messageInUse(m, element)) {
+      log.remove(m.definitions.get('rootElements') as ModdleElement[], element);
+      m.removeForeignDi([element], log);
+    }
+    return;
+  }
   if (isProcessDataIoType(element.$type)) {
     removeDataIo(element, log);
     m.removeForeignDi([element], log);
@@ -135,6 +160,37 @@ export function removeShape(m: SemanticModel, shape: Shape, log: ChangeLog): voi
     }
   }
   m.removeForeignDi([element], log);
+}
+
+/**
+ * A lane goes into the lane set of its process, or into the childLaneSet of
+ * its parent lane (nested lanes, PDF 334), created when missing, right after
+ * the lane it was added after.
+ */
+function addLane(m: SemanticModel, shape: Shape, lane: ModdleElement, log: ChangeLog): void {
+  const placement = shape as Shape & LanePlacement;
+  const parent = placement.bfParentLane;
+  let laneSet: ModdleElement | undefined;
+  if (parent) {
+    laneSet = getRef(parent, 'childLaneSet');
+    if (!laneSet) {
+      laneSet = m.created(shape, 'laneSet', () => m.factory.createModdle('bpmn:LaneSet'));
+      log.setParent(laneSet, parent);
+      log.set(parent, 'childLaneSet', laneSet);
+    }
+  } else {
+    const process = processOf(shape.parent);
+    if (!process) throw new Error('A lane needs a pool.');
+    laneSet = placement.bfAfterLane?.$parent ?? getMany(process, 'laneSets')[0];
+    if (!laneSet) {
+      laneSet = m.created(shape, 'laneSet', () => m.factory.createModdle('bpmn:LaneSet'));
+      m.insertInto(process, 'laneSets', laneSet, log);
+    }
+  }
+  const lanes = laneSet.get('lanes') as ModdleElement[];
+  const after = placement.bfAfterLane ? lanes.indexOf(placement.bfAfterLane) : -1;
+  log.insert(lanes, lane, after >= 0 ? after + 1 : lanes.length);
+  log.setParent(lane, laneSet);
 }
 
 /**
@@ -320,6 +376,18 @@ export function removeUnusedDataStore(
     if (el !== reference && getRef(el, 'dataStoreRef') === dataStore) used = true;
   });
   if (!used) log.remove(m.definitions.get('rootElements') as ModdleElement[], dataStore);
+}
+
+const MESSAGE_REFS = ['messageRef', 'inMessageRef', 'outMessageRef'];
+
+/** Whether anything references the Message or another diagram draws it. */
+function messageInUse(m: SemanticModel, message: ModdleElement): boolean {
+  let used = false;
+  walkContainment(m.definitions, (el) => {
+    if (MESSAGE_REFS.some((key) => getRef(el, key) === message)) used = true;
+    if (is(el, 'bpmndi:BPMNShape') && getRef(el, 'bpmnElement') === message) used = true;
+  });
+  return used;
 }
 
 export function removeUnusedCategory(m: SemanticModel, group: ModdleElement, log: ChangeLog): void {

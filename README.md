@@ -101,7 +101,7 @@ pushes to `main` (enable Pages → “GitHub Actions” in the repository settin
 ## Documentation
 
 - [Architecture](docs/architecture.md)
-- [BPMN support matrix](docs/bpmn-support.md) · [BPMN 2.0.2 alignment](docs/spec-conformance.md)
+- [BPMN support matrix](docs/bpmn-support.md) · [BPMN 2.0.2 alignment](docs/spec-conformance.md) · [notation checklist](docs/notation-checklist.md)
 - [Compatibility and data-loss policy](docs/compatibility.md)
 - [Process analysis](docs/analysis.md)
 - [Library package](docs/library.md)

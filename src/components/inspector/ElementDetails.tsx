@@ -11,21 +11,43 @@ import {
 } from '@/bpmn/model/elements';
 import { getMany, getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
 import { Badge } from '@/components/ui/badge';
-import type { BpmnData } from '@/editor/model';
+import { canExpand, type BpmnData } from '@/editor/model';
 import { alternativeTypes } from '@/editor/commands/ChangeTypeHandler';
+import { hasDataState } from '@/editor/commands/ElementDetailHandler';
 import { useEditorStore } from '@/stores/editorStore';
 import { MetadataSection } from './MetadataSection';
 import { EventDetailFields, EventTriggerFields } from './eventFields';
 import { NameField, Row, Section, TextField } from './fields';
-import { BlackBoxField, ChoreographyFields } from './participantFields';
+import {
+  BlackBoxField,
+  BoundlessPoolField,
+  CallConversationFields,
+  ChoreographyFields,
+  MultiplicityField,
+  PoolBoundaryField,
+} from './participantFields';
 import { inputClass, standardAttributes, triggerLabel } from './shared';
 import {
   ActivityFields,
   CollectionField,
+  DataObjectField,
+  DataStateField,
   EventGatewayFields,
+  GatewayMarkerField,
   FlowProperties,
   InterruptingField,
+  LanePartitionField,
+  SubProcessFields,
 } from './kindFields';
+import {
+  CategoryValueFields,
+  CompensationFields,
+  EventCodeField,
+  GatewayFields,
+  GroupFields,
+  ProcessFields,
+  TextFormatField,
+} from './specFields';
 
 export function ElementDetails({ id }: { id: string }) {
   const controller = useEditorStore((s) => s.controller);
@@ -42,7 +64,12 @@ export function ElementDetails({ id }: { id: string }) {
   const bounds = readBounds(element.di);
   const source = getRef(bo, 'sourceRef');
   const target = getRef(bo, 'targetRef');
-  const alternatives = supported ? alternativeTypes(bo.$type) : [];
+  // Only types the element may become where it is (start events have no incoming flows, ...).
+  const alternatives = !supported
+    ? []
+    : readOnly
+      ? alternativeTypes(bo.$type)
+      : (controller?.typeChangeOptions(id) ?? []);
   // Triggers allowed where the event is, plus the ones it has (so they can be removed).
   const eventDefs =
     supported && is(bo, 'bpmn:Event')
@@ -107,14 +134,62 @@ export function ElementDetails({ id }: { id: string }) {
         {is(bo, 'bpmn:Participant') && is(bo.$parent, 'bpmn:Collaboration') && (
           <BlackBoxField elementId={element.id} pool={bo} readOnly={readOnly} />
         )}
+        {is(bo, 'bpmn:Participant') &&
+          is(bo.$parent, 'bpmn:Collaboration') &&
+          !is(bo.$parent, 'bpmn:Choreography') && (
+            <MultiplicityField elementId={element.id} pool={bo} readOnly={readOnly} />
+          )}
+        {is(bo, 'bpmn:Participant') &&
+          is(bo.$parent, 'bpmn:Collaboration') &&
+          !is(bo.$parent, 'bpmn:Choreography') &&
+          getRef(bo, 'processRef') && (
+            <PoolBoundaryField elementId={element.id} readOnly={readOnly} />
+          )}
+        {is(bo, 'bpmn:Collaboration') && !is(bo, 'bpmn:Choreography') && (
+          <BoundlessPoolField readOnly={readOnly} />
+        )}
+        {supported && is(bo, 'bpmn:Lane') && (
+          <LanePartitionField elementId={element.id} bo={bo} readOnly={readOnly} />
+        )}
+        {supported && is(bo, 'bpmn:DataObjectReference') && (
+          <DataObjectField elementId={element.id} bo={bo} readOnly={readOnly} />
+        )}
         {supported &&
           ((is(bo, 'bpmn:DataObjectReference') && getRef(bo, 'dataObjectRef')) ||
             is(bo, 'bpmn:DataInput') ||
             is(bo, 'bpmn:DataOutput')) && (
             <CollectionField elementId={element.id} bo={bo} readOnly={readOnly} />
           )}
+        {supported && hasDataState(bo) && (
+          <DataStateField elementId={element.id} bo={bo} readOnly={readOnly} />
+        )}
+        {supported && is(bo, 'bpmn:Gateway') && (
+          <GatewayFields elementId={element.id} bo={bo} readOnly={readOnly} />
+        )}
+        {supported && is(bo, 'bpmn:TextAnnotation') && (
+          <TextFormatField elementId={element.id} bo={bo} readOnly={readOnly} />
+        )}
+        {supported && is(bo, 'bpmn:Group') && (
+          <GroupFields elementId={element.id} bo={bo} readOnly={readOnly} />
+        )}
+        {(is(bo, 'bpmn:Process') || is(bo, 'bpmn:Participant')) && (
+          <ProcessFields elementId={element.id} bo={bo} readOnly={readOnly} />
+        )}
+        {supported && is(bo, 'bpmn:ExclusiveGateway') && (
+          <GatewayMarkerField
+            elementId={element.id}
+            di={(element as { di?: ModdleElement }).di}
+            readOnly={readOnly}
+          />
+        )}
         {supported && is(bo, 'bpmn:ChoreographyActivity') && (
           <ChoreographyFields elementId={element.id} activity={bo} readOnly={readOnly} />
+        )}
+        {supported && is(bo, 'bpmn:CallConversation') && (
+          <CallConversationFields elementId={element.id} bo={bo} readOnly={readOnly} />
+        )}
+        {supported && canExpand(bo) && (
+          <SubProcessFields elementId={element.id} bo={bo} readOnly={readOnly} />
         )}
         {supported && is(bo, 'bpmn:Activity') && (
           <ActivityFields elementId={element.id} bo={bo} readOnly={readOnly} />
@@ -130,6 +205,32 @@ export function ElementDetails({ id }: { id: string }) {
               readOnly={readOnly}
             />
           ))}
+        {eventDefs.length > 0 &&
+          getMany(bo, 'eventDefinitions').map((definition, index) =>
+            is(definition, 'bpmn:ErrorEventDefinition') ||
+            is(definition, 'bpmn:EscalationEventDefinition') ? (
+              <EventCodeField
+                key={`code:${index}`}
+                elementId={element.id}
+                definition={definition}
+                definitionIndex={index}
+                readOnly={readOnly}
+              />
+            ) : is(definition, 'bpmn:CompensateEventDefinition') &&
+              (is(bo, 'bpmn:IntermediateThrowEvent') || is(bo, 'bpmn:EndEvent')) ? (
+              <CompensationFields
+                key={`compensate:${index}`}
+                elementId={element.id}
+                event={bo}
+                definition={definition}
+                definitionIndex={index}
+                readOnly={readOnly}
+              />
+            ) : null,
+          )}
+        {supported && is(bo, 'bpmn:FlowElement') && (
+          <CategoryValueFields elementId={element.id} bo={bo} readOnly={readOnly} />
+        )}
         {(is(bo, 'bpmn:BoundaryEvent') ||
           (is(bo, 'bpmn:StartEvent') && bo.$parent?.get('triggeredByEvent') === true)) &&
           !interruptingIsFixed(bo) && (

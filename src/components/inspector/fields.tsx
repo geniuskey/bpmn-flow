@@ -51,6 +51,7 @@ export function TextField({
   disabled,
   multiline,
   placeholder,
+  list,
   onCommit,
 }: {
   label: string;
@@ -58,6 +59,8 @@ export function TextField({
   disabled: boolean;
   multiline?: boolean;
   placeholder?: string;
+  /** Id of a <datalist> with suggestions (single-line fields). */
+  list?: string;
   onCommit: (value: string) => void;
 }) {
   const draft = useDraft(value, onCommit);
@@ -75,6 +78,6 @@ export function TextField({
       onKeyDown={(e) => draft.onKeyDown(e, true)}
     />
   ) : (
-    <input {...props} className={inputClass} />
+    <input {...props} list={list} className={inputClass} />
   );
 }

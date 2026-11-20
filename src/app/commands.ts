@@ -164,6 +164,17 @@ export const COMMANDS: AppCommand[] = [
     },
   },
   {
+    id: 'arrange.addSubLane',
+    label: 'Add sub-lane',
+    group: 'Arrange',
+    editing: true,
+    selection: true,
+    run: (c) => {
+      const id = useEditorStore.getState().snapshot.selection[0];
+      if (id) c.addLane(id, true);
+    },
+  },
+  {
     id: 'tools.select',
     label: 'Select tool',
     group: 'Tools',

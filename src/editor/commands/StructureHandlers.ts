@@ -2,7 +2,7 @@
  * Commands that change BPMN structure beyond a single element:
  * - `root.toCollaboration`: turns a process diagram into a collaboration
  * - `lanes.updateMembership`: recomputes `flowNodeRef` from node positions
- * - `lane.add`: inserts a lane into a pool, growing the pool
+ * - `lane.add`: inserts a lane into a pool or lane (sub-lane), growing the pool
  * - `pool.setBlackBox`: turns an empty pool into a black-box pool (no process) or back
  */
 import type Canvas from 'diagram-js/lib/core/Canvas';
@@ -12,14 +12,29 @@ import { getMany, getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
 import { bo, childrenOf, type BpmnData } from '../model';
 import type BpmnElementFactory from '../modeling/BpmnElementFactory';
 import { ChangeLog } from '../modeling/ChangeLog';
-import { center, contains, isFlowNodeShape, lanesOf, participantOf } from '../modeling/semantic';
+import { center, contains, isFlowNodeShape, lanesOf } from '../modeling/semantic';
+import {
+  along,
+  boundsOf,
+  childLanes,
+  contentBounds,
+  cross,
+  crossDelta,
+  crossPosition,
+  end,
+  HEADER,
+  isHorizontal,
+  laneAncestors,
+  laneContainer,
+  type LanePlacement,
+} from '../modeling/laneLayout';
 
 export const ROOT_TO_COLLABORATION = 'root.toCollaboration';
 export const UPDATE_LANES = 'lanes.updateMembership';
 export const ADD_LANE = 'lane.add';
 export const SET_POOL_BLACK_BOX = 'pool.setBlackBox';
 
-export const POOL_BAND = 30;
+export const POOL_BAND = HEADER;
 export const NEW_LANE_HEIGHT = 125;
 
 export class RootToCollaborationHandler {
@@ -94,8 +109,13 @@ export class UpdateLanesHandler {
 }
 
 /**
- * Adds a lane below `target` (a lane) or at the bottom of `target` (a pool).
- * A pool without lanes first gets one lane covering its current area.
+ * Adds a lane (BPMN 2.0.2 PDF 334-337):
+ * - `target` a pool: after its last lane;
+ * - `target` a lane: after it, in the same lane set;
+ * - `target` a lane with `inside`: a sub-lane in its childLaneSet (nested lanes).
+ * A pool or lane without lanes first gets one lane covering its area. Everything
+ * after the new lane moves to make room; the pool and enclosing lanes grow.
+ * Horizontal pools stack lanes downwards, vertical pools to the right.
  */
 export class AddLaneHandler {
   static $inject = ['modeling', 'elementFactory'];
@@ -104,66 +124,100 @@ export class AddLaneHandler {
     private readonly factory: BpmnElementFactory,
   ) {}
 
-  preExecute(context: { target: Shape; newLane?: Shape }): void {
-    const participant = is(bo(context.target), 'bpmn:Participant')
-      ? context.target
-      : participantOf(context.target.parent);
-    if (!participant) throw new Error('Lanes can only be added to pools.');
-    if (!getRef(bo(participant), 'processRef')) {
-      throw new Error('A black-box pool has no process and therefore no lanes.');
+  preExecute(context: { target: Shape; inside?: boolean; newLane?: Shape }): void {
+    const { target } = context;
+    const isPool = is(bo(target), 'bpmn:Participant');
+    const isRoot = !target.parent;
+    if (!isPool && !isRoot && !is(bo(target), 'bpmn:Lane')) {
+      throw new Error('Lanes go into pools or lanes.');
     }
-    // Vertical pools (DI isHorizontal=false) are shown, but lane editing is horizontal only.
-    if ((participant as Partial<BpmnData>).di?.get('isHorizontal') === false) {
-      throw new Error('Adding lanes to a vertical pool is not supported yet.');
+    // The pool, or the process diagram itself, whose children the lanes are.
+    const host = isPool || isRoot ? target : (target.parent as Shape);
+    if (is(bo(host), 'bpmn:Participant')) {
+      if (!getRef(bo(host), 'processRef')) {
+        throw new Error('A black-box pool has no process and therefore no lanes.');
+      }
+    } else if (host.parent || !is(bo(host), 'bpmn:Process')) {
+      throw new Error('Lanes can only be added to pools or to a process diagram.');
     }
-    const lanes = lanesOf(participant);
-    const laneX = participant.x + POOL_BAND;
-    const laneWidth = participant.width - POOL_BAND;
+    const pool = host.parent ? host : undefined;
     const hints = { lanesHandled: true };
+    // The pool, lane or diagram that gets the new lane, and the lane it follows.
+    const container = isPool || isRoot || context.inside ? target : laneContainer(target)!;
+    let after = isPool || isRoot || context.inside ? undefined : target;
+    const parentBo = is(bo(container), 'bpmn:Lane') ? bo(container) : undefined;
+    const existing = childLanes(container);
+    const h = pool
+      ? isHorizontal(pool)
+      : existing.length
+        ? isHorizontal(existing[0]!)
+        : !is(bo(container), 'bpmn:Lane') || isHorizontal(container);
 
-    if (lanes.length === 0) {
-      const first = this.factory.createShape({ type: 'bpmn:Lane' });
-      this.modeling.createShape(
-        first,
-        { x: laneX, y: participant.y, width: laneWidth, height: participant.height } as never,
-        participant,
-        0,
+    let siblings = existing;
+    if (!siblings.length) {
+      const first = this.newLane(h, { bfParentLane: parentBo });
+      const area = container === host && !pool ? diagramLaneArea(host) : contentBounds(container);
+      this.modeling.createShape(first, area as never, host, this.index(host), hints);
+      siblings = [first];
+    }
+    after ??= siblings[siblings.length - 1]!;
+    const line = end(cross(after, h));
+
+    // Move everything after the insertion line to make room.
+    const enclosing = new Set<Shape>(
+      [pool, container, ...laneAncestors(container)].filter((s): s is Shape => !!s && !!s.parent),
+    );
+    // (A copy: a move re-inserts the shape among its parent's children.)
+    for (const child of [...childrenOf(host)]) {
+      if ((child as { waypoints?: unknown }).waypoints || enclosing.has(child as Shape)) continue;
+      const shape = child as Shape;
+      if (crossPosition(shape, h) >= line - 1) {
+        // Same parent, same index: the drawing order (lanes below content) stays.
+        const index = childrenOf(host).indexOf(shape);
+        this.modeling.moveShape(shape, crossDelta(NEW_LANE_HEIGHT, h), host, index, hints);
+      }
+    }
+    // The pool and the lanes around the new one grow.
+    for (const grown of [...enclosing]) {
+      const c = cross(grown, h);
+      this.modeling.resizeShape(
+        grown,
+        boundsOf(along(grown, h), { start: c.start, size: c.size + NEW_LANE_HEIGHT }, h),
+        undefined,
         hints,
       );
-      lanes.push(first);
     }
-
-    const after = is(bo(context.target), 'bpmn:Lane') ? context.target : lanes[lanes.length - 1]!;
-    const insertY = after.y + after.height;
-
-    // Shift everything below the insertion line down to make room.
-    for (const child of childrenOf(participant)) {
-      if ((child as { waypoints?: unknown }).waypoints) continue;
-      const shape = child as Shape;
-      const top = is(bo(shape), 'bpmn:Lane') ? shape.y : center(shape).y;
-      if (top >= insertY - 1)
-        this.modeling.moveShape(shape, { x: 0, y: NEW_LANE_HEIGHT }, undefined, undefined, hints);
-    }
-    this.modeling.resizeShape(
-      participant,
-      {
-        x: participant.x,
-        y: participant.y,
-        width: participant.width,
-        height: participant.height + NEW_LANE_HEIGHT,
-      },
-      undefined,
-      hints,
-    );
-    const lane = this.factory.createShape({ type: 'bpmn:Lane' });
+    const lane = this.newLane(h, { bfParentLane: parentBo, bfAfterLane: bo(after) });
+    const main =
+      is(bo(container), 'bpmn:Participant') || is(bo(container), 'bpmn:Lane')
+        ? along(contentBounds(container), h)
+        : along(after, h);
     this.modeling.createShape(
       lane,
-      { x: laneX, y: insertY, width: laneWidth, height: NEW_LANE_HEIGHT } as never,
-      participant,
-      lanes.length,
+      boundsOf(main, { start: line, size: NEW_LANE_HEIGHT }, h) as never,
+      host,
+      this.index(host),
       hints,
     );
     context.newLane = lane;
+  }
+
+  /** Lanes are drawn above their pool and parent lanes, below the content. */
+  private index(host: Shape): number {
+    const children = childrenOf(host);
+    let last = -1;
+    children.forEach((c, i) => {
+      if (is(bo(c), 'bpmn:Lane')) last = i;
+    });
+    return last + 1;
+  }
+
+  private newLane(horizontal: boolean, placement: LanePlacement): Shape {
+    const lane = this.factory.createShape({ type: 'bpmn:Lane' }) as Shape & LanePlacement;
+    if (!horizontal) (lane as unknown as BpmnData).di.set('isHorizontal', false);
+    if (placement.bfParentLane) lane.bfParentLane = placement.bfParentLane;
+    if (placement.bfAfterLane) lane.bfAfterLane = placement.bfAfterLane;
+    return lane;
   }
 
   execute(): [] {
@@ -173,6 +227,29 @@ export class AddLaneHandler {
   revert(): [] {
     return [];
   }
+}
+
+/**
+ * The first lane of a process diagram without pools ("Lanes are used to
+ * organize and categorize activities within a Pool" — often, not always; PDF
+ * 334) covers the diagram's content, with room for its name band.
+ */
+function diagramLaneArea(root: Shape): { x: number; y: number; width: number; height: number } {
+  const shapes = childrenOf(root).filter(
+    (c) => !(c as { waypoints?: unknown }).waypoints && !is(bo(c), 'bpmn:Lane'),
+  ) as Shape[];
+  if (!shapes.length) return { x: 100, y: 100, width: 600, height: NEW_LANE_HEIGHT };
+  const pad = 30;
+  const minX = Math.min(...shapes.map((s) => s.x));
+  const minY = Math.min(...shapes.map((s) => s.y));
+  const maxX = Math.max(...shapes.map((s) => s.x + s.width));
+  const maxY = Math.max(...shapes.map((s) => s.y + s.height));
+  return {
+    x: minX - pad - HEADER,
+    y: minY - pad,
+    width: maxX - minX + 2 * pad + HEADER,
+    height: Math.max(NEW_LANE_HEIGHT, maxY - minY + 2 * pad),
+  };
 }
 
 export function hasLanes(participant: Shape | undefined): boolean {

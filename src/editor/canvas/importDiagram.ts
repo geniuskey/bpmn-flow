@@ -8,11 +8,11 @@
 import type Canvas from 'diagram-js/lib/core/Canvas';
 import type ElementFactory from 'diagram-js/lib/core/ElementFactory';
 import type ElementRegistry from 'diagram-js/lib/core/ElementRegistry';
-import type { Element } from 'diagram-js/lib/model/Types';
-import { connectionEnds, indexDi, readBounds, readWaypoints } from '@/bpmn/di/di';
+import type { Element, Shape } from 'diagram-js/lib/model/Types';
+import { connectionEnds, drawnEdgeEnds, indexDi, readBounds, readWaypoints } from '@/bpmn/di/di';
 import { isEditableConnection, isEditableShapeElement } from '@/bpmn/model/elements';
 import { getMany, getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
-import { canExpand, type BpmnRoot, type BpmnShape } from '../model';
+import { canExpand, isConnection, type BpmnRoot, type BpmnShape } from '../model';
 
 import type { CanvasImportResult } from '../types';
 
@@ -41,6 +41,21 @@ function owningProcess(bo: ModdleElement): ModdleElement | undefined {
   for (let p = bo.$parent; p; p = p.$parent) if (is(p, 'bpmn:Process')) return p;
   return undefined;
 }
+
+/** Shapes drawn below other content: pools, lanes, sub-processes, groups. */
+function isContainerElement(el: Element): boolean {
+  const b = (el as Partial<BpmnShape>).businessObject;
+  return (
+    !!b &&
+    (is(b, 'bpmn:Participant') ||
+      is(b, 'bpmn:Lane') ||
+      is(b, 'bpmn:Group') ||
+      is(b, 'bpmn:SubProcess') ||
+      is(b, 'bpmn:SubChoreography'))
+  );
+}
+
+const isEdge = (el: Element | undefined): boolean => !!el && isConnection(el);
 
 function isSupportedShape(bo: ModdleElement): boolean {
   return isEditableShapeElement(bo) || is(bo, 'bpmn:Participant') || is(bo, 'bpmn:Lane');
@@ -158,28 +173,75 @@ export function importDiagram(
       }
     }
 
-    for (const diEdge of planeElements.filter((p) => is(p, 'bpmndi:BPMNEdge'))) {
+    // Plane order is the Z-order (BPMN 2.0.2 §12.2.1, PDF 398). Shapes keep the
+    // order containers need (pools, lanes, sub-processes below their content,
+    // boundary events above their host); edges go back to their place in the
+    // file among their siblings, but never below a container they would vanish under.
+    const fileIndex = new Map(planeElements.map((p, i) => [p, i]));
+    const edgeIndexIn = (parent: Element, diEdge: ModdleElement): number | undefined => {
+      const index = fileIndex.get(diEdge)!;
+      const siblings = (parent as Shape).children ?? [];
+      let lastContainer = -1;
+      siblings.forEach((c, i) => {
+        if (isContainerElement(c)) lastContainer = i;
+      });
+      const after = siblings.findIndex(
+        (c, i) => i > lastContainer && (fileIndex.get((c as BpmnShape).di) ?? -1) > index,
+      );
+      return after < 0 ? undefined : after;
+    };
+
+    // Edges that end at another edge (an association to a message flow, PDF 92)
+    // come after the edges they end at.
+    const edges = planeElements.filter((p) => is(p, 'bpmndi:BPMNEdge'));
+    const edgeTargets = new Set(edges.map((e) => getRef(e, 'bpmnElement')));
+    const endsAtEdge = (diEdge: ModdleElement): boolean => {
+      const bo = getRef(diEdge, 'bpmnElement');
+      if (!bo) return false;
+      const ends = drawnEdgeEnds(bo, diEdge);
+      return edgeTargets.has(ends.source) || edgeTargets.has(ends.target);
+    };
+    const orderedEdges = [
+      ...edges.filter((e) => !endsAtEdge(e)),
+      ...edges.filter((e) => endsAtEdge(e)),
+    ];
+
+    for (const diEdge of orderedEdges) {
       const bo = getRef(diEdge, 'bpmnElement');
       const id = bo?.id;
       if (!bo || !id || elementRegistry.get(id)) {
         result.warnings.push(`Skipped diagram edge ${diEdge.id ?? ''}.`);
         continue;
       }
-      const ends = connectionEnds(bo);
-      const source = elementRegistry.get(ends.source?.id ?? '') as Element | undefined;
-      const target = elementRegistry.get(ends.target?.id ?? '') as Element | undefined;
+      // Drawn ends (BPMNEdge sourceElement / targetElement) when they are shown
+      // here, otherwise the model ends.
+      const drawn = drawnEdgeEnds(bo, diEdge);
+      const model = connectionEnds(bo);
+      const find = (a?: ModdleElement, b?: ModdleElement) =>
+        (elementRegistry.get(a?.id ?? '') ?? elementRegistry.get(b?.id ?? '')) as
+          Element | undefined;
+      const source = find(drawn.source, model.source);
+      const target = find(drawn.target, model.target);
       const connection = elementFactory.createConnection({
         id,
         type: bo.$type,
         businessObject: bo,
         di: diEdge,
-        unsupported: !isEditableConnection(bo),
+        // An association may end at an editable sequence / message flow (PDF 95,
+        // Fig 10.68); any other edge ending at an edge is shown read-only.
+        unsupported:
+          !isEditableConnection(bo) ||
+          [source, target].some(
+            (end) =>
+              isEdge(end) &&
+              (!is(bo, 'bpmn:Association') || !!(end as { unsupported?: boolean }).unsupported),
+          ),
         waypoints: readWaypoints(diEdge),
         source,
         target,
       });
       const parent = is(bo, 'bpmn:SequenceFlow') ? (source?.parent ?? root) : root;
-      canvas.addConnection(connection, parent);
+      canvas.addConnection(connection, parent, edgeIndexIn(parent, diEdge));
       result.connections++;
     }
   }

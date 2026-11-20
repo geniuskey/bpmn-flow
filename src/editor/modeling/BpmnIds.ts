@@ -12,7 +12,13 @@ const PREFIX: Record<string, string> = {
   'bpmn:SubChoreography': 'ChoreographyTask',
   'bpmn:CallChoreography': 'ChoreographyTask',
   'bpmn:Choreography': 'Choreography',
+  'bpmn:GlobalChoreographyTask': 'GlobalChoreographyTask',
+  'bpmn:GlobalConversation': 'GlobalConversation',
+  'bpmn:ParticipantMultiplicity': 'ParticipantMultiplicity',
+  'bpmn:Message': 'Message',
   'bpmndi:BPMNShape': 'Band',
+  'bpmndi:BPMNPlane': 'BPMNPlane',
+  'bpmndi:BPMNDiagram': 'BPMNDiagram',
   'bpmn:Participant': 'Participant',
   'bpmn:Lane': 'Lane',
   'bpmn:LaneSet': 'LaneSet',
@@ -23,6 +29,12 @@ const PREFIX: Record<string, string> = {
   'bpmn:MessageEventDefinition': 'MessageEventDefinition',
   'bpmn:TimerEventDefinition': 'TimerEventDefinition',
   'bpmn:TerminateEventDefinition': 'TerminateEventDefinition',
+  'bpmn:DataInput': 'DataInput',
+  'bpmn:DataOutput': 'DataOutput',
+  'bpmn:InputOutputSpecification': 'IoSpecification',
+  'bpmn:InputSet': 'InputSet',
+  'bpmn:OutputSet': 'OutputSet',
+  'bpmn:Resource': 'Resource',
 };
 
 function prefixFor(type: string): string {

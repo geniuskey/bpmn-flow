@@ -10,5 +10,6 @@ export function useCompactLayout(): void {
     const ui = useUiStore.getState();
     if (ui.inspectorOpen) ui.toggleInspector();
     if (ui.analysisOpen) ui.toggleAnalysis(false);
+    if (ui.libraryOpen) ui.toggleLibrary(false);
   }, []);
 }

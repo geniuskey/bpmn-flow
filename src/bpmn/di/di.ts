@@ -64,9 +64,10 @@ export function invalidDi(index: DiIndex): { di: ModdleElement; reason: string }
     const drawn = new Set<string>();
     const planeElements = getMany(plane, 'planeElement');
     for (const di of planeElements) {
-      if (!is(di, 'bpmndi:BPMNShape')) continue;
       const target = getRef(di, 'bpmnElement');
+      // Edges count too: an association may end at a message flow (PDF 92, Fig 8.28).
       if (target?.id) drawn.add(target.id);
+      if (!is(di, 'bpmndi:BPMNShape')) continue;
       if (!getRef(di, 'bounds')) out.push({ di, reason: 'shape has no bounds' });
       if (getRef(di, 'choreographyActivityShape') && !target) {
         out.push({ di, reason: 'participant band has no participant' });
@@ -79,7 +80,13 @@ export function invalidDi(index: DiIndex): { di: ModdleElement; reason: string }
       if (getMany(di, 'waypoint').length < 2)
         out.push({ di, reason: 'edge has fewer than 2 waypoints' });
       const { source, target } = connectionEnds(bo);
-      for (const end of [source, target]) {
+      // BPMNEdge sourceElement / targetElement name the drawn ends when they
+      // differ from the model ends (PDF 405, 440).
+      const ends = [
+        getRef(getRef(di, 'sourceElement'), 'bpmnElement') ?? source,
+        getRef(getRef(di, 'targetElement'), 'bpmnElement') ?? target,
+      ];
+      for (const end of ends) {
         if (end?.id && !drawn.has(end.id)) {
           out.push({ di, reason: `edge end ${end.id} is not drawn in the same diagram` });
           break;
@@ -197,6 +204,25 @@ export function translateLabel(di: ModdleElement, dx: number, dy: number): boole
   return true;
 }
 
+/**
+ * Keeps a label drawn inside a shape (task, sub-process, pool, ...) in the same
+ * place relative to the shape when it is resized: its BPMNLabel bounds scale
+ * with the shape.
+ */
+export function scaleLabel(di: ModdleElement, from: Bounds, to: Bounds): boolean {
+  const bounds = getRef(getRef(di, 'label'), 'bounds') as
+    (ModdleElement & Partial<Bounds>) | undefined;
+  if (!bounds) return false;
+  const sx = from.width ? to.width / from.width : 1;
+  const sy = from.height ? to.height / from.height : 1;
+  const r = (n: number) => Math.round(n * 100) / 100;
+  bounds.set('x', r(to.x + ((bounds.x ?? 0) - from.x) * sx));
+  bounds.set('y', r(to.y + ((bounds.y ?? 0) - from.y) * sy));
+  bounds.set('width', r((bounds.width ?? 0) * sx));
+  bounds.set('height', r((bounds.height ?? 0) * sy));
+  return true;
+}
+
 /** Replaces the waypoints of a BPMNEdge. Returns false if nothing changed. */
 export function writeWaypoints(
   moddle: BpmnModdleInstance,
@@ -231,4 +257,48 @@ export function messageVisibleKind(
     return undefined;
   const value = diEdge.get('messageVisibleKind');
   return value === 'initiating' || value === 'non_initiating' ? value : undefined;
+}
+
+/** Font of a BPMNLabel's BPMNLabelStyle (dc:Font, BPMN 2.0.2 §12.2.3.8, PDF 407). */
+export interface LabelFont {
+  name?: string;
+  size?: number;
+  isBold?: boolean;
+  isItalic?: boolean;
+  isUnderline?: boolean;
+  isStrikeThrough?: boolean;
+}
+
+export function readLabelFont(di: ModdleElement | undefined): LabelFont | undefined {
+  const font = getRef(getRef(getRef(di, 'label'), 'labelStyle'), 'font');
+  if (!font) return undefined;
+  const pick = <T>(key: string, type: string): T | undefined => {
+    const value = font.get(key);
+    return typeof value === type ? (value as T) : undefined;
+  };
+  const size = pick<number>('size', 'number');
+  return {
+    name: pick<string>('name', 'string') || undefined,
+    size: size && size > 0 ? size : undefined,
+    isBold: pick<boolean>('isBold', 'boolean'),
+    isItalic: pick<boolean>('isItalic', 'boolean'),
+    isUnderline: pick<boolean>('isUnderline', 'boolean'),
+    isStrikeThrough: pick<boolean>('isStrikeThrough', 'boolean'),
+  };
+}
+
+/**
+ * The model elements an edge is drawn between: BPMNEdge sourceElement /
+ * targetElement when set (e.g. a message flow drawn to a pool border while its
+ * sourceRef is a task in that pool), otherwise the model ends.
+ */
+export function drawnEdgeEnds(
+  bo: ModdleElement,
+  diEdge: ModdleElement | undefined,
+): { source?: ModdleElement; target?: ModdleElement } {
+  const ends = connectionEnds(bo);
+  return {
+    source: getRef(getRef(diEdge, 'sourceElement'), 'bpmnElement') ?? ends.source,
+    target: getRef(getRef(diEdge, 'targetElement'), 'bpmnElement') ?? ends.target,
+  };
 }
