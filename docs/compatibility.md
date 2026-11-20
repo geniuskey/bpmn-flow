@@ -132,5 +132,8 @@ editor had no time expression (now editable, and flagged by
   `color:border-color` / `color:color` (OMG non-normative) and `bioc:fill` / `bioc:stroke`
   (bpmn.io); the OMG attributes win when both are present. BPMN 2.0.2 itself defines no
   colors (§7.5). The Inspector's Diagram section sets fill / stroke (presets or any
-  color), writing both vocabularies; labels outside a shape keep the theme color unless
-  `color:color` is set (not editable in the Inspector).
+  color), writing both vocabularies. The same rule holds for every element type: stroke colors the
+  outline, markers and all of the element's text (inside or external labels, as in bpmn-js)
+  unless `color:color` sets a label color (not editable in the Inspector); fill colors the
+  interior only, and a colored element drops the per-type theme tints of events and
+  gateways.

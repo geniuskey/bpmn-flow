@@ -143,7 +143,8 @@ The `bpmn:Definitions` moddle tree is the only document model.
 
 Shapes carry `bf-*` CSS classes; colors live in CSS variables (`src/styles/canvas.css`).
 DI color extensions (`color:*`, `bioc:*`) redefine those variables on the element's own
-visual group (`src/editor/renderer/colors.ts`).
+visual group (`src/editor/renderer/colors.ts`): stroke → lines, markers and text; fill →
+interior only, uniformly across element types.
 Switching light/dark toggles a class on `<html>` and needs no redraw. BPMN notation is
 kept (circle/rounded rectangle/diamond, thin start and thick end event borders,
 gateway markers); only the visual treatment is modernized.

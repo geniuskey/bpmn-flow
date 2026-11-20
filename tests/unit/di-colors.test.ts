@@ -109,11 +109,14 @@ describe('rendering DI colors', () => {
 
     const flow = visual('F');
     expect(flow.style.getPropertyValue('--bf-connection')).toBe('#205022');
-    expect(flow.style.getPropertyValue('--bf-di-label')).toBe('');
+    // Stroke colors the flow's label too, as on every element type.
+    expect(flow.style.getPropertyValue('--bf-di-text')).toBe('#205022');
+    expect(flow.classList.contains('bf-di')).toBe(true);
 
     const start = visual('S');
     expect(start.getAttribute('style') ?? '').toBe('');
     expect(start.classList.contains('bf-di-fill')).toBe(false);
+    expect(start.classList.contains('bf-di')).toBe(false);
   });
 
   it('renders the colors of a Camunda Modeler export', async () => {

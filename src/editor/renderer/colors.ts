@@ -4,9 +4,13 @@
  * variables, so an element is recolored by redefining those variables on its
  * own `.djs-visual` group; the rest of the canvas keeps following the theme.
  *
- * As in bpmn-js, text inside a shape takes the label color, else the stroke
- * color. Labels outside the shape (events, gateways, data, flows) only take an
- * explicit label color, so they stay readable on the canvas in both themes.
+ * One rule for every element type:
+ * - stroke colors the line work (outline, markers, icons) and, as in bpmn-js,
+ *   all of the element's text — inside the shape or an external label —
+ *   unless an explicit label color is set;
+ * - fill colors the interior only;
+ * - stroke never changes the interior: once an element has any DI color, the
+ *   per-type theme tints (events, gateways) give way to the neutral fill.
  */
 import { classes as svgClasses } from 'tiny-svg';
 import { readDiColors } from '@/bpmn/di/di';
@@ -28,7 +32,7 @@ const SHAPE_STROKE_VARS = [
   '--bf-connection',
 ];
 const EDGE_STROKE_VARS = ['--bf-connection', '--bf-shape-stroke'];
-const TEXT_VARS = ['--bf-di-text', '--bf-di-label'];
+const TEXT_VARS = ['--bf-di-text'];
 const ALL_VARS = [...new Set([...FILL_VARS, ...SHAPE_STROKE_VARS, ...TEXT_VARS])];
 
 export function applyDiColors(
@@ -39,10 +43,11 @@ export function applyDiColors(
   // The same visual group is reused when an element is redrawn (e.g. on undo).
   const style = gfx.style;
   for (const name of ALL_VARS) style.removeProperty(name);
-  svgClasses(gfx).remove('bf-di-fill').remove('bf-di-text');
+  svgClasses(gfx).remove('bf-di').remove('bf-di-fill').remove('bf-di-text');
 
   const colors = readDiColors(di);
   if (!colors) return;
+  svgClasses(gfx).add('bf-di');
   if (colors.fill) {
     for (const name of kind === 'shape' ? FILL_VARS : ['--bf-shape-fill']) {
       style.setProperty(name, colors.fill);
@@ -57,7 +62,6 @@ export function applyDiColors(
   const text = colors.label ?? colors.stroke;
   if (text) {
     style.setProperty('--bf-di-text', text);
-    if (colors.label) style.setProperty('--bf-di-label', colors.label);
     svgClasses(gfx).add('bf-di-text');
   }
 }

@@ -550,20 +550,18 @@
 
 /*
  * DI color extensions (color:* / bioc:*, src/editor/renderer/colors.ts). The
- * element's own --bf-* variables are redefined inline on its visual group;
- * these rules cover the styles that mix a theme color into the fill.
+ * element's own --bf-* variables are redefined inline on its visual group.
+ * Any DI color drops the per-type interior tints, so a stroke color only ever
+ * changes lines and text, the same way on every element type.
  */
-.bf-di-fill .bf-start-event,
-.bf-di-fill .bf-end-event,
+.bf-di {
+  --bf-gateway-fill: var(--bf-shape-fill);
+}
+.bf-di .bf-start-event,
+.bf-di .bf-end-event,
 .bf-di-fill .bf-lane {
   fill: var(--bf-shape-fill);
 }
 .bf-di-text .bf-label {
   fill: var(--bf-di-text);
-}
-.bf-di-text .bf-external-label {
-  fill: var(--bf-di-label, var(--bf-label));
-}
-.bf-di-text .bf-flow-label {
-  fill: var(--bf-di-label, var(--bf-muted));
 }
