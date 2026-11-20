@@ -18,12 +18,21 @@ export function toHex6(color: string | undefined): string | undefined {
   if (short) return `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`;
   if (/^#[0-9a-f]{8}$/.test(value)) return value.slice(0, 7);
   try {
-    // A 2D context normalizes named and rgb()/hsl() colors to #rrggbb.
-    const ctx = document.createElement('canvas').getContext('2d');
+    // Paint one pixel and read it back: this normalizes any CSS color the
+    // browser knows (named, rgb(), hsl(), oklch(), color-mix() results, …).
+    const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
     if (!ctx) return undefined;
+    // An invalid color leaves fillStyle unchanged, so it differs between two
+    // different starting values; a valid one overwrites both alike.
     ctx.fillStyle = '#000000';
     ctx.fillStyle = value;
-    return /^#[0-9a-f]{6}$/i.test(ctx.fillStyle) ? ctx.fillStyle : undefined;
+    const first = ctx.fillStyle;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = value;
+    if (ctx.fillStyle !== first) return undefined;
+    ctx.fillRect(0, 0, 1, 1);
+    const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+    return `#${[r, g, b].map((n) => (n ?? 0).toString(16).padStart(2, '0')).join('')}`;
   } catch {
     return undefined;
   }

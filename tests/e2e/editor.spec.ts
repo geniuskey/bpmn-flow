@@ -204,3 +204,23 @@ test('context menu stays inside a small viewport', async ({ page }) => {
   expect(menu.y + menu.height).toBeLessThanOrEqual(500);
   expect(menu.y).toBeGreaterThanOrEqual(0);
 });
+
+test('color fields show the rendered default color, not white', async ({ page }) => {
+  await page.goto('/?sample=vendor-camunda-style');
+  await expect(el(page, 'StartEvent_1')).toBeVisible();
+  await el(page, 'StartEvent_1').click();
+  const inspector = page.getByTestId('inspector');
+  const fill = inspector.getByLabel('Fill color', { exact: true });
+  const stroke = inspector.getByLabel('Stroke color', { exact: true });
+  await expect(fill).toHaveValue('#c8e6c9'); // explicit DI color
+
+  await inspector.getByRole('button', { name: 'Default colors' }).click();
+  await expect(inspector).toContainText('Default · ');
+  // The theme's start-event colors: a green stroke and a faint green tint.
+  const [r, g, b] = (await stroke.inputValue()).match(/\w\w/g)!.map((h) => parseInt(h, 16));
+  expect(g).toBeGreaterThan(r! + 60);
+  expect(g).toBeGreaterThan(b! + 30);
+  const tint = (await fill.inputValue()).match(/\w\w/g)!.map((h) => parseInt(h, 16));
+  expect(tint[1]).toBeGreaterThan(tint[0]!);
+  expect(tint[1]).toBeLessThan(255);
+});

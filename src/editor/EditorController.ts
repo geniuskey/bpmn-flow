@@ -666,6 +666,24 @@ export class EditorController {
     if (canvas && elements.length) canvas.scrollToElement(elements[0]!, 120);
   }
 
+  /**
+   * The fill and stroke an element is drawn with right now, as computed CSS
+   * colors — theme defaults included, so the Inspector can show what an
+   * element without DI colors actually looks like.
+   */
+  getRenderedColors(id: string): { fill?: string; stroke?: string } {
+    const gfx = this.get<ElementRegistry>('elementRegistry')?.getGraphics(id) as
+      SVGElement | undefined;
+    const body =
+      gfx?.querySelector<SVGElement>('.djs-visual > .bf-shape, .djs-visual > .bf-connection') ??
+      gfx?.querySelector<SVGElement>('.djs-visual > :first-child');
+    if (!body) return {};
+    const style = getComputedStyle(body);
+    const paint = (value: string) =>
+      value && value !== 'none' && !value.startsWith('url(') ? value : undefined;
+    return { fill: paint(style.fill), stroke: paint(style.stroke) };
+  }
+
   highlight(ids: string[]): void {
     const canvas = this.get<Canvas>('canvas');
     const registry = this.get<ElementRegistry>('elementRegistry');

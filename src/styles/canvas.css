@@ -77,12 +77,12 @@
 .bf-start-event {
   stroke: var(--bf-event-start);
   stroke-width: 2px;
-  fill: color-mix(in oklch, var(--bf-event-start) 8%, var(--bf-shape-fill));
+  fill: color-mix(in oklab, var(--bf-event-start) 8%, var(--bf-shape-fill));
 }
 .bf-end-event {
   stroke: var(--bf-event-end);
   stroke-width: 4px;
-  fill: color-mix(in oklch, var(--bf-event-end) 8%, var(--bf-shape-fill));
+  fill: color-mix(in oklab, var(--bf-event-end) 8%, var(--bf-shape-fill));
 }
 
 .bf-gateway {
@@ -176,7 +176,7 @@
 .bf-unsupported {
   stroke: var(--bf-unsupported);
   stroke-width: 2px;
-  fill: color-mix(in oklch, var(--bf-unsupported) 8%, var(--bf-shape-fill));
+  fill: color-mix(in oklab, var(--bf-unsupported) 8%, var(--bf-shape-fill));
   filter: none;
 }
 .bf-unsupported-hatch {
@@ -474,7 +474,7 @@
   stroke-width: 1px;
 }
 .bf-non-initiating .bf-envelope-body {
-  fill: color-mix(in oklch, var(--bf-shape-stroke) 22%, var(--bf-shape-fill));
+  fill: color-mix(in oklab, var(--bf-shape-stroke) 22%, var(--bf-shape-fill));
 }
 
 /* Shape previews (palette, replace menu): drawn by the canvas renderer. */

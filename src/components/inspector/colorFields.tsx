@@ -2,7 +2,7 @@
  * Fill / stroke colors of the selected element, stored as DI color extensions
  * (`color:*` and `bioc:*`; BPMN 2.0.2 itself defines no colors).
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { RotateCcw } from 'lucide-react';
 import { readDiColors } from '@/bpmn/di/di';
 import { is, type ModdleElement } from '@/bpmn/model/moddle';
@@ -23,6 +23,7 @@ function ColorInput({
   onCommit,
 }: {
   label: string;
+  /** The color shown in the swatch (explicit or the rendered default). */
   value: string | undefined;
   disabled: boolean;
   onCommit: (value: string) => void;
@@ -43,13 +44,20 @@ function ColorInput({
       ref={ref}
       type="color"
       aria-label={label}
-      title={value ?? 'Theme default'}
+      title={value}
       disabled={disabled}
       defaultValue={toHex6(value) ?? '#ffffff'}
       className="h-8 w-10 cursor-default rounded-md border bg-background p-0.5 disabled:opacity-60"
     />
   );
 }
+
+const subscribeTheme = (onChange: () => void) => {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  return () => observer.disconnect();
+};
+const isDark = () => document.documentElement.classList.contains('dark');
 
 export function ColorFields({
   elementId,
@@ -61,9 +69,14 @@ export function ColorFields({
   readOnly: boolean;
 }) {
   const controller = useEditorStore((s) => s.controller);
+  // Re-read the rendered defaults when the theme flips.
+  useSyncExternalStore(subscribeTheme, isDark);
   if (!is(di, 'bpmndi:BPMNShape') && !is(di, 'bpmndi:BPMNEdge')) return null;
   const shape = is(di, 'bpmndi:BPMNShape');
   const colors = readDiColors(di) ?? {};
+  // What the canvas draws when no DI color is set (theme defaults differ per
+  // element type and between light and dark).
+  const rendered = controller?.getRenderedColors(elementId) ?? {};
   const set = (detail: { fill?: string | null; stroke?: string | null }) =>
     controller?.updateElementDetail(elementId, { kind: 'colors', ...detail });
   const swatch = 'size-5 rounded-full border-2 disabled:opacity-60';
@@ -73,12 +86,12 @@ export function ColorFields({
       <div className="flex items-center gap-1.5">
         <ColorInput
           label={`${label} color`}
-          value={colors[key]}
+          value={toHex6(colors[key]) ?? toHex6(rendered[key])}
           disabled={readOnly}
           onCommit={(v) => set({ [key]: v })}
         />
         <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
-          {colors[key] ?? 'Default'}
+          {colors[key] ?? `Default · ${toHex6(rendered[key]) ?? 'none'}`}
         </span>
         {colors[key] && (
           <Button
