@@ -174,6 +174,39 @@ export const COMMANDS: AppCommand[] = [
       if (id) c.addLane(id, true);
     },
   },
+  ...(
+    [
+      ['alignLeft', 'Align left', 'left'],
+      ['alignCenter', 'Align centers horizontally', 'center'],
+      ['alignRight', 'Align right', 'right'],
+      ['alignTop', 'Align top', 'top'],
+      ['alignMiddle', 'Align centers vertically', 'middle'],
+      ['alignBottom', 'Align bottom', 'bottom'],
+    ] as const
+  ).map(([id, label, type]): AppCommand => ({
+    id: `arrange.${id}`,
+    label,
+    group: 'Arrange',
+    editing: true,
+    selection: true,
+    run: (c) => void c.alignSelection(type),
+  })),
+  {
+    id: 'arrange.distributeHorizontal',
+    label: 'Distribute horizontally',
+    group: 'Arrange',
+    editing: true,
+    selection: true,
+    run: (c) => void c.distributeSelection('horizontal'),
+  },
+  {
+    id: 'arrange.distributeVertical',
+    label: 'Distribute vertically',
+    group: 'Arrange',
+    editing: true,
+    selection: true,
+    run: (c) => void c.distributeSelection('vertical'),
+  },
   {
     id: 'tools.select',
     label: 'Select tool',
@@ -251,7 +284,23 @@ export function isEnabled(cmd: AppCommand): boolean {
   if (cmd.id === 'file.export') return !!useDocumentStore.getState().doc?.report.exportAllowed;
   if (cmd.id === 'edit.undo') return snapshot.canUndo;
   if (cmd.id === 'edit.redo') return snapshot.canRedo;
+  if (cmd.id.startsWith('arrange.align')) return controller.arrangeableCount() >= 2;
+  if (cmd.id.startsWith('arrange.distribute')) return controller.arrangeableCount() >= 3;
+  if (cmd.id === 'arrange.addLane') return isPoolOrLane(controller, snapshot.selection[0]);
+  if (cmd.id === 'arrange.addSubLane') {
+    return controller.getElement(snapshot.selection[0] ?? '')?.type === 'bpmn:Lane';
+  }
   return true;
+}
+
+/** Lanes can be added to a pool with a process (not a black box) or to a lane. */
+function isPoolOrLane(controller: EditorController, id: string | undefined): boolean {
+  const element = id
+    ? (controller.getElement(id) as
+        { type?: string; businessObject?: { get(key: string): unknown } } | undefined)
+    : undefined;
+  if (element?.type === 'bpmn:Lane') return true;
+  return element?.type === 'bpmn:Participant' && !!element.businessObject?.get('processRef');
 }
 
 export function runCommand(id: string): void {

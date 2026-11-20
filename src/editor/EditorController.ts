@@ -56,7 +56,15 @@ import { UPDATE_ELEMENT_DETAIL } from './commands/ElementDetailHandler';
 import { ADD_LANE, SET_POOL_BLACK_BOX, blackBoxBlocker } from './commands/StructureHandlers';
 import { SET_POOL_BOUNDARY, hideBoundaryBlocker } from './commands/PoolBoundaryHandler';
 import { APPLY_LAYOUT } from './layout/ApplyLayoutHandler';
-import { deletable } from './interaction/BpmnFlowRules';
+import { arrangeable, deletable } from './interaction/BpmnFlowRules';
+import {
+  ARRANGE_ELEMENTS,
+  alignMoves,
+  distributeMoves,
+  type Alignment,
+  type ArrangeMove,
+  type DistributeAxis,
+} from './commands/ArrangeHandler';
 import type DirectEditing from './interaction/DirectEditing';
 import type Clipboard from './interaction/Clipboard';
 import { guardCommandStack } from './commands/guardCommandStack';
@@ -416,6 +424,32 @@ export class EditorController {
 
   cut(): number {
     return this.get<Clipboard>('bpmnClipboard')?.cut() ?? 0;
+  }
+
+  /** Number of selected shapes that align / distribute would move (2+ to align, 3+ to distribute). */
+  arrangeableCount(): number {
+    return this.snapshot.readOnly ? 0 : arrangeable(this.selected()).length;
+  }
+
+  /** Aligns the selected shapes; returns how many moved. */
+  alignSelection(type: Alignment): number {
+    return this.arrange(alignMoves(arrangeable(this.selected()), type));
+  }
+
+  /** Spaces the selected shapes evenly; returns how many moved. */
+  distributeSelection(axis: DistributeAxis): number {
+    return this.arrange(distributeMoves(arrangeable(this.selected()), axis));
+  }
+
+  private arrange(moves: ArrangeMove[]): number {
+    const rules = this.get<Rules>('rules');
+    if (this.snapshot.readOnly || !rules) return 0;
+    // The same check as a drag of each shape (container changes, pool bounds, ...).
+    const allowed = moves.filter((m) =>
+      rules.allowed('elements.move', { shapes: [m.shape], delta: m.delta }),
+    );
+    if (allowed.length) this.exec(ARRANGE_ELEMENTS, { moves: allowed });
+    return allowed.length;
   }
 
   nudge(dx: number, dy: number): void {

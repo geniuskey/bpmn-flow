@@ -46,6 +46,7 @@ import {
   UpdateLanesHandler,
 } from './commands/StructureHandlers';
 import PoolBoundaryHandler, { SET_POOL_BOUNDARY } from './commands/PoolBoundaryHandler';
+import ArrangeHandler, { ARRANGE_ELEMENTS } from './commands/ArrangeHandler';
 import { APPLY_LAYOUT, ApplyLayoutHandler } from './layout/ApplyLayoutHandler';
 import BpmnFlowRules from './interaction/BpmnFlowRules';
 import BpmnContextPadProvider from './interaction/ContextPadProvider';
@@ -82,6 +83,7 @@ class BpmnFlowCommands {
     commandStack.registerHandler(SET_POOL_BLACK_BOX, SetPoolBlackBoxHandler);
     commandStack.registerHandler(SET_POOL_BOUNDARY, PoolBoundaryHandler);
     commandStack.registerHandler(APPLY_LAYOUT, ApplyLayoutHandler);
+    commandStack.registerHandler(ARRANGE_ELEMENTS, ArrangeHandler);
   }
 }
 

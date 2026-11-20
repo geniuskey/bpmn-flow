@@ -161,33 +161,52 @@ test('malformed files keep the current document', async ({ page }) => {
   await expect(el(page, 'Task_check')).toBeVisible();
 });
 
-test('theme switch toggles dark mode', async ({ page }) => {
+test('theme setting toggles dark mode', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' });
   await page.goto('/');
   await expect(page.locator('html')).not.toHaveClass(/dark/);
-  const toggle = page.getByRole('button', { name: 'Switch theme' });
-  await toggle.click(); // system -> light
-  await toggle.click(); // light -> dark
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('dialog', { name: 'Settings' }).getByLabel('Theme').selectOption('dark');
   await expect(page.locator('html')).toHaveClass(/dark/);
+});
+
+test('snap to grid is a toolbar toggle', async ({ page }) => {
+  await page.goto('/?sample=simple-process');
+  const snap = page.getByRole('button', { name: 'Snap to grid' });
+  await expect(snap).toHaveAttribute('aria-pressed', 'true');
+  await snap.click();
+  await expect(snap).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('align menu lines up the selected shapes', async ({ page }) => {
+  await page.goto('/?sample=simple-process');
+  const align = page.getByRole('button', { name: 'Align and distribute' });
+  await expect(align).toBeDisabled();
+  await page.keyboard.press('ControlOrMeta+a');
+  await expect(align).toBeEnabled();
+  await align.click();
+  const menu = page.getByRole('menu', { name: 'Align and distribute' });
+  await expect(menu.getByRole('menuitem', { name: 'Align left' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await expect(align).toBeFocused();
 });
 
 test('settings popover is not clipped by the header', async ({ page }) => {
   await page.goto('/?sample=simple-process');
   await page.getByRole('button', { name: 'Settings' }).click();
   const dialog = page.getByRole('dialog', { name: 'Settings' });
-  const snap = dialog.getByLabel('Snap to grid');
-  await expect(snap).toBeVisible();
+  const theme = dialog.getByLabel('Theme');
+  await expect(theme).toBeVisible();
   // The control must be the topmost element at its position (not covered by the canvas).
-  const box = (await snap.boundingBox())!;
+  const box = (await theme.boundingBox())!;
   const header = (await page.locator('header').boundingBox())!;
   expect(box.y).toBeGreaterThan(header.y + header.height);
   const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
   const hit = await page.evaluate<string | undefined>(
     `document.elementFromPoint(${x}, ${y})?.getAttribute('aria-label')`,
   );
-  expect(hit).toBe('Snap to grid');
-  await snap.click();
-  await expect(snap).not.toBeChecked();
+  expect(hit).toBe('Theme');
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
 });

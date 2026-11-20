@@ -137,15 +137,7 @@ export function ContextMenu({ host }: { host: HTMLElement | null }) {
 
   if (!menu) return null;
   const ids = selection.length ? ELEMENT_ITEMS : CANVAS_ITEMS;
-  const commands = ids
-    .map((id) => COMMANDS.find((c) => c.id === id)!)
-    .filter((c) => isEnabled(c))
-    .filter((c) => c.id !== 'arrange.addLane' || isPoolOrLane(selection[0]))
-    .filter(
-      (c) =>
-        c.id !== 'arrange.addSubLane' ||
-        controller?.getElement(selection[0] ?? '')?.type === 'bpmn:Lane',
-    );
+  const commands = ids.map((id) => COMMANDS.find((c) => c.id === id)!).filter((c) => isEnabled(c));
   const single = selection.length === 1 ? controller?.getElement(selection[0]!) : undefined;
   const type = (single as { type?: string } | undefined)?.type;
   const alternatives =
@@ -191,16 +183,6 @@ export function ContextMenu({ host }: { host: HTMLElement | null }) {
       )}
     </div>
   );
-}
-
-/** Lanes can be added to a pool with a process (not a black box) or to a lane. */
-function isPoolOrLane(id: string | undefined): boolean {
-  const element = id
-    ? (useEditorStore.getState().controller?.getElement(id) as
-        { type?: string; businessObject?: { get(key: string): unknown } } | undefined)
-    : undefined;
-  if (element?.type === 'bpmn:Lane') return true;
-  return element?.type === 'bpmn:Participant' && !!element.businessObject?.get('processRef');
 }
 
 function MenuItem({ label, keys, onClick }: { label: string; keys?: string; onClick: () => void }) {

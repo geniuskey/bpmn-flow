@@ -917,6 +917,29 @@ export function canResize(shape: Shape, newBounds?: Bounds): boolean {
   return false;
 }
 
+/**
+ * Shapes of a selection that align / distribute may move: not connections,
+ * labels, boundary events or lanes, and not content of another selected shape
+ * (it moves with its container).
+ */
+export function arrangeable(elements: Element[]): Shape[] {
+  const set = new Set(elements);
+  const insideSelected = (el: Element) => {
+    for (let p = el.parent; p; p = p.parent) if (set.has(p)) return true;
+    return false;
+  };
+  return elements.filter(
+    (el): el is Shape =>
+      !(el as Connection).waypoints &&
+      !(el as Shape & { labelTarget?: Element }).labelTarget &&
+      !(el as Shape).host &&
+      !!el.parent &&
+      editableShape(el) &&
+      !is(bo(el), 'bpmn:Lane') &&
+      !insideSelected(el),
+  );
+}
+
 /** Deletable subset of a selection. Lanes must be empty; unsupported content stays. */
 export function deletable(elements: Element[]): Element[] {
   return elements.filter((el) => {

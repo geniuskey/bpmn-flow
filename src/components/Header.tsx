@@ -1,28 +1,49 @@
 import {
+  AlignCenterHorizontal,
+  AlignCenterVertical,
+  AlignEndHorizontal,
+  AlignEndVertical,
+  AlignHorizontalDistributeCenter,
+  AlignStartHorizontal,
+  AlignStartVertical,
+  AlignVerticalDistributeCenter,
+  BetweenHorizontalEnd,
+  ClipboardPaste,
+  Command,
+  Copy,
+  CopyPlus,
   Download,
   FileDown,
   FilePlus2,
   FolderOpen,
+  Grid3x3,
+  LayoutDashboard,
   Lock,
   Maximize,
-  Monitor,
-  Moon,
   PanelBottom,
   PanelRight,
   Redo2,
-  Sun,
+  Scissors,
+  Settings,
+  Trash,
   Undo2,
   Workflow,
-  LayoutDashboard,
-  Command,
-  Settings,
   ZoomIn,
   ZoomOut,
+  type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { downloadOriginal, exportXml, newDocument, pickFile, runAutoLayout } from '@/app/actions';
+import { COMMANDS, isEnabled, runCommand } from '@/app/commands';
+import {
+  downloadOriginal,
+  exportXml,
+  newChoreographyDocument,
+  newDocument,
+  pickFile,
+} from '@/app/actions';
 import { formatKeys, SHORTCUTS } from '@/app/shortcuts';
+import { ToolbarMenu, type ToolbarMenuItem } from '@/components/ToolbarMenu';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -34,24 +55,61 @@ function tip(label: string, shortcut?: keyof typeof SHORTCUTS): string {
   return shortcut ? `${label} (${formatKeys(SHORTCUTS[shortcut]!.keys)})` : label;
 }
 
-const THEME_NEXT: Record<ThemePreference, ThemePreference> = {
-  system: 'light',
-  light: 'dark',
-  dark: 'system',
-};
+function commandTip(id: string): string {
+  const cmd = COMMANDS.find((c) => c.id === id)!;
+  return cmd.keys ? `${cmd.label} (${formatKeys(cmd.keys)})` : cmd.label;
+}
+
+/** An icon button for a registry command; disabled when the command is. */
+function CommandButton({ id, icon: Icon }: { id: string; icon: LucideIcon }) {
+  const cmd = COMMANDS.find((c) => c.id === id)!;
+  return (
+    <Button
+      size="icon"
+      title={commandTip(id)}
+      aria-label={cmd.label}
+      disabled={!isEnabled(cmd)}
+      onClick={() => runCommand(id)}
+    >
+      <Icon />
+    </Button>
+  );
+}
+
+const ARRANGE_ITEMS: { id: string; icon: LucideIcon; separated?: boolean }[] = [
+  { id: 'arrange.alignLeft', icon: AlignStartVertical },
+  { id: 'arrange.alignCenter', icon: AlignCenterVertical },
+  { id: 'arrange.alignRight', icon: AlignEndVertical },
+  { id: 'arrange.alignTop', icon: AlignStartHorizontal, separated: true },
+  { id: 'arrange.alignMiddle', icon: AlignCenterHorizontal },
+  { id: 'arrange.alignBottom', icon: AlignEndHorizontal },
+  { id: 'arrange.distributeHorizontal', icon: AlignHorizontalDistributeCenter, separated: true },
+  { id: 'arrange.distributeVertical', icon: AlignVerticalDistributeCenter },
+];
 
 export function Header() {
   const doc = useDocumentStore((s) => s.doc);
   const loading = useDocumentStore((s) => s.loading);
   const controller = useEditorStore((s) => s.controller);
   const { canUndo, canRedo, dirty, zoom, readOnly } = useEditorStore((s) => s.snapshot);
-  const theme = useUiStore((s) => s.theme);
-  const setTheme = useUiStore((s) => s.setTheme);
+  const snapToGrid = useUiStore((s) => s.snapToGrid);
+  const setSnapToGrid = useUiStore((s) => s.setSnapToGrid);
   const { inspectorOpen, analysisOpen, toggleInspector, toggleAnalysis } = useUiStore();
 
   const setPaletteOpen = useUiStore((s) => s.setCommandPaletteOpen);
-  const ThemeIcon = theme === 'dark' ? Moon : theme === 'light' ? Sun : Monitor;
   const exportAllowed = !!doc?.report.exportAllowed;
+  // Re-evaluated on every snapshot change (selection, read-only, ...).
+  const arrangeItems: ToolbarMenuItem[] = ARRANGE_ITEMS.map(({ id, icon, separated }) => {
+    const cmd = COMMANDS.find((c) => c.id === id)!;
+    return {
+      label: cmd.label,
+      icon,
+      separated,
+      disabled: !isEnabled(cmd),
+      onSelect: () => runCommand(id),
+    };
+  });
+  const canArrange = arrangeItems.some((i) => !i.disabled);
 
   return (
     <header className="flex h-12 shrink-0 items-center gap-1 overflow-x-auto overflow-y-hidden border-b bg-card px-2 [&>*]:shrink-0">
@@ -59,7 +117,7 @@ export function Header() {
         <div className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground">
           <Workflow className="size-4" />
         </div>
-        <span className="hidden text-sm font-semibold tracking-tight sm:inline">BPMN Flow</span>
+        <span className="hidden text-sm font-semibold tracking-tight xl:inline">BPMN Flow</span>
       </div>
       <Separator vertical />
       <div
@@ -93,6 +151,24 @@ export function Header() {
         >
           <FilePlus2 />
         </Button>
+        <ToolbarMenu
+          label="More ways to start a diagram"
+          className="-ml-1 w-4 px-0"
+          trigger={null}
+          items={[
+            {
+              label: 'New diagram',
+              icon: FilePlus2,
+              keys: SHORTCUTS.newDoc!.keys,
+              onSelect: () => void newDocument(),
+            },
+            {
+              label: 'New choreography diagram',
+              icon: FilePlus2,
+              onSelect: () => void newChoreographyDocument(),
+            },
+          ]}
+        />
         <Button
           size="icon"
           title={tip('Open BPMN file', 'open')}
@@ -121,14 +197,34 @@ export function Header() {
           <Redo2 />
         </Button>
         <Separator vertical />
+        <div className="hidden items-center gap-0.5 xl:flex" role="group" aria-label="Edit">
+          <CommandButton id="edit.cut" icon={Scissors} />
+          <CommandButton id="edit.copy" icon={Copy} />
+          <CommandButton id="edit.paste" icon={ClipboardPaste} />
+          <CommandButton id="edit.duplicate" icon={CopyPlus} />
+          <CommandButton id="edit.delete" icon={Trash} />
+          <Separator vertical />
+        </div>
+        <ToolbarMenu
+          label="Align and distribute"
+          title={
+            canArrange ? 'Align and distribute' : 'Align and distribute — select two or more shapes'
+          }
+          disabled={readOnly || !doc || !canArrange}
+          trigger={<AlignStartVertical />}
+          items={arrangeItems}
+        />
+        <CommandButton id="arrange.addLane" icon={BetweenHorizontalEnd} />
+        <CommandButton id="arrange.layout" icon={LayoutDashboard} />
         <Button
           size="icon"
-          title={tip('Auto layout', 'layout')}
-          aria-label="Auto layout"
-          disabled={readOnly || !doc}
-          onClick={() => void runAutoLayout()}
+          variant={snapToGrid ? 'active' : 'ghost'}
+          title={`Snap to grid: ${snapToGrid ? 'on' : 'off'}`}
+          aria-label="Snap to grid"
+          aria-pressed={snapToGrid}
+          onClick={() => setSnapToGrid(!snapToGrid)}
         >
-          <LayoutDashboard />
+          <Grid3x3 />
         </Button>
       </div>
 
@@ -193,14 +289,6 @@ export function Header() {
           <Command />
         </Button>
         <SettingsMenu />
-        <Button
-          size="icon"
-          title={`Theme: ${theme} (click to switch)`}
-          aria-label="Switch theme"
-          onClick={() => setTheme(THEME_NEXT[theme])}
-        >
-          <ThemeIcon />
-        </Button>
         <Separator vertical />
         {doc && !exportAllowed ? (
           <Button
@@ -230,8 +318,6 @@ function SettingsMenu() {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const snapToGrid = useUiStore((s) => s.snapToGrid);
-  const setSnapToGrid = useUiStore((s) => s.setSnapToGrid);
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
 
@@ -285,15 +371,6 @@ function SettingsMenu() {
               style={{ top: pos.top, right: pos.right }}
               className="fixed z-50 max-h-[calc(100vh-4rem)] w-60 max-w-[calc(100vw-1rem)] space-y-3 overflow-y-auto rounded-lg border bg-card p-3 shadow-xl"
             >
-              <label className="flex items-center justify-between gap-2">
-                <span>Snap to grid</span>
-                <input
-                  type="checkbox"
-                  aria-label="Snap to grid"
-                  checked={snapToGrid}
-                  onChange={(e) => setSnapToGrid(e.target.checked)}
-                />
-              </label>
               <label className="flex items-center justify-between gap-2">
                 <span>Theme</span>
                 <select
