@@ -302,3 +302,45 @@ export function drawnEdgeEnds(
     target: getRef(getRef(diEdge, 'targetElement'), 'bpmnElement') ?? ends.target,
   };
 }
+
+/**
+ * Element colors from the vendor DI color extensions. BPMN 2.0.2 defines no
+ * colors (§7.5, PDF 38: fills "MAY be white or clear", other fills are a tool
+ * extension), and BPMN DI has no color attributes, so tools write them as
+ * extension attributes on BPMNShape / BPMNEdge / BPMNLabel:
+ *  - OMG BPMN MIWG non-normative (`http://www.omg.org/spec/BPMN/non-normative/color/1.0`):
+ *    `background-color`, `border-color`, and `color` on BPMNLabel (preferred);
+ *  - bpmn.io / Camunda (`http://bpmn.io/schema/bpmn/biocolor/1.0`): `fill`, `stroke`.
+ * bpmn-moddle ships both packages and binds them by namespace URI, so any
+ * prefix in the file works and the values round-trip as typed properties.
+ */
+export interface DiColors {
+  fill?: string;
+  stroke?: string;
+  /** Explicit label color (`color:color` on BPMNLabel). */
+  label?: string;
+}
+
+/** Accepts only plain CSS color values (hex, rgb/hsl functions, named colors). */
+const COLOR_VALUE =
+  /^(#[0-9a-f]{3,4}|#[0-9a-f]{6}|#[0-9a-f]{8}|(rgb|rgba|hsl|hsla)\([0-9.,%\s/+-]+\)|[a-z]{3,30})$/i;
+
+export function isCssColor(value: string): boolean {
+  return COLOR_VALUE.test(value.trim());
+}
+
+export function readDiColors(di: ModdleElement | undefined): DiColors | undefined {
+  if (!di || !(is(di, 'bpmndi:BPMNShape') || is(di, 'bpmndi:BPMNEdge'))) return undefined;
+  const pick = (el: ModdleElement | undefined, ...names: string[]) =>
+    names
+      .map((name) => el?.get(name))
+      .map((v) => (typeof v === 'string' ? v.trim() : undefined))
+      .find((v): v is string => !!v && isCssColor(v));
+  const shape = is(di, 'bpmndi:BPMNShape');
+  const colors: DiColors = {
+    fill: shape ? pick(di, 'color:background-color', 'bioc:fill') : pick(di, 'bioc:fill'),
+    stroke: pick(di, 'color:border-color', 'bioc:stroke'),
+    label: pick(getRef(di, 'label'), 'color:color'),
+  };
+  return colors.fill || colors.stroke || colors.label ? colors : undefined;
+}

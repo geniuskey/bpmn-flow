@@ -547,3 +547,23 @@
   stroke: var(--bf-shape-stroke);
   stroke-width: 1px;
 }
+
+/*
+ * DI color extensions (color:* / bioc:*, src/editor/renderer/colors.ts). The
+ * element's own --bf-* variables are redefined inline on its visual group;
+ * these rules cover the styles that mix a theme color into the fill.
+ */
+.bf-di-fill .bf-start-event,
+.bf-di-fill .bf-end-event,
+.bf-di-fill .bf-lane {
+  fill: var(--bf-shape-fill);
+}
+.bf-di-text .bf-label {
+  fill: var(--bf-di-text);
+}
+.bf-di-text .bf-external-label {
+  fill: var(--bf-di-label, var(--bf-label));
+}
+.bf-di-text .bf-flow-label {
+  fill: var(--bf-di-label, var(--bf-muted));
+}

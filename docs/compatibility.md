@@ -128,4 +128,8 @@ editor had no time expression (now editable, and flagged by
   application, run unmodified; BPMN Flow itself does not use bpmn-js). Signavio and
   ARIS are proprietary SaaS products that require accounts and are not tested.
 - Label bounds are moved with their shape but not resized after renaming.
-- Vendor color extensions (e.g. `bioc:fill`) are preserved but not rendered.
+- Vendor color extensions are rendered and preserved: `color:background-color` /
+  `color:border-color` / `color:color` (OMG non-normative) and `bioc:fill` / `bioc:stroke`
+  (bpmn.io); the OMG attributes win when both are present. BPMN 2.0.2 itself defines no
+  colors (§7.5). The editor has no UI to set colors, and labels outside a shape keep the
+  theme color unless `color:color` is set.

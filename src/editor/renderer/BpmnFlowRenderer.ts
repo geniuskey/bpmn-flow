@@ -4,6 +4,7 @@
  *
  * Colors are not hard-coded: every SVG node gets `bf-*` classes that are styled
  * by CSS variables in src/styles/canvas.css, so theme switches need no redraw.
+ * DI color extensions override those variables per element (./colors.ts).
  */
 import BaseRenderer from 'diagram-js/lib/draw/BaseRenderer';
 import type EventBus from 'diagram-js/lib/core/EventBus';
@@ -29,6 +30,7 @@ import {
   iconType,
 } from './markers';
 import { callsComposite } from '../modeling/choreography';
+import { applyDiColors } from './colors';
 import { drawBlackBoxPool, drawChoreography, drawEvent, drawPool } from './shapes';
 import { el, path } from './svg';
 import {
@@ -258,12 +260,14 @@ export default class BpmnFlowRenderer extends BaseRenderer {
   }
 
   override drawShape(gfx: SVGElement, element: Shape): SVGElement {
+    applyDiColors(gfx, (element as BpmnShape).di, 'shape');
     return drawBpmnShape(gfx, element);
   }
 
   override drawConnection(gfx: SVGElement, element: Connection): SVGElement {
     const connection = element as BpmnConnection;
     const bo = connection.businessObject;
+    applyDiColors(gfx, connection.di, 'edge');
     const visual = visualFor(bo, true);
     const points = connection.waypoints;
     const unsupported = visual.kind === 'unsupportedConnection' ? ' bf-unsupported' : '';
