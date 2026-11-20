@@ -1,10 +1,11 @@
-import { AlertTriangle, Info, XCircle } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { AlertTriangle, CheckCircle2, ChevronRight, Info, XCircle } from 'lucide-react';
+import { useState } from 'react';
 import type { Finding, Severity } from '@/analysis/analyze';
 import { useAnalysis } from '@/app/useAnalysis';
 import { humanizeType } from '@/bpmn/model/elements';
 import type { CompatibilityIssue } from '@/bpmn/validation/compatibility';
 import { Badge } from '@/components/ui/badge';
+import { Stat, StatList } from '@/components/ui/stat';
 import { cn } from '@/lib/utils';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useEditorStore } from '@/stores/editorStore';
@@ -17,14 +18,7 @@ const SEVERITY = {
   info: { icon: Info, className: 'text-info', label: 'Info' },
 };
 
-function Tile({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) {
-  return (
-    <div className="rounded-lg border bg-background px-3 py-2" title={hint}>
-      <div className="text-[11px] text-muted-foreground">{label}</div>
-      <div className="text-lg font-semibold tabular-nums">{value}</div>
-    </div>
-  );
-}
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 function Overview() {
   const result = useAnalysis();
@@ -33,22 +27,15 @@ function Overview() {
   if (!result || !doc) return null;
   const { metrics, counts } = result;
   const validation = result.findings.filter(isValidation);
+  const count = (label: string, value: number, divider?: boolean) => (
+    <Stat label={label} value={value} dim={value === 0} divider={divider} />
+  );
   return (
-    <div className="space-y-3 p-3" data-testid="metrics">
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2">
-        <Tile label="Elements" value={metrics.totalElements} />
-        <Tile label="Events" value={metrics.events} />
-        <Tile label="Activities" value={metrics.activities} />
-        <Tile label="Gateways" value={metrics.gateways} />
-        <Tile label="Sequence flows" value={metrics.sequenceFlows} />
-        <Tile label="Message flows" value={metrics.messageFlows} />
-        <Tile label="Pools" value={metrics.pools} />
-        <Tile label="Lanes" value={metrics.lanes} />
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <SummaryButton
+    <div className="space-y-4 p-3 @container" data-testid="metrics">
+      <div className="grid overflow-hidden rounded-lg border bg-background @2xl:grid-cols-3">
+        <StatusButton
           label="Validation"
-          detail={validation.length ? `${validation.length} issue(s)` : 'valid'}
+          detail={validation.length ? plural(validation.length, 'issue') : 'No issues'}
           tone={
             validation.some((f) => f.severity === 'error')
               ? 'error'
@@ -58,24 +45,49 @@ function Overview() {
           }
           onClick={() => setTab('validation')}
         />
-        <SummaryButton
+        <StatusButton
           label="Findings"
-          detail={`${counts.warning} warning(s), ${counts.info} info`}
+          detail={
+            counts.warning || counts.info
+              ? [
+                  counts.warning && plural(counts.warning, 'warning'),
+                  counts.info && `${counts.info} info`,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')
+              : 'Nothing to review'
+          }
           tone={counts.warning ? 'warning' : 'success'}
           onClick={() => setTab('findings')}
         />
-        <SummaryButton
+        <StatusButton
           label="Compatibility"
-          detail={doc.report.mode === 'editable' ? 'editable, lossless' : 'read-only'}
+          detail={doc.report.mode === 'editable' ? 'Editable · lossless' : 'Read-only'}
           tone={doc.report.mode === 'editable' ? 'success' : 'warning'}
           onClick={() => setTab('compatibility')}
         />
       </div>
+      <StatList className="px-1">
+        {count('Elements', metrics.totalElements)}
+        {count('Events', metrics.events, true)}
+        {count('Activities', metrics.activities)}
+        {count('Gateways', metrics.gateways)}
+        {count('Sequence flows', metrics.sequenceFlows, true)}
+        {count('Message flows', metrics.messageFlows)}
+        {count('Pools', metrics.pools, true)}
+        {count('Lanes', metrics.lanes)}
+      </StatList>
     </div>
   );
 }
 
-function SummaryButton({
+const TONE = {
+  success: { icon: CheckCircle2, className: 'text-success' },
+  warning: { icon: AlertTriangle, className: 'text-warning' },
+  error: { icon: XCircle, className: 'text-destructive' },
+};
+
+function StatusButton({
   label,
   detail,
   tone,
@@ -83,16 +95,21 @@ function SummaryButton({
 }: {
   label: string;
   detail: string;
-  tone: 'success' | 'warning' | 'error';
+  tone: keyof typeof TONE;
   onClick: () => void;
 }) {
+  const { icon: Icon, className } = TONE[tone];
   return (
     <button
-      className="flex items-center gap-2 rounded-lg border bg-background px-3 py-2 hover:bg-accent"
+      className="group flex min-w-0 items-center gap-2.5 border-t px-3 py-2.5 text-left first:border-t-0 hover:bg-accent @2xl:border-t-0 @2xl:border-l @2xl:first:border-l-0"
       onClick={onClick}
     >
-      <span className="font-medium">{label}</span>
-      <Badge variant={tone}>{detail}</Badge>
+      <Icon className={cn('size-4 shrink-0', className)} />
+      <span className="min-w-0 flex-1">
+        <span className="block font-medium">{label}</span>
+        <span className="block truncate text-xs text-muted-foreground">{detail}</span>
+      </span>
+      <ChevronRight className="size-4 shrink-0 text-muted-foreground/60 group-hover:text-foreground" />
     </button>
   );
 }
@@ -121,12 +138,12 @@ function Metrics() {
     ],
   ];
   return (
-    <div className="space-y-3 p-3" data-testid="graph-metrics">
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2">
+    <div className="space-y-4 p-3" data-testid="graph-metrics">
+      <StatList className="px-1">
         {tiles.map(([label, value, hint]) => (
-          <Tile key={label} label={label} value={value} hint={hint} />
+          <Stat key={label} label={label} value={value} hint={hint} dim={value === 0} />
         ))}
-      </div>
+      </StatList>
       {graph.gateways.length > 0 && (
         <table className="w-full max-w-xl text-left">
           <caption className="pb-1 text-left text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
@@ -369,7 +386,7 @@ export function AnalysisPanel() {
       <div
         role="tablist"
         aria-label="Analysis views"
-        className="flex h-9 shrink-0 items-center gap-1 border-b px-2"
+        className="flex h-9 shrink-0 items-center gap-1 overflow-x-auto border-b px-2 [scrollbar-width:none]"
         onKeyDown={(e) => {
           // WAI-ARIA tabs: arrows / Home / End move to and activate another tab.
           const i = TABS.findIndex((t) => t.id === tab);
@@ -398,7 +415,7 @@ export function AnalysisPanel() {
             aria-controls="analysis-tabpanel"
             tabIndex={tab === t.id ? 0 : -1}
             className={cn(
-              'flex h-7 items-center gap-1.5 rounded-md px-2.5 font-medium',
+              'flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 font-medium whitespace-nowrap',
               tab === t.id
                 ? 'bg-accent text-accent-foreground'
                 : 'text-muted-foreground hover:text-foreground',

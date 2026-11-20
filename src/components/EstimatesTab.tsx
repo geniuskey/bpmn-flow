@@ -4,6 +4,7 @@ import { useDocumentStore } from '@/stores/documentStore';
 import { useEditorStore } from '@/stores/editorStore';
 import { useMetadataStore } from '@/stores/metadataStore';
 import { formatMinutes } from '@/lib/format';
+import { Stat, StatList } from '@/components/ui/stat';
 
 export function EstimatesTab() {
   const doc = useDocumentStore((s) => s.doc);
@@ -32,17 +33,17 @@ export function EstimatesTab() {
       {result.processes.map((p) => (
         <div key={p.processId} className="space-y-2">
           <div className="font-medium">{p.processName || p.processId}</div>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2">
-            <Tile label="Elapsed — best case" value={formatMinutes(p.bestCaseMinutes)} />
-            <Tile label="Elapsed — worst case" value={formatMinutes(p.worstCaseMinutes)} />
-            <Tile label="Hands-on work (sum)" value={formatMinutes(p.totalWorkMinutes)} />
-            <Tile label="Waiting (sum)" value={formatMinutes(p.totalWaitingMinutes)} />
-            <Tile label="Cost (Σ cost × frequency)" value={p.totalCost.toLocaleString()} />
-            <Tile
+          <StatList className="px-1">
+            <Stat label="Elapsed — best case" value={formatMinutes(p.bestCaseMinutes)} />
+            <Stat label="Elapsed — worst case" value={formatMinutes(p.worstCaseMinutes)} />
+            <Stat label="Hands-on work (sum)" value={formatMinutes(p.totalWorkMinutes)} />
+            <Stat label="Waiting (sum)" value={formatMinutes(p.totalWaitingMinutes)} />
+            <Stat label="Cost (Σ cost × frequency)" value={p.totalCost.toLocaleString()} />
+            <Stat
               label="Activities with duration"
               value={`${p.activities - p.missingDuration.length} / ${p.activities}`}
             />
-          </div>
+          </StatList>
           {p.criticalPath.length > 1 && (
             <button
               className="text-left text-xs text-primary hover:underline"
@@ -78,15 +79,6 @@ export function EstimatesTab() {
         slowest branch counts); alternative paths give best/worst case; loops are counted once;
         missing durations count as 0. These are estimates from entered data, not measurements.
       </p>
-    </div>
-  );
-}
-
-function Tile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border bg-background px-3 py-2">
-      <div className="text-[11px] text-muted-foreground">{label}</div>
-      <div className="text-base font-semibold tabular-nums">{value}</div>
     </div>
   );
 }
