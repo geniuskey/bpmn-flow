@@ -28,6 +28,7 @@ import type { BpmnDocument } from '@/bpmn/document';
 import { exportBpmnXml } from '@/bpmn/document';
 import type { ModdleElement } from '@/bpmn/model/moddle';
 import { importDiagram } from './canvas/importDiagram';
+import { exportSvg, type SvgExport } from './canvas/svgExport';
 import {
   UPDATE_CONDITION,
   UPDATE_DOCUMENTATION,
@@ -263,6 +264,59 @@ export class EditorController {
     const canvas = this.diagram.get<Canvas>('canvas');
     const scale = Math.min(4, Math.max(0.2, canvas.zoom() * factor));
     canvas.zoom(scale, 'auto' as never);
+  }
+
+  /** Zooms to an absolute scale around the center of the view. */
+  setZoom(scale: number): void {
+    this.diagram?.get<Canvas>('canvas').zoom(Math.min(4, Math.max(0.2, scale)), 'auto' as never);
+  }
+
+  /** Fits the view to the selected elements (no upscaling beyond 100%). */
+  zoomToSelection(): boolean {
+    const canvas = this.get<Canvas>('canvas');
+    const elements = this.selected();
+    if (!canvas || !elements.length) return false;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const el of elements) {
+      const points = (el as Connection).waypoints ?? [
+        { x: (el as Shape).x, y: (el as Shape).y },
+        { x: (el as Shape).x + (el as Shape).width, y: (el as Shape).y + (el as Shape).height },
+      ];
+      for (const p of points) {
+        minX = Math.min(minX, p.x);
+        minY = Math.min(minY, p.y);
+        maxX = Math.max(maxX, p.x);
+        maxY = Math.max(maxY, p.y);
+      }
+    }
+    const pad = 60;
+    const box = {
+      x: minX - pad,
+      y: minY - pad,
+      width: maxX - minX + pad * 2,
+      height: maxY - minY + pad * 2,
+    };
+    const { outer } = canvas.viewbox();
+    const scale = Math.min(1, outer.width / box.width, outer.height / box.height);
+    const width = outer.width / scale;
+    const height = outer.height / scale;
+    canvas.viewbox({
+      x: box.x + box.width / 2 - width / 2,
+      y: box.y + box.height / 2 - height / 2,
+      width,
+      height,
+    });
+    return true;
+  }
+
+  /** Standalone SVG image of the visible diagram (light theme, no editor chrome). */
+  toSvg(): SvgExport | null {
+    const canvas = this.get<Canvas>('canvas');
+    const registry = this.get<ElementRegistry>('elementRegistry');
+    return canvas && registry ? exportSvg(canvas, registry) : null;
   }
 
   resetZoom(): void {

@@ -4,6 +4,7 @@
  */
 import {
   downloadOriginal,
+  exportImage,
   exportXml,
   newChoreographyDocument,
   newDocument,
@@ -55,6 +56,18 @@ export const COMMANDS: AppCommand[] = [
     group: 'File',
     keys: 'Mod+S',
     run: () => exportXml(),
+  },
+  {
+    id: 'file.exportSvg',
+    label: 'Export as SVG image',
+    group: 'File',
+    run: () => exportImage('svg'),
+  },
+  {
+    id: 'file.exportPng',
+    label: 'Export as PNG image',
+    group: 'File',
+    run: () => exportImage('png'),
   },
   {
     id: 'file.restorePrevious',
@@ -251,6 +264,13 @@ export const COMMANDS: AppCommand[] = [
     keys: '0',
     run: (c) => c.resetZoom(),
   },
+  {
+    id: 'view.zoomSelection',
+    label: 'Zoom to selection',
+    group: 'View',
+    selection: true,
+    run: (c) => void c.zoomToSelection(),
+  },
   { id: 'view.fit', label: 'Fit to view', group: 'View', keys: 'Shift+1', run: (c) => c.fit() },
   {
     id: 'view.theme',
@@ -280,6 +300,9 @@ export function isEnabled(cmd: AppCommand): boolean {
   if (!controller) return false;
   if (cmd.editing && snapshot.readOnly) return false;
   if (cmd.selection && snapshot.selection.length === 0) return false;
+  if (cmd.id === 'file.exportSvg' || cmd.id === 'file.exportPng') {
+    return !!useDocumentStore.getState().doc;
+  }
   if (cmd.id === 'file.original') return !!useDocumentStore.getState().doc;
   if (cmd.id === 'file.export') return !!useDocumentStore.getState().doc?.report.exportAllowed;
   if (cmd.id === 'edit.undo') return snapshot.canUndo;

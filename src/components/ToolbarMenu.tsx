@@ -35,19 +35,27 @@ export function ToolbarMenu({
   items,
   trigger,
   className,
+  variant = 'ghost',
+  testId,
+  chevron = true,
 }: {
   label: string;
   title?: string;
   disabled?: boolean;
   items: ToolbarMenuItem[];
-  /** Trigger content; a chevron is added after it. */
+  /** Trigger content. */
   trigger: ReactNode;
   className?: string;
+  variant?: 'ghost' | 'default' | 'outline';
+  testId?: string;
+  /** Adds a chevron after the trigger content. */
+  chevron?: boolean;
 }) {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const open = pos !== null;
+  const anyIcon = items.some((i) => i.icon);
 
   const close = () => {
     setPos(null);
@@ -90,8 +98,9 @@ export function ToolbarMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         disabled={disabled}
-        variant={open ? 'active' : 'ghost'}
+        variant={open && variant === 'ghost' ? 'active' : variant}
         className={cn('gap-0.5 px-1.5', className)}
+        data-testid={testId}
         onClick={() => {
           if (open) return close();
           const r = buttonRef.current!.getBoundingClientRect();
@@ -99,7 +108,7 @@ export function ToolbarMenu({
         }}
       >
         {trigger}
-        <ChevronDown className="!size-3 text-muted-foreground" />
+        {chevron && <ChevronDown className="!size-3 opacity-60" />}
       </Button>
       {open &&
         createPortal(
@@ -127,7 +136,7 @@ export function ToolbarMenu({
                       item.onSelect();
                     }}
                   >
-                    {item.icon && <item.icon />}
+                    {item.icon ? <item.icon /> : anyIcon && <span className="size-4 shrink-0" />}
                     <span className="flex-1">{item.label}</span>
                     {item.keys && (
                       <span className="text-[11px] text-muted-foreground">

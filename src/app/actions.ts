@@ -5,7 +5,7 @@
 import { BpmnExportError, loadBpmnDocument } from '@/bpmn/document';
 import { BpmnImportError } from '@/bpmn/import/parse';
 import { newChoreographyXml, newDiagramXml } from '@/bpmn/model/newDiagram';
-import { downloadBytes, downloadText } from '@/lib/download';
+import { downloadBlob, downloadBytes, downloadText } from '@/lib/download';
 import { decodeXmlBytes } from '@/bpmn/import/encoding';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useEditorStore } from '@/stores/editorStore';
@@ -155,6 +155,59 @@ export async function exportXml(): Promise<void> {
       kind: 'error',
       title: err instanceof Error ? err.message : 'Export failed.',
       details,
+    });
+  }
+}
+
+/** PNG pixel ratio, reduced for very large diagrams to stay within canvas limits. */
+const PNG_SCALE = 2;
+const PNG_MAX_PIXELS = 40_000_000;
+const PNG_MAX_SIDE = 16_000;
+
+/** Downloads the visible diagram as an SVG or PNG image (light theme). */
+export async function exportImage(format: 'svg' | 'png'): Promise<void> {
+  const ctrl = controller();
+  const doc = useDocumentStore.getState().doc;
+  const notify = useDocumentStore.getState().notify;
+  const image = ctrl?.toSvg();
+  if (!doc || !image) {
+    notify({ kind: 'info', title: 'Nothing to export: the diagram is empty.' });
+    return;
+  }
+  const name = `${doc.fileName.replace(/\.(bpmn|xml)$/i, '')}.${format}`;
+  if (format === 'svg') {
+    downloadText(image.svg, name, 'image/svg+xml');
+    return;
+  }
+  try {
+    const scale = Math.min(
+      PNG_SCALE,
+      Math.sqrt(PNG_MAX_PIXELS / (image.width * image.height)),
+      PNG_MAX_SIDE / Math.max(image.width, image.height),
+    );
+    const url = URL.createObjectURL(new Blob([image.svg], { type: 'image/svg+xml' }));
+    const img = new Image();
+    img.src = url;
+    try {
+      await img.decode();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(image.width * scale);
+    canvas.height = Math.round(image.height * scale);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas is not available.');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) throw new Error('The image is too large.');
+    downloadBlob(blob, name);
+  } catch (err) {
+    notify({
+      kind: 'error',
+      title: `PNG export failed${err instanceof Error ? `: ${err.message}` : '.'}`,
     });
   }
 }

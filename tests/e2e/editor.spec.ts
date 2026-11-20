@@ -243,3 +243,56 @@ test('color fields show the rendered default color, not white', async ({ page })
   expect(tint[1]).toBeGreaterThan(tint[0]!);
   expect(tint[1]).toBeLessThan(255);
 });
+
+test('exports the diagram as a standalone SVG and a PNG image', async ({ page }) => {
+  await page.goto('/?sample=simple-process');
+  // Dark mode on screen must not leak into the image.
+  await page.evaluate(() => document.documentElement.classList.add('dark'));
+  await page.keyboard.press('ControlOrMeta+a'); // outlines of selected shapes stay out too
+  const menu = page.getByRole('button', { name: 'Export as image' });
+
+  let download = page.waitForEvent('download');
+  await menu.click();
+  await page.getByRole('menuitem', { name: 'Export as SVG image' }).click();
+  const svgFile = await download;
+  expect(svgFile.suggestedFilename()).toBe('simple-process.svg');
+  const svg = await readFile(await svgFile.path(), 'utf8');
+  expect(svg).toMatch(/^<\?xml[^>]*>\s*<svg[^>]+viewBox="/);
+  expect(svg).not.toMatch(/djs-hit|djs-outline|class="|var\(--|oklch|oklab/);
+  expect(svg).toContain('rgb(255, 255, 255)'); // light shape fill
+  await expect(page.locator('html')).toHaveClass(/dark/);
+
+  download = page.waitForEvent('download');
+  await menu.click();
+  await page.getByRole('menuitem', { name: 'Export as PNG image' }).click();
+  const pngFile = await download;
+  expect(pngFile.suggestedFilename()).toBe('simple-process.png');
+  const png = await readFile(await pngFile.path());
+  expect(png.subarray(1, 4).toString()).toBe('PNG');
+  expect(png.length).toBeGreaterThan(2000);
+});
+
+test('zoom menu applies presets', async ({ page }) => {
+  await page.goto('/?sample=simple-process');
+  const zoom = page.getByTestId('zoom-level');
+  await zoom.click();
+  await page.getByRole('menuitem', { name: '150%' }).click();
+  await expect(zoom).toHaveText('150%');
+  await zoom.click();
+  await page.getByRole('menuitem', { name: '50%', exact: true }).click();
+  await expect(zoom).toHaveText('50%');
+});
+
+test('toolbar groups move into the More menu on narrow screens', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 600 });
+  await page.goto('/?sample=simple-process');
+  await expect(page.getByRole('button', { name: 'Align and distribute' })).toHaveCount(0);
+  const header = await page.locator('header').evaluate((h) => [h.scrollWidth, h.clientWidth]);
+  expect(header[0]).toBeLessThanOrEqual(header[1]!);
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.getByRole('button', { name: 'More actions' }).click();
+  const menu = page.getByRole('menu', { name: 'More actions' });
+  await expect(menu.getByRole('menuitem', { name: 'Copy' })).toBeEnabled();
+  await expect(menu.getByRole('menuitem', { name: 'Align left' })).toBeEnabled();
+  await expect(menu.getByRole('menuitem', { name: 'Auto layout' })).toBeVisible();
+});

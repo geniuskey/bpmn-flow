@@ -17,9 +17,12 @@ import {
   FilePlus2,
   FolderOpen,
   Grid3x3,
+  Image,
   LayoutDashboard,
   Lock,
   Maximize,
+  MoreHorizontal,
+  Scan,
   PanelBottom,
   PanelRight,
   Redo2,
@@ -32,7 +35,7 @@ import {
   ZoomOut,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { COMMANDS, isEnabled, runCommand } from '@/app/commands';
 import {
@@ -76,6 +79,44 @@ function CommandButton({ id, icon: Icon }: { id: string; icon: LucideIcon }) {
   );
 }
 
+function commandItem(id: string, icon?: LucideIcon, separated?: boolean): ToolbarMenuItem {
+  const cmd = COMMANDS.find((c) => c.id === id)!;
+  return {
+    label: cmd.label,
+    icon,
+    keys: cmd.keys,
+    separated,
+    disabled: !isEnabled(cmd),
+    onSelect: () => runCommand(id),
+  };
+}
+
+/** Tailwind `lg` and `xl`: below them, toolbar groups move into the overflow menu. */
+const LG = '(min-width: 1024px)';
+const XL = '(min-width: 1280px)';
+
+function useMedia(query: string): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const mq = window.matchMedia(query);
+      mq.addEventListener('change', onChange);
+      return () => mq.removeEventListener('change', onChange);
+    },
+    () => window.matchMedia(query).matches,
+    () => true,
+  );
+}
+
+const EDIT_ITEMS: [string, LucideIcon][] = [
+  ['edit.cut', Scissors],
+  ['edit.copy', Copy],
+  ['edit.paste', ClipboardPaste],
+  ['edit.duplicate', CopyPlus],
+  ['edit.delete', Trash],
+];
+
+const ZOOM_PRESETS = [0.5, 0.75, 1, 1.5, 2];
+
 const ARRANGE_ITEMS: { id: string; icon: LucideIcon; separated?: boolean }[] = [
   { id: 'arrange.alignLeft', icon: AlignStartVertical },
   { id: 'arrange.alignCenter', icon: AlignCenterVertical },
@@ -99,17 +140,41 @@ export function Header() {
   const setPaletteOpen = useUiStore((s) => s.setCommandPaletteOpen);
   const exportAllowed = !!doc?.report.exportAllowed;
   // Re-evaluated on every snapshot change (selection, read-only, ...).
-  const arrangeItems: ToolbarMenuItem[] = ARRANGE_ITEMS.map(({ id, icon, separated }) => {
-    const cmd = COMMANDS.find((c) => c.id === id)!;
-    return {
-      label: cmd.label,
-      icon,
-      separated,
-      disabled: !isEnabled(cmd),
-      onSelect: () => runCommand(id),
-    };
-  });
+  const arrangeItems = ARRANGE_ITEMS.map(({ id, icon, separated }) =>
+    commandItem(id, icon, separated),
+  );
   const canArrange = arrangeItems.some((i) => !i.disabled);
+  const wide = useMedia(XL);
+  const medium = useMedia(LG);
+  // Groups that do not fit move into the "More" menu (edit below xl, arrange below lg).
+  const overflowItems: ToolbarMenuItem[] = [
+    ...(wide ? [] : EDIT_ITEMS.map(([id, icon]) => commandItem(id, icon))),
+    ...(medium
+      ? []
+      : [
+          ...arrangeItems.map((item, i) => (i === 0 ? { ...item, separated: !wide } : item)),
+          commandItem('arrange.addLane', BetweenHorizontalEnd, true),
+          commandItem('arrange.layout', LayoutDashboard),
+          {
+            label: `Snap to grid: ${snapToGrid ? 'on' : 'off'}`,
+            icon: Grid3x3,
+            onSelect: () => setSnapToGrid(!snapToGrid),
+          },
+        ]),
+  ];
+  const zoomItems: ToolbarMenuItem[] = [
+    ...ZOOM_PRESETS.map((z) => ({
+      label: `${z * 100}%`,
+      keys: z === 1 ? SHORTCUTS.zoomReset!.keys : undefined,
+      onSelect: () => controller?.setZoom(z),
+    })),
+    { ...commandItem('view.fit', Maximize), separated: true },
+    commandItem('view.zoomSelection', Scan),
+  ];
+  const imageItems: ToolbarMenuItem[] = [
+    commandItem('file.exportSvg', Image),
+    commandItem('file.exportPng', Image),
+  ];
 
   return (
     <header className="flex h-12 shrink-0 items-center gap-1 overflow-x-auto overflow-y-hidden border-b bg-card px-2 [&>*]:shrink-0">
@@ -197,70 +262,91 @@ export function Header() {
           <Redo2 />
         </Button>
         <Separator vertical />
-        <div className="hidden items-center gap-0.5 xl:flex" role="group" aria-label="Edit">
-          <CommandButton id="edit.cut" icon={Scissors} />
-          <CommandButton id="edit.copy" icon={Copy} />
-          <CommandButton id="edit.paste" icon={ClipboardPaste} />
-          <CommandButton id="edit.duplicate" icon={CopyPlus} />
-          <CommandButton id="edit.delete" icon={Trash} />
-          <Separator vertical />
-        </div>
-        <ToolbarMenu
-          label="Align and distribute"
-          title={
-            canArrange ? 'Align and distribute' : 'Align and distribute — select two or more shapes'
-          }
-          disabled={readOnly || !doc || !canArrange}
-          trigger={<AlignStartVertical />}
-          items={arrangeItems}
-        />
-        <CommandButton id="arrange.addLane" icon={BetweenHorizontalEnd} />
-        <CommandButton id="arrange.layout" icon={LayoutDashboard} />
-        <Button
-          size="icon"
-          variant={snapToGrid ? 'active' : 'ghost'}
-          title={`Snap to grid: ${snapToGrid ? 'on' : 'off'}`}
-          aria-label="Snap to grid"
-          aria-pressed={snapToGrid}
-          onClick={() => setSnapToGrid(!snapToGrid)}
-        >
-          <Grid3x3 />
-        </Button>
+        {wide && (
+          <div className="flex items-center gap-0.5" role="group" aria-label="Edit">
+            {EDIT_ITEMS.map(([id, icon]) => (
+              <CommandButton key={id} id={id} icon={icon} />
+            ))}
+            <Separator vertical />
+          </div>
+        )}
+        {medium && (
+          <div className="flex items-center gap-0.5" role="group" aria-label="Arrange">
+            <ToolbarMenu
+              label="Align and distribute"
+              title={
+                canArrange
+                  ? 'Align and distribute'
+                  : 'Align and distribute — select two or more shapes'
+              }
+              disabled={readOnly || !doc || !canArrange}
+              trigger={<AlignStartVertical />}
+              items={arrangeItems}
+            />
+            <CommandButton id="arrange.addLane" icon={BetweenHorizontalEnd} />
+            <CommandButton id="arrange.layout" icon={LayoutDashboard} />
+            <Button
+              size="icon"
+              variant={snapToGrid ? 'active' : 'ghost'}
+              title={`Snap to grid: ${snapToGrid ? 'on' : 'off'}`}
+              aria-label="Snap to grid"
+              aria-pressed={snapToGrid}
+              onClick={() => setSnapToGrid(!snapToGrid)}
+            >
+              <Grid3x3 />
+            </Button>
+          </div>
+        )}
+        {overflowItems.length > 0 && (
+          <ToolbarMenu
+            label="More actions"
+            chevron={false}
+            className="w-8 px-0"
+            trigger={<MoreHorizontal />}
+            items={overflowItems}
+          />
+        )}
       </div>
 
       <div className="ml-auto flex items-center gap-0.5">
-        <Button
-          size="icon"
-          title={tip('Zoom out', 'zoomOut')}
-          aria-label="Zoom out"
-          onClick={() => controller?.zoomBy(1 / 1.2)}
-        >
-          <ZoomOut />
-        </Button>
-        <button
-          className="h-7 w-12 rounded-md text-center text-xs tabular-nums text-muted-foreground hover:bg-accent"
-          title={tip('Reset zoom', 'zoomReset')}
-          onClick={() => controller?.resetZoom()}
-          data-testid="zoom-level"
-        >
-          {Math.round(zoom * 100)}%
-        </button>
-        <Button
-          size="icon"
-          title={tip('Zoom in', 'zoomIn')}
-          aria-label="Zoom in"
-          onClick={() => controller?.zoomBy(1.2)}
-        >
-          <ZoomIn />
-        </Button>
-        <Button
-          size="icon"
-          title={tip('Fit to view', 'fit')}
-          aria-label="Fit to view"
-          onClick={() => controller?.fit()}
-        >
-          <Maximize />
-        </Button>
+        {medium && (
+          <Button
+            size="icon"
+            title={tip('Zoom out', 'zoomOut')}
+            aria-label="Zoom out"
+            onClick={() => controller?.zoomBy(1 / 1.2)}
+          >
+            <ZoomOut />
+          </Button>
+        )}
+        <ToolbarMenu
+          label="Zoom level"
+          title="Zoom level and presets"
+          testId="zoom-level"
+          className="h-7 w-16 text-xs tabular-nums text-muted-foreground"
+          trigger={`${Math.round(zoom * 100)}%`}
+          items={zoomItems}
+        />
+        {medium && (
+          <>
+            <Button
+              size="icon"
+              title={tip('Zoom in', 'zoomIn')}
+              aria-label="Zoom in"
+              onClick={() => controller?.zoomBy(1.2)}
+            >
+              <ZoomIn />
+            </Button>
+            <Button
+              size="icon"
+              title={tip('Fit to view', 'fit')}
+              aria-label="Fit to view"
+              onClick={() => controller?.fit()}
+            >
+              <Maximize />
+            </Button>
+          </>
+        )}
         <Separator vertical />
         <Button
           size="icon"
@@ -290,25 +376,42 @@ export function Header() {
         </Button>
         <SettingsMenu />
         <Separator vertical />
-        {doc && !exportAllowed ? (
-          <Button
-            variant="outline"
-            title="Download the unmodified original file"
-            onClick={downloadOriginal}
-          >
-            <FileDown /> Original
-          </Button>
-        ) : (
-          <Button
-            variant="default"
+        <div className="flex items-center">
+          {doc && !exportAllowed ? (
+            <Button
+              variant="outline"
+              className="rounded-r-none border-r-0"
+              title="Download the unmodified original file"
+              onClick={downloadOriginal}
+            >
+              <FileDown /> Original
+            </Button>
+          ) : (
+            <Button
+              variant="default"
+              className="rounded-r-none"
+              disabled={!doc}
+              title={tip('Export BPMN 2.0 XML', 'export')}
+              onClick={() => void exportXml()}
+              data-testid="export-button"
+            >
+              <Download /> Export
+            </Button>
+          )}
+          <ToolbarMenu
+            label="Export as image"
+            title="Export as SVG or PNG image"
+            variant={doc && !exportAllowed ? 'outline' : 'default'}
+            className={
+              doc && !exportAllowed
+                ? 'w-6 rounded-l-none px-0'
+                : 'w-6 rounded-l-none border-l border-l-primary-foreground/25 px-0'
+            }
             disabled={!doc}
-            title={tip('Export BPMN 2.0 XML', 'export')}
-            onClick={() => void exportXml()}
-            data-testid="export-button"
-          >
-            <Download /> Export
-          </Button>
-        )}
+            trigger={null}
+            items={imageItems}
+          />
+        </div>
       </div>
     </header>
   );
