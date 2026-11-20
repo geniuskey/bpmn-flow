@@ -8,8 +8,9 @@ import type { Shape } from 'diagram-js/lib/model/Types';
 
 export const ARRANGE_ELEMENTS = 'elements.arrange';
 
-export type Alignment = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
-export type DistributeAxis = 'horizontal' | 'vertical';
+import type { Alignment, DistributeAxis } from '../types';
+
+export type { Alignment, DistributeAxis };
 
 export interface ArrangeMove {
   shape: Shape;

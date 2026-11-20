@@ -14,6 +14,16 @@ export interface DiagramInfo {
 
 export type EditorTool = 'select' | 'pan' | 'lasso' | 'connect';
 
+export type Alignment = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
+export type DistributeAxis = 'horizontal' | 'vertical';
+
+/** A standalone SVG image of a diagram and its size in pixels. */
+export interface SvgExport {
+  svg: string;
+  width: number;
+  height: number;
+}
+
 export interface EditorSnapshot {
   selection: string[];
   canUndo: boolean;

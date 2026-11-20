@@ -28,7 +28,7 @@ import type { BpmnDocument } from '@/bpmn/document';
 import { exportBpmnXml } from '@/bpmn/document';
 import type { ModdleElement } from '@/bpmn/model/moddle';
 import { importDiagram } from './canvas/importDiagram';
-import { exportSvg, type SvgExport } from './canvas/svgExport';
+import { exportSvg } from './canvas/svgExport';
 import {
   UPDATE_CONDITION,
   UPDATE_DOCUMENTATION,
@@ -62,9 +62,7 @@ import {
   ARRANGE_ELEMENTS,
   alignMoves,
   distributeMoves,
-  type Alignment,
   type ArrangeMove,
-  type DistributeAxis,
 } from './commands/ArrangeHandler';
 import type DirectEditing from './interaction/DirectEditing';
 import type Clipboard from './interaction/Clipboard';
@@ -75,8 +73,10 @@ import { labelOf } from '@/bpmn/model/elements';
 import { getMany, getRef, is } from '@/bpmn/model/moddle';
 import { coreModule, EDITING_MODULES } from './modules';
 import type {
+  Alignment,
   CanvasImportResult,
   BandOp,
+  DistributeAxis,
   DiagramInfo,
   EditorOptions,
   ElementDetail,
@@ -88,6 +88,7 @@ import type {
   LoopKind,
   PropertyValue,
   ShapePreset,
+  SvgExport,
 } from './types';
 import type { ELK } from 'elkjs/lib/elk-api';
 

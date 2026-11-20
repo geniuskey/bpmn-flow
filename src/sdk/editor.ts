@@ -18,9 +18,11 @@ import type { CanvasImportResult, EditorOptions } from '@/editor/types';
 import { bindKeyboard, type KeyboardOptions } from './keyboard';
 
 export type {
+  Alignment,
   BandOp,
   CanvasImportResult,
   DiagramInfo,
+  DistributeAxis,
   EditorOptions,
   EditorSnapshot,
   EditorTool,
@@ -32,6 +34,7 @@ export type {
   LoopKind,
   PropertyValue,
   ShapePreset,
+  SvgExport,
   TimerType,
 } from '@/editor/types';
 /** The BPMN 2.0.2 shape library (palette entries) and their previews. */

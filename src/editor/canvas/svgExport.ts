@@ -7,6 +7,7 @@
 import type Canvas from 'diagram-js/lib/core/Canvas';
 import type ElementRegistry from 'diagram-js/lib/core/ElementRegistry';
 import type { Connection, Element, Shape } from 'diagram-js/lib/model/Types';
+import type { SvgExport } from '../types';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const PADDING = 20;
@@ -48,12 +49,6 @@ const PROPERTIES = [
 ] as const;
 
 const COLOR_PROPERTIES = new Set(['fill', 'stroke']);
-
-export interface SvgExport {
-  svg: string;
-  width: number;
-  height: number;
-}
 
 export function exportSvg(canvas: Canvas, registry: ElementRegistry): SvgExport | null {
   const layer = canvas.getActiveLayer() as SVGGElement | null;
