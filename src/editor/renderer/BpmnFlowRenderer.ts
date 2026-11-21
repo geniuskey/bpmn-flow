@@ -36,6 +36,8 @@ import { el, path } from './svg';
 import {
   TEXT,
   drawCaption,
+  DI_LABEL_PADDING,
+  fitDiLabel,
   drawCenteredText,
   drawExternalLabel,
   drawShapeName,
@@ -351,18 +353,29 @@ export default class BpmnFlowRenderer extends BaseRenderer {
 
     if (bo.name) {
       const label = readLabelBounds(connection.di);
-      const mid = polylineMid(points);
-      const box = label
-        ? { x: label.x, y: label.y, width: Math.max(label.width, 40), height: label.height }
-        : { x: mid.x - 45, y: mid.y - 22, width: 90, height: 18 };
-      drawCenteredText(
-        gfx,
-        bo.name,
-        box,
-        'bf-label bf-flow-label',
-        label ? 'center-top' : 'center-middle',
-        readLabelFont(connection.di),
-      );
+      const font = readLabelFont(connection.di);
+      if (label) {
+        const fitted = fitDiLabel(bo.name, label, font, 40);
+        drawCenteredText(
+          gfx,
+          fitted.text,
+          fitted.box,
+          'bf-label bf-flow-label',
+          'center-top',
+          font,
+          DI_LABEL_PADDING,
+        );
+      } else {
+        const mid = polylineMid(points);
+        drawCenteredText(
+          gfx,
+          bo.name,
+          { x: mid.x - 45, y: mid.y - 22, width: 90, height: 18 },
+          'bf-label bf-flow-label',
+          'center-middle',
+          font,
+        );
+      }
     }
     return line;
   }

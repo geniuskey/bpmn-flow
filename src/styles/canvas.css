@@ -551,11 +551,16 @@
 /*
  * DI color extensions (color:* / bioc:*, src/editor/renderer/colors.ts). The
  * element's own --bf-* variables are redefined inline on its visual group.
- * Any DI color drops the per-type interior tints, so a stroke color only ever
+ * Any DI color drops the per-type tints (interior and lines), so a stroke color only ever
  * changes lines and text, the same way on every element type.
  */
 .bf-di {
   --bf-gateway-fill: var(--bf-shape-fill);
+  /* The per-type line tints too: a theme tint on a file's own fill can vanish
+     (an orange marker on a gold gateway). A DI stroke color, set inline, wins. */
+  --bf-gateway: var(--bf-shape-stroke);
+  --bf-event-start: var(--bf-shape-stroke);
+  --bf-event-end: var(--bf-shape-stroke);
 }
 .bf-di .bf-start-event,
 .bf-di .bf-end-event,

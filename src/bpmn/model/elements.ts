@@ -477,7 +477,8 @@ export const PASSIVE_TYPES = [
 
 /**
  * Root elements (children of `bpmn:Definitions`) that the editor does not show
- * but which cannot be affected by MVP edits. They are preserved verbatim.
+ * but which cannot be affected by MVP edits. They are preserved verbatim,
+ * with everything inside them (e.g. the operations of an interface).
  */
 export const PRESERVED_ROOT_TYPES = [
   'bpmn:Message',
@@ -500,6 +501,9 @@ export const PRESERVED_ROOT_TYPES = [
   'bpmn:PartnerRole',
   'bpmn:CorrelationProperty',
   'bpmn:EndPoint',
+  // Not root elements, but declarations of bpmn:Definitions of the same kind.
+  'bpmn:Import',
+  'bpmn:Relationship',
 ] as const;
 
 export type ElementCategory = 'event' | 'activity' | 'gateway' | 'flow' | 'container' | 'other';

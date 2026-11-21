@@ -85,6 +85,26 @@ function isInsideExtension(el: ModdleElement): boolean {
   return false;
 }
 
+function isPreservedRoot(el: ModdleElement): boolean {
+  return (
+    (PRESERVED_ROOT_TYPES as readonly string[]).includes(el.$type) &&
+    is(el.$parent, 'bpmn:Definitions')
+  );
+}
+
+/** `"name" ` of a preserved element: an import is known by its location or namespace. */
+function preservedName(el: ModdleElement): string {
+  const name =
+    el.name ?? el.id ?? (el.get('location') as string | undefined) ?? el.get('namespace');
+  return name ? `"${name as string}" ` : '';
+}
+
+/** Content of a preserved root element is preserved with it. */
+function isInsidePreservedRoot(el: ModdleElement): boolean {
+  for (let p = el.$parent; p; p = p.$parent) if (isPreservedRoot(p)) return true;
+  return false;
+}
+
 export function assessCompatibility(
   definitions: ModdleElement,
   parseWarnings: readonly string[],
@@ -169,6 +189,33 @@ export function assessCompatibility(
   const unsupported = new Map<string, string[]>();
   let hasExtensions = false;
 
+  // A process no diagram shows (e.g. one only a call activity calls) is
+  // preserved untouched: no edit can reach its content (BPMN 2.0.2 §12.1).
+  const shownProcesses = new Set<ModdleElement>();
+  for (const plane of di.planes) {
+    const shown = getRef(plane, 'bpmnElement');
+    if (is(shown, 'bpmn:Collaboration')) {
+      for (const p of getMany(shown, 'participants')) {
+        const process = getRef(p, 'processRef');
+        if (process) shownProcesses.add(process);
+      }
+    }
+    // A process, or a sub-process drawn on its own: the process around it.
+    let top = shown;
+    while (top && !is(top.$parent, 'bpmn:Definitions')) top = top.$parent;
+    if (is(top, 'bpmn:Process')) shownProcesses.add(top!);
+  }
+  const undrawnProcesses = new Set<ModdleElement>();
+  if (di.plane) {
+    for (const root of getMany(definitions, 'rootElements')) {
+      if (is(root, 'bpmn:Process') && !shownProcesses.has(root)) undrawnProcesses.add(root);
+    }
+  }
+  const insideUndrawn = (el: ModdleElement) => {
+    for (let p = el.$parent; p; p = p.$parent) if (undrawnProcesses.has(p)) return true;
+    return false;
+  };
+
   // "One and only one" pool of a collaboration may be drawn without its boundary;
   // its process content is drawn on the diagram (BPMN 2.0.2 §9.3, PDF 141-143).
   const boundless = new Set<ModdleElement>();
@@ -184,21 +231,28 @@ export function assessCompatibility(
   }
 
   walkContainment(definitions, (el) => {
-    if (isInsideExtension(el)) return;
+    if (isInsideExtension(el) || isInsidePreservedRoot(el) || insideUndrawn(el)) return;
     if (getRef(el, 'extensionElements') || Object.keys(el.$attrs ?? {}).some(isVendorAttribute)) {
       hasExtensions = true;
     }
 
-    const isPreservedRoot =
-      (PRESERVED_ROOT_TYPES as readonly string[]).includes(el.$type) &&
-      is(el.$parent, 'bpmn:Definitions');
-    if (isPreservedRoot) {
+    if (undrawnProcesses.has(el)) {
+      issues.push({
+        code: 'PRESERVED_ELEMENT',
+        severity: 'info',
+        message: `Process ${preservedName(el)}is on no diagram: it is not shown but is preserved on export.`,
+        elementId: el.id,
+        elementType: el.$type,
+      });
+      return;
+    }
+    if (isPreservedRoot(el)) {
       // A Message drawn as an envelope shape (PDF 121-122) is shown and edited.
       if (is(el, 'bpmn:Message') && el.id && di.shapes.has(el.id)) return;
       issues.push({
         code: 'PRESERVED_ELEMENT',
         severity: 'info',
-        message: `${humanizeType(el.$type)} "${el.name ?? el.id}" is not shown but is preserved on export.`,
+        message: `${humanizeType(el.$type)} ${preservedName(el)}is not shown but is preserved on export.`,
         elementId: el.id,
         elementType: el.$type,
       });

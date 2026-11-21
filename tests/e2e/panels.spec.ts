@@ -28,7 +28,8 @@ test('properties panel: header, collapsible sections, exact bounds', async ({ pa
 
   // Events are drawn at a fixed size: only the position is editable.
   await expect(inspector.getByLabel('Width')).toBeDisabled();
-  await el(page, 'Task_check').click();
+  // Off center: the start event's context pad reaches over the task's middle.
+  await el(page, 'Task_check').click({ position: { x: 85, y: 70 } });
   await inspector.getByLabel('X position').fill('300');
   await inspector.getByLabel('X position').press('Enter');
   await inspector.getByLabel('Width').fill('140');

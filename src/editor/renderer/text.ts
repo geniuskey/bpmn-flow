@@ -35,6 +35,16 @@ export function fontCss(font: LabelFont | undefined): string {
     .join(';');
 }
 
+function textStyle(font: LabelFont | undefined) {
+  return font?.size || font?.name
+    ? {
+        fontFamily: font.name ? `${font.name}, ${FONT_FAMILY}` : FONT_FAMILY,
+        fontSize: font.size ?? FONT_SIZE,
+        lineHeight: 1.25,
+      }
+    : undefined;
+}
+
 export function drawCenteredText(
   gfx: SVGElement,
   text: string | undefined,
@@ -42,22 +52,16 @@ export function drawCenteredText(
   className: string,
   align: Align = 'center-middle',
   font?: LabelFont,
+  padding = 6,
 ): SVGElement | undefined {
   if (!text) return undefined;
+  // Line breaking measures with the label's own font (BPMNLabelStyle).
+  const style = textStyle(font);
   const node = TEXT.createText(text, {
     box: { width: box.width, height: box.height },
     align: align as 'center-middle', // 'left-middle' works at runtime, missing from the typings
-    padding: 6,
-    // Line breaking measures with the label's own font (BPMNLabelStyle).
-    ...(font?.size || font?.name
-      ? {
-          style: {
-            fontFamily: font.name ? `${font.name}, ${FONT_FAMILY}` : FONT_FAMILY,
-            fontSize: font.size ?? FONT_SIZE,
-            lineHeight: 1.25,
-          },
-        }
-      : {}),
+    padding,
+    ...(style ? { style } : {}),
   });
   svgAttr(node, { transform: `translate(${box.x}, ${box.y})` });
   const css = fontCss(font);
@@ -65,6 +69,62 @@ export function drawCenteredText(
   for (const c of className.split(' ')) svgClasses(node).add(c);
   svgAppend(gfx, node);
   return node;
+}
+
+/** Padding inside BPMNLabel bounds: they already are the text's extent. */
+export const DI_LABEL_PADDING = 1;
+
+/**
+ * A label at BPMNLabel bounds written by another tool. The bounds fit the text
+ * as that tool measured it; in our font the same words can be a little wider.
+ * The box keeps its center and may grow by 15%, and always to its longest
+ * word; lines break between words, measured (diagram-js estimates the break by
+ * character count and can cut a word that fits).
+ */
+export function fitDiLabel(
+  text: string,
+  box: Box,
+  font?: LabelFont,
+  minWidth = 0,
+): { text: string; box: Box } {
+  const style = textStyle(font);
+  const measure = (line: string) => {
+    try {
+      return TEXT.getDimensions(line, {
+        box: { width: 100_000, height: 0 },
+        padding: 0,
+        ...(style ? { style } : {}),
+      } as never).width;
+    } catch {
+      return 0; // No layout engine (tests without canvas measuring).
+    }
+  };
+  const lines = text.split(/\r?\n/).map((line) => line.split(/\s+/).filter(Boolean));
+  const longest = Math.max(0, ...lines.flat().map(measure));
+  const width = Math.max(
+    box.width * 1.15 + 2 * DI_LABEL_PADDING,
+    longest + 2 + 2 * DI_LABEL_PADDING,
+    minWidth,
+  );
+  const room = width - 2 * DI_LABEL_PADDING;
+  const wrapped: string[] = [];
+  for (const words of lines) {
+    let line = '';
+    for (const word of words) {
+      const next = line ? `${line} ${word}` : word;
+      if (line && measure(next) > room) {
+        wrapped.push(line);
+        line = word;
+      } else {
+        line = next;
+      }
+    }
+    wrapped.push(line);
+  }
+  return {
+    text: wrapped.join('\n'),
+    box: { x: box.x - (width - box.width) / 2, y: box.y, width, height: box.height },
+  };
 }
 
 /**
@@ -90,14 +150,21 @@ export function drawShapeName(
   align: Align = 'center-middle',
 ): void {
   const box = labelBoxOf(shape);
-  drawCenteredText(
-    gfx,
-    text,
-    box ?? fallback,
-    className,
-    box ? 'center-middle' : align,
-    readLabelFont(shape.di),
-  );
+  const font = readLabelFont(shape.di);
+  if (box && text) {
+    const fitted = fitDiLabel(text, box, font);
+    drawCenteredText(
+      gfx,
+      fitted.text,
+      fitted.box,
+      className,
+      'center-middle',
+      font,
+      DI_LABEL_PADDING,
+    );
+  } else {
+    drawCenteredText(gfx, text, fallback, className, align, font);
+  }
 }
 
 /** Data state of an item-aware element: data object / store references, data inputs / outputs (PDF 234, 243). */
@@ -120,23 +187,27 @@ export function drawExternalLabel(gfx: SVGElement, shape: BpmnShape): void {
   const name = [bo.name, state && `[${state}]`].filter(Boolean).join('\n');
   if (!name) return;
   const label = readLabelBounds(shape.di);
-  const width = Math.max(label?.width ?? 0, 90);
-  const box = label
-    ? {
-        x: label.x - shape.x - (width - label.width) / 2,
-        y: label.y - shape.y,
-        width,
-        height: label.height,
-      }
-    : { x: shape.width / 2 - width / 2, y: shape.height + 6, width, height: 30 };
-  drawCenteredText(
-    gfx,
-    name,
-    box,
-    'bf-label bf-external-label',
-    'center-top',
-    readLabelFont(shape.di),
-  );
+  const font = readLabelFont(shape.di);
+  if (label) {
+    const fitted = fitDiLabel(
+      name,
+      { x: label.x - shape.x, y: label.y - shape.y, width: label.width, height: label.height },
+      font,
+      90,
+    );
+    drawCenteredText(
+      gfx,
+      fitted.text,
+      fitted.box,
+      'bf-label bf-external-label',
+      'center-top',
+      font,
+      DI_LABEL_PADDING,
+    );
+    return;
+  }
+  const box = { x: shape.width / 2 - 45, y: shape.height + 6, width: 90, height: 30 };
+  drawCenteredText(gfx, name, box, 'bf-label bf-external-label', 'center-top', font);
 }
 
 /** Type caption inside the top-left corner of unsupported boxes. */

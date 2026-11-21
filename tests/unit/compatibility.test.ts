@@ -94,6 +94,47 @@ describe('content the parser drops and structurally invalid DI', () => {
     expect((await readonlyFor(cdata)).mode).toBe('editable');
   });
 
+  it('keeps non-visual declarations and processes on no diagram editable (BPMN MIWG files)', async () => {
+    const xml = simple()
+      .replace(
+        '<bpmn:process id="Process_simple"',
+        `<bpmn:import importType="http://www.w3.org/2001/XMLSchema" location="types.xsd" namespace="http://example.com/types" />
+  <bpmn:interface id="If_1" name="Orders"><bpmn:operation id="Op_1" name="place" /></bpmn:interface>
+  <bpmn:process id="Process_called" isExecutable="false">
+    <bpmn:startEvent id="Called_start" />
+    <bpmn:task id="Called_task" name="Not drawn anywhere" />
+    <bpmn:sequenceFlow id="Called_flow" sourceRef="Called_start" targetRef="Called_task" />
+  </bpmn:process>
+  <bpmn:process id="Process_simple"`,
+      )
+      .replace(
+        '<bpmndi:BPMNDiagram',
+        `<bpmn:relationship type="trace"><bpmn:source>Task_check</bpmn:source><bpmn:target>Called_task</bpmn:target></bpmn:relationship>
+  <bpmndi:BPMNDiagram`,
+      );
+    const doc = await loadBpmnDocument(xml);
+    expect(doc.report.issues.filter((i) => i.severity !== 'info')).toEqual([]);
+    expect(doc.report).toMatchObject({ mode: 'editable', exportAllowed: true });
+    const preserved = doc.report.issues.filter((i) => i.code === 'PRESERVED_ELEMENT');
+    expect(preserved.map((i) => i.elementType).sort()).toEqual([
+      'bpmn:Import',
+      'bpmn:Interface',
+      'bpmn:Process',
+      'bpmn:Relationship',
+    ]);
+    expect(preserved.find((i) => i.elementType === 'bpmn:Import')!.message).toContain('types.xsd');
+  });
+
+  it('opens a drawn process whose element has no shape read-only', async () => {
+    const xml = simple().replace(
+      '<bpmn:task id="Task_check"',
+      '<bpmn:task id="Undrawn" /><bpmn:task id="Task_check"',
+    );
+    const r = await readonlyFor(xml);
+    expect(r.mode).toBe('readonly');
+    expect(codes(r.issues)).toContain('MISSING_DI');
+  });
+
   it('opens a diagram whose plane has no BPMN element read-only', async () => {
     const xml = simple().replace(' bpmnElement="Process_simple"', '');
     const r = await readonlyFor(xml);

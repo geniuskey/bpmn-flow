@@ -10,7 +10,8 @@
  *   unless an explicit label color is set;
  * - fill colors the interior only;
  * - stroke never changes the interior: once an element has any DI color, the
- *   per-type theme tints (events, gateways) give way to the neutral fill.
+ *   per-type theme tints (events, gateways) give way to the neutral fill and
+ *   stroke.
  */
 import { classes as svgClasses } from 'tiny-svg';
 import { readDiColors } from '@/bpmn/di/di';

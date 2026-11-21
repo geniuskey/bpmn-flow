@@ -1,6 +1,6 @@
 /** Shapes with their own structure: events, choreography activities with bands, pools (incl. black-box pools). */
 import { append as svgAppend, attr as svgAttr, classes as svgClasses } from 'tiny-svg';
-import { readLabelFont } from '@/bpmn/di/di';
+import { readLabelFont, type LabelFont } from '@/bpmn/di/di';
 import { getMany, getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
 import { isExpandedShape, type BpmnShape } from '../model';
 import { outlinePath } from './geometry';
@@ -17,7 +17,15 @@ import {
 } from '../modeling/choreography';
 import { drawEventMarker } from './markers';
 import { el, path } from './svg';
-import { TEXT, drawCenteredText, drawShapeName, fontCss, labelBoxOf } from './text';
+import {
+  DI_LABEL_PADDING,
+  TEXT,
+  fitDiLabel,
+  drawCenteredText,
+  drawShapeName,
+  fontCss,
+  labelBoxOf,
+} from './text';
 
 /** Event circle(s) by event type, plus the definition marker. */
 export function drawEvent(gfx: SVGElement, shape: BpmnShape): SVGElement {
@@ -221,15 +229,92 @@ function drawMultiplicity(gfx: SVGElement, cx: number, top: number): void {
   path(gfx, `M${cx - 4},${top}v10M${cx},${top}v10M${cx + 4},${top}v10`, 'bf-icon-stroke');
 }
 
+/**
+ * A pool or lane name at its BPMNLabel bounds (PDF 406): vertical text when the
+ * box is taller than wide.
+ */
+function drawPoolNameAtLabel(
+  gfx: SVGElement,
+  name: string,
+  labelBox: { x: number; y: number; width: number; height: number },
+  font: LabelFont | undefined,
+): void {
+  if (labelBox.height > labelBox.width) {
+    // Laid out unrotated (along the box's height), then turned a quarter.
+    const run = fitDiLabel(
+      name,
+      { x: 0, y: 0, width: labelBox.height, height: labelBox.width },
+      font,
+    );
+    const node = drawCenteredText(
+      gfx,
+      run.text,
+      run.box,
+      'bf-label bf-pool-label',
+      'center-middle',
+      font,
+      DI_LABEL_PADDING,
+    );
+    if (node) {
+      svgAttr(node, {
+        transform: `matrix(0, -1, 1, 0, ${labelBox.x}, ${labelBox.y + labelBox.height - run.box.x})`,
+      });
+    }
+  } else {
+    const fitted = fitDiLabel(name, labelBox, font);
+    drawCenteredText(
+      gfx,
+      fitted.text,
+      fitted.box,
+      'bf-label bf-pool-label',
+      'center-middle',
+      font,
+      DI_LABEL_PADDING,
+    );
+  }
+}
+
 /** Black-box pool (no process): a plain rectangle with the name in the middle. */
 export function drawBlackBoxPool(gfx: SVGElement, shape: BpmnShape): SVGElement {
   const box = { x: 0, y: 0, width: shape.width, height: shape.height };
   const main = path(gfx, outlinePath('rect', box), 'bf-shape bf-participant bf-black-box');
-  drawShapeName(gfx, shape, shape.businessObject.name, box, 'bf-label bf-pool-label');
+  const name = shape.businessObject.name;
+  const labelBox = labelBoxOf(shape);
+  if (name && labelBox) drawPoolNameAtLabel(gfx, name, labelBox, readLabelFont(shape.di));
+  else drawShapeName(gfx, shape, name, box, 'bf-label bf-pool-label');
   if (isMultiParticipant(shape.businessObject)) {
     drawMultiplicity(gfx, shape.width / 2, shape.height - 14);
   }
   return main;
+}
+
+const HEADER_BAND = 30;
+
+/** The lanes directly inside a pool or lane (the semantic structure). */
+function childLanes(bo: ModdleElement): ModdleElement[] {
+  if (is(bo, 'bpmn:Lane')) return getMany(getRef(bo, 'childLaneSet'), 'lanes');
+  return getMany(getRef(bo, 'processRef'), 'laneSets').flatMap((set) => getMany(set, 'lanes'));
+}
+
+/**
+ * Width of the header band: where the drawn lanes start, so the header line is
+ * their edge and not a second line next to it (files from other tools put lanes
+ * 31px or 20px in); 30 without lanes. Lanes are siblings of a lane on the canvas,
+ * children of their pool.
+ */
+function headerBand(shape: BpmnShape, horizontal: boolean): number {
+  const lanes = new Set(childLanes(shape.businessObject));
+  if (!lanes.size) return HEADER_BAND;
+  const scope = (
+    is(shape.businessObject, 'bpmn:Lane') ? shape.parent?.children : shape.children
+  ) as BpmnShape[] | undefined;
+  const size = horizontal ? shape.width : shape.height;
+  const offsets = (scope ?? [])
+    .filter((c) => lanes.has(c.businessObject))
+    .map((c) => (horizontal ? c.x - shape.x : c.y - shape.y));
+  if (!offsets.length) return HEADER_BAND;
+  const band = Math.min(...offsets);
+  return band > 0 && band < size / 2 ? band : HEADER_BAND;
 }
 
 /** Pool / lane: rectangle with a header band holding the rotated name. */
@@ -237,11 +322,11 @@ export function drawPool(gfx: SVGElement, shape: BpmnShape, className: string): 
   const horizontal = shape.di.get('isHorizontal') !== false;
   const box = { x: 0, y: 0, width: shape.width, height: shape.height };
   const main = path(gfx, outlinePath('rect', box), `bf-shape ${className}`);
-  const band = 30;
+  const band = headerBand(shape, horizontal);
   // A lane's name is not separated from its contents by a line unless it has
   // sub-lanes (PDF 334); a pool keeps its header line.
   const bo = shape.businessObject;
-  const subLanes = getMany(getRef(bo, 'childLaneSet'), 'lanes').length > 0;
+  const subLanes = childLanes(bo).length > 0;
   if (!is(bo, 'bpmn:Lane') || subLanes) {
     path(
       gfx,
@@ -253,24 +338,7 @@ export function drawPool(gfx: SVGElement, shape: BpmnShape, className: string): 
   const labelBox = labelBoxOf(shape);
   const font = readLabelFont(shape.di);
   if (name && labelBox) {
-    // BPMNLabel bounds (PDF 406): vertical text when the box is taller than wide.
-    if (labelBox.height > labelBox.width) {
-      const node = drawCenteredText(
-        gfx,
-        name,
-        { x: 0, y: 0, width: labelBox.height, height: labelBox.width },
-        'bf-label bf-pool-label',
-        'center-middle',
-        font,
-      );
-      if (node) {
-        svgAttr(node, {
-          transform: `matrix(0, -1, 1, 0, ${labelBox.x}, ${labelBox.y + labelBox.height})`,
-        });
-      }
-    } else {
-      drawCenteredText(gfx, name, labelBox, 'bf-label bf-pool-label', 'center-middle', font);
-    }
+    drawPoolNameAtLabel(gfx, name, labelBox, font);
   } else if (name) {
     const node = TEXT.createText(name, {
       box: horizontal

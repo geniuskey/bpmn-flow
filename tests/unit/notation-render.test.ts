@@ -278,7 +278,14 @@ describe('DI attributes', () => {
 </bpmn:definitions>`;
     const { controller, host } = await open(xml);
     const label = gfx(host, 'T').querySelector('text.bf-label')!;
-    expect(label.getAttribute('transform')).toBe('translate(10, 50)');
+    // Centered on the bounds (x 10..90), with room for our font's wider metrics.
+    const [x, y] = /translate\(([-\d.]+), ([-\d.]+)\)/
+      .exec(label.getAttribute('transform')!)!
+      .slice(1)
+      .map(Number);
+    expect(y).toBe(50);
+    expect(x).toBeLessThan(10);
+    expect(x).toBeGreaterThan(0);
     const style = label.getAttribute('style')!;
     expect(style).toMatch(/font-size:16px/);
     expect(style).toMatch(/font-weight:700/);

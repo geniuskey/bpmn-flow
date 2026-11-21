@@ -8,6 +8,7 @@
 import type Canvas from 'diagram-js/lib/core/Canvas';
 import type ElementFactory from 'diagram-js/lib/core/ElementFactory';
 import type ElementRegistry from 'diagram-js/lib/core/ElementRegistry';
+import type GraphicsFactory from 'diagram-js/lib/core/GraphicsFactory';
 import type { Element, Shape } from 'diagram-js/lib/model/Types';
 import { connectionEnds, drawnEdgeEnds, indexDi, readBounds, readWaypoints } from '@/bpmn/di/di';
 import { isEditableConnection, isEditableShapeElement } from '@/bpmn/model/elements';
@@ -22,6 +23,8 @@ interface Services {
   canvas: Canvas;
   elementFactory: ElementFactory;
   elementRegistry: ElementRegistry;
+  /** Redraws pools and lanes once their lanes are in (their header band follows them). */
+  graphicsFactory?: GraphicsFactory;
 }
 
 function shapeOrder(bo: ModdleElement): number {
@@ -62,7 +65,7 @@ function isSupportedShape(bo: ModdleElement): boolean {
 }
 
 export function importDiagram(
-  { canvas, elementFactory, elementRegistry }: Services,
+  { canvas, elementFactory, elementRegistry, graphicsFactory }: Services,
   definitions: ModdleElement,
 ): CanvasImportResult {
   const result: CanvasImportResult = { shapes: 0, connections: 0, warnings: [] };
@@ -170,6 +173,18 @@ export function importDiagram(
       if (is(bo, 'bpmn:Participant')) {
         const process = getRef(bo, 'processRef');
         if (process) participantByProcess.set(process, shape);
+      }
+    }
+
+    // Pools and lanes are drawn before their lanes: draw those with lanes again.
+    if (graphicsFactory) {
+      for (const { bo } of shapes) {
+        const hasLanes = is(bo, 'bpmn:Lane')
+          ? getMany(getRef(bo, 'childLaneSet'), 'lanes').length > 0
+          : is(bo, 'bpmn:Participant') &&
+            getMany(getRef(bo, 'processRef'), 'laneSets').some((s) => getMany(s, 'lanes').length);
+        const shape = hasLanes ? elementRegistry.get(bo.id!) : undefined;
+        if (shape) graphicsFactory.update('shape', shape, elementRegistry.getGraphics(shape));
       }
     }
 

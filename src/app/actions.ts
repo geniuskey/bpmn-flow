@@ -4,6 +4,7 @@
  */
 import { BpmnExportError, loadBpmnDocument } from '@/bpmn/document';
 import { BpmnImportError } from '@/bpmn/import/parse';
+import type { CompatibilityCode, CompatibilityReport } from '@/bpmn/validation/compatibility';
 import { newChoreographyXml, newDiagramXml } from '@/bpmn/model/newDiagram';
 import { downloadBlob, downloadBytes, downloadText } from '@/lib/download';
 import { decodeXmlBytes } from '@/bpmn/import/encoding';
@@ -16,6 +17,19 @@ import type { BpmnDocument } from '@/bpmn/document';
 import { exportBpmnXml } from '@/bpmn/document';
 
 /** Stable id used to key local data (metadata) for a document. */
+/** Why a file opened read-only, from the most severe kind of issue. */
+function readOnlyTitle(report: CompatibilityReport): string {
+  const has = (code: CompatibilityCode) => report.issues.some((i) => i.code === code);
+  if (!report.exportAllowed)
+    return 'Opened read-only: some content of this file cannot be preserved, so re-export is disabled.';
+  if (has('UNSUPPORTED_ELEMENT'))
+    return 'Opened read-only: this file uses BPMN elements the editor does not support yet.';
+  if (has('NO_DIAGRAM')) return 'Opened read-only: this file has no diagram layout.';
+  if (has('MISSING_DI') || has('INVALID_DI'))
+    return 'Opened read-only: the diagram layout of this file is incomplete or inconsistent.';
+  return 'Opened read-only.';
+}
+
 export function documentIdOf(doc: BpmnDocument): string {
   return doc.definitions.id || doc.fileName;
 }
@@ -68,9 +82,7 @@ export async function openXml(
     if (report.mode === 'readonly') {
       docs.notify({
         kind: 'warning',
-        title: report.exportAllowed
-          ? 'Opened read-only: this file uses BPMN elements the editor does not support yet.'
-          : 'Opened read-only: some content of this file cannot be preserved, so re-export is disabled.',
+        title: readOnlyTitle(report),
         details: ['See Analysis → Compatibility for details.'],
       });
       useUiStore.getState().toggleAnalysis(true);

@@ -17,7 +17,8 @@ prove is lossless.
 | More than one diagram                                                                                                                                                                             | editable  | allowed             | switch diagrams with the selector in the header                    |
 | Missing DI for a supported element                                                                                                                                                                | read-only | allowed (unchanged) | it could not be shown                                              |
 | Vendor attributes / extension elements                                                                                                                                                            | editable  | allowed             | preserved and proven by the round-trip check                       |
-| Root-level Message, Signal, …                                                                                                                                                                     | editable  | allowed             | not reachable by MVP edits                                         |
+| Root-level Message, Signal, Interface (with its operations), …; imports and relationships                                                                                                         | editable  | allowed             | not reachable by MVP edits                                         |
+| A process no diagram shows (e.g. one only a call activity calls)                                                                                                                                  | editable  | allowed             | its content is not reachable by edits and is preserved             |
 
 "Download original" always returns the exact bytes that were opened, also after
 the document was restored from the autosave.
@@ -135,5 +136,10 @@ editor had no time expression (now editable, and flagged by
   color), writing both vocabularies. The same rule holds for every element type: stroke colors the
   outline, markers and all of the element's text (inside or external labels, as in bpmn-js)
   unless `color:color` sets a label color (not editable in the Inspector); fill colors the
-  interior only, and a colored element drops the per-type theme tints of events and
-  gateways.
+  interior only, and a colored element drops the per-type theme tints (interior and
+  lines) of events and gateways.
+- `BPMNLabel` bounds written by other tools fit the text in their font. A label keeps
+  the center of its bounds but may be up to 15% wider (and always as wide as its
+  longest word), and breaks lines only between words; vertical bounds (pools, lanes,
+  black-box pools) give vertical text. Checked against the rendered references of the
+  BPMN MIWG test suite (A.1.0–C.10.0).

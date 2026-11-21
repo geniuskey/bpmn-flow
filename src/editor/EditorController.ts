@@ -10,6 +10,7 @@ import Diagram from 'diagram-js';
 import type Canvas from 'diagram-js/lib/core/Canvas';
 import type ElementFactory from 'diagram-js/lib/core/ElementFactory';
 import type ElementRegistry from 'diagram-js/lib/core/ElementRegistry';
+import type GraphicsFactory from 'diagram-js/lib/core/GraphicsFactory';
 import type EventBus from 'diagram-js/lib/core/EventBus';
 import type CommandStack from 'diagram-js/lib/command/CommandStack';
 import type Selection from 'diagram-js/lib/features/selection/Selection';
@@ -166,6 +167,7 @@ export class EditorController {
           canvas: diagram.get<Canvas>('canvas'),
           elementFactory: diagram.get<ElementFactory>('elementFactory'),
           elementRegistry: diagram.get<ElementRegistry>('elementRegistry'),
+          graphicsFactory: diagram.get<GraphicsFactory>('graphicsFactory'),
         },
         doc.definitions,
       );
