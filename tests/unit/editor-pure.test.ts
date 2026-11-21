@@ -12,6 +12,7 @@ import {
   rectPath,
 } from '@/editor/renderer/geometry';
 import { visualFor } from '@/editor/renderer/visuals';
+import { curvedPath, linePath, polylinePath, roundedPath } from '@/editor/renderer/geometry';
 import { fixture } from '../helpers';
 
 async function load(name: string) {
@@ -124,5 +125,35 @@ describe('move rules', () => {
     expect(canMoveShape(triage as never, { x: 400, y: 0 })).toBe(false); // out of the pool
     expect(canMoveShape(triage as never, { x: 0, y: -100 })).toBe(false); // above the pool
     expect(canMoveShape(pool as never, { x: 10, y: 0 })).toBe(true); // pools move with their content
+  });
+});
+
+describe('line paths', () => {
+  const pts = [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 100, y: 60 },
+    { x: 200, y: 60 },
+  ];
+  it('rounds bends and keeps the ends and their direction', () => {
+    const d = roundedPath(pts, 10);
+    expect(d.startsWith('M0,0L90,0Q100,0 100,10')).toBe(true);
+    expect(d.endsWith('L200,60')).toBe(true);
+    // Short segments take a smaller radius.
+    expect(
+      roundedPath(
+        [
+          { x: 0, y: 0 },
+          { x: 8, y: 0 },
+          { x: 8, y: 8 },
+        ],
+        10,
+      ),
+    ).toContain('L4,0Q8,0 8,4');
+  });
+  it('curves through segment middles; two points stay a line', () => {
+    expect(curvedPath(pts)).toBe('M0,0L50,0Q100,0 100,30Q100,60 150,60L200,60');
+    expect(linePath(pts.slice(0, 2), 'curved')).toBe('M0,0L100,0');
+    expect(linePath(pts, 'straight')).toBe(polylinePath(pts));
   });
 });

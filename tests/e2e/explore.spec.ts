@@ -23,6 +23,33 @@ test('layout options: top to bottom from the toolbar menu, one undo step', async
   await page.keyboard.press('Escape');
 });
 
+test('line style from the toolbar menu: curved lines are drawn, straight ones laid out', async ({
+  page,
+}) => {
+  await page.goto('/?sample=mvp-elements');
+  await expect(el(page, 'Review')).toBeVisible();
+  const paths = () =>
+    page
+      .locator('.djs-connection path.bf-connection')
+      .evaluateAll((ps) => ps.map((p) => p.getAttribute('d') ?? ''));
+  await page.getByTestId('layout-options').click();
+  await page.getByRole('menuitemradio', { name: 'Curved lines' }).click();
+  await expect.poll(async () => (await paths()).some((d) => d.includes('Q'))).toBe(true);
+  await page.getByTestId('layout-options').click();
+  await page.getByRole('menuitemradio', { name: 'Straight lines' }).click();
+  await expect
+    .poll(async () => (await paths()).every((d) => !d.includes('Q') && d.split('L').length === 2))
+    .toBe(true);
+  // Kept after a reload.
+  await page.reload();
+  await page.getByTestId('layout-options').click();
+  await expect(page.getByRole('menuitemradio', { name: 'Straight lines' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await page.keyboard.press('Escape');
+});
+
 test('reflow view: fits a narrow window top to bottom, read-only, the file keeps its layout', async ({
   page,
 }) => {

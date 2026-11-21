@@ -92,7 +92,8 @@ import type {
   ShapePreset,
   SvgExport,
 } from './types';
-import type { LayoutOptions } from './layout/graph';
+import type { LayoutOptions, LineStyle } from './layout/graph';
+import type { LineStyleState } from './lineStyle';
 
 export type { DiagramInfo, EditorOptions, EditorSnapshot, EditorTool, ShapePreset } from './types';
 
@@ -115,11 +116,35 @@ export class EditorController {
   /** Undo-stack entry that was on top when the document was last exported (null: none). */
   private savedAction: unknown = null;
   private tool: EditorTool = 'select';
+  /** Shared with the renderer and the connection layouter of every diagram opened. */
+  private readonly line: LineStyleState;
 
   constructor(
     protected readonly container: HTMLElement,
     protected readonly options: EditorOptions = {},
-  ) {}
+  ) {
+    this.line = { style: options.lineStyle ?? 'orthogonal' };
+  }
+
+  getLineStyle(): LineStyle {
+    return this.line.style;
+  }
+
+  /**
+   * How flows are drawn: rounded and curved bends are only drawn so, straight
+   * lines are what flows get when laid out, created or their shapes moved.
+   * Lines already in the diagram keep their route until laid out again.
+   */
+  setLineStyle(style: LineStyle): void {
+    if (this.line.style === style) return;
+    this.line.style = style;
+    // Only drawn differently: the routes (and the file) stay as they are.
+    const registry = this.get<ElementRegistry>('elementRegistry');
+    const graphics = this.get<GraphicsFactory>('graphicsFactory');
+    if (!registry || !graphics) return;
+    for (const c of registry.filter((e) => isConnection(e)))
+      graphics.update('connection', c, registry.getGraphics(c));
+  }
 
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
@@ -154,7 +179,11 @@ export class EditorController {
       HandToolModule,
       LassoToolModule,
       coreModule,
-      { moddle: ['value', doc.moddle], bpmnDefinitions: ['value', doc.definitions] },
+      {
+        moddle: ['value', doc.moddle],
+        bpmnDefinitions: ['value', doc.definitions],
+        lineStyle: ['value', this.line],
+      },
     ];
     if (!readOnly) modules.push(...EDITING_MODULES);
 
@@ -743,11 +772,13 @@ export class EditorController {
 
   /**
    * Lays out the shown diagram as one undoable step. Collaborations keep the
-   * direction of their pools (vertical pools flow top → bottom).
+   * direction of their pools (vertical pools flow top → bottom). A `lineStyle`
+   * given becomes the editor's line style (see setLineStyle).
    */
   async autoLayout(options: LayoutOptions = {}): Promise<boolean> {
     const canvas = this.get<Canvas>('canvas');
     if (!canvas || this.snapshot.readOnly) return false;
+    if (options.lineStyle) this.setLineStyle(options.lineStyle);
     const [{ layoutDiagram }, { extractLayout }, { measureLabel }] = await Promise.all([
       import('./layout/engine'),
       import('./layout/extract'),
@@ -761,7 +792,11 @@ export class EditorController {
         ? 'TB'
         : 'LR'
       : (options.direction ?? (extracted.vertical ? 'TB' : 'LR'));
-    const layout = layoutDiagram(extracted.diagram, { ...options, direction }, measureLabel);
+    const layout = layoutDiagram(
+      extracted.diagram,
+      { ...options, lineStyle: this.line.style, direction },
+      measureLabel,
+    );
     this.applyLayout(layout);
     this.fit();
     return true;
@@ -783,6 +818,7 @@ export class EditorController {
    */
   async layoutSelection(options: LayoutOptions = {}): Promise<string | null> {
     if (!this.diagram || this.snapshot.readOnly) return 'The document is read-only.';
+    if (options.lineStyle) this.setLineStyle(options.lineStyle);
     const [{ layoutDiagram }, { extractSelection }, { measureLabel }] = await Promise.all([
       import('./layout/engine'),
       import('./layout/extract'),
@@ -792,7 +828,11 @@ export class EditorController {
     if (typeof extracted === 'string') return extracted;
     const framed = !!extracted.frame;
     const direction = extracted.vertical ? 'TB' : framed ? 'LR' : (options.direction ?? 'LR');
-    const r = layoutDiagram(extracted.diagram, { ...options, direction }, measureLabel);
+    const r = layoutDiagram(
+      extracted.diagram,
+      { ...options, lineStyle: this.line.style, direction },
+      measureLabel,
+    );
     const bbox = (boxes: { x: number; y: number; width: number; height: number }[]) => {
       const x = Math.min(...boxes.map((b) => b.x));
       const y = Math.min(...boxes.map((b) => b.y));

@@ -136,7 +136,7 @@ export interface BpmnFlowViewProps extends BpmnFlowViewerOptions {
 /**
  * Read-only view that re-lays out the diagram to fit its box (top → bottom
  * when narrow) and reflows on resize; the XML is never changed.
- * `reflow` and `density` are read once, on mount.
+ * `reflow`, `density` and `lineStyle` are read once, on mount.
  */
 export const BpmnFlowView = forwardRef<BpmnFlowViewer | null, BpmnFlowViewProps>(
   function BpmnFlowView(props, ref) {
@@ -151,10 +151,11 @@ export const BpmnFlowView = forwardRef<BpmnFlowViewer | null, BpmnFlowViewProps>
     useEffect(() => {
       const host = hostRef.current;
       if (!host) return;
-      const { reflow, density } = callbacks.current;
+      const { reflow, density, lineStyle } = callbacks.current;
       const instance = new BpmnFlowViewer(host, {
         ...(reflow !== undefined ? { reflow } : {}),
         ...(density !== undefined ? { density } : {}),
+        ...(lineStyle !== undefined ? { lineStyle } : {}),
       });
       setViewer(instance);
       callbacks.current.onReady?.(instance);

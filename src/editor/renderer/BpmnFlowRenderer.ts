@@ -14,7 +14,15 @@ import { messageVisibleKind, readLabelBounds, readLabelFont } from '@/bpmn/di/di
 import { getRef, is } from '@/bpmn/model/moddle';
 import { annotationText, groupLabel } from '@/bpmn/model/elements';
 import type { BpmnConnection, BpmnShape } from '../model';
-import { arrowHeadPath, outlinePath, polylineMid, polylinePath, startMarkerPath } from './geometry';
+import { lineStyleState, type LineStyleState } from '../lineStyle';
+import {
+  arrowHeadPath,
+  linePath,
+  outlinePath,
+  polylineMid,
+  polylinePath,
+  startMarkerPath,
+} from './geometry';
 import {
   hasExternalLabel,
   isCollection,
@@ -241,10 +249,13 @@ function drawHatch(gfx: SVGElement, outline: string): void {
 }
 
 export default class BpmnFlowRenderer extends BaseRenderer {
-  static $inject = ['eventBus'];
+  static $inject = ['eventBus', 'injector'];
 
-  constructor(eventBus: EventBus) {
+  private readonly line: LineStyleState;
+
+  constructor(eventBus: EventBus, injector: { get(name: string, strict?: boolean): unknown }) {
     super(eventBus, 1500);
+    this.line = lineStyleState(injector);
   }
 
   override canRender(element: Element): boolean {
@@ -275,8 +286,9 @@ export default class BpmnFlowRenderer extends BaseRenderer {
     const unsupported = visual.kind === 'unsupportedConnection' ? ' bf-unsupported' : '';
     const message = visual.kind === 'messageFlow' ? ' bf-message-flow' : '';
     // Not dashed / dotted: those styles mean message flow and association (PDF 38, 70).
-    if (unsupported) path(gfx, polylinePath(points), 'bf-unsupported-halo');
-    const line = path(gfx, polylinePath(points), `bf-connection${unsupported}${message}`);
+    const d = linePath(points, this.line.style);
+    if (unsupported) path(gfx, d, 'bf-unsupported-halo');
+    const line = path(gfx, d, `bf-connection${unsupported}${message}`);
     if (message && points.length > 1) {
       const a = points[0]!;
       el(gfx, 'circle', { cx: a.x, cy: a.y, r: 4 }, 'bf-message-start');
@@ -325,7 +337,7 @@ export default class BpmnFlowRenderer extends BaseRenderer {
     if (visual.kind === 'conversationLink') {
       // "Conversation Links MUST be drawn with double thin lines" (PDF 161).
       svgClasses(line).add('bf-conversation-link');
-      path(gfx, polylinePath(points), 'bf-conversation-link-gap');
+      path(gfx, d, 'bf-conversation-link-gap');
     }
     if (visual.kind === 'dataAssociation') {
       svgClasses(line).add('bf-association');

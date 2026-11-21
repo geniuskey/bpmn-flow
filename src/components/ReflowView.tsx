@@ -16,6 +16,7 @@ export function ReflowView() {
   const hostRef = useRef<HTMLDivElement>(null);
   const controller = useEditorStore((s) => s.controller);
   const density = useUiStore((s) => s.layoutDensity);
+  const lineStyle = useUiStore((s) => s.lineStyle);
   const focusMode = useUiStore((s) => s.focusMode);
   const setReflowView = useUiStore((s) => s.setReflowView);
   const [viewer, setViewer] = useState<BpmnFlowViewer | null>(null);
@@ -26,7 +27,7 @@ export function ReflowView() {
     const host = hostRef.current;
     const doc = controller?.getDocument();
     if (!host || !doc) return;
-    const instance = new BpmnFlowViewer(host, { density });
+    const instance = new BpmnFlowViewer(host, { density, lineStyle });
     const off = instance.subscribe((s) => {
       setSelection(s.selection);
       setDirection(instance.getDirection());
@@ -43,7 +44,7 @@ export function ReflowView() {
       instance.destroy();
       setViewer(null);
     };
-  }, [controller, density]);
+  }, [controller, density, lineStyle]);
 
   useEffect(() => {
     viewer?.focus(focusMode ? selection : []);

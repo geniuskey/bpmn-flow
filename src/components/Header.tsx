@@ -49,6 +49,7 @@ import { Separator } from '@/components/ui/separator';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useEditorStore } from '@/stores/editorStore';
 import { useUiStore, type ThemePreference } from '@/stores/uiStore';
+import type { LineStyle } from '@/editor/layout/graph';
 
 function tip(label: string, shortcut?: keyof typeof SHORTCUTS): string {
   return shortcut ? `${label} (${formatKeys(SHORTCUTS[shortcut]!.keys)})` : label;
@@ -113,6 +114,13 @@ const EDIT_ITEMS: [string, LucideIcon][] = [
 
 const ZOOM_PRESETS = [0.5, 0.75, 1, 1.5, 2];
 
+const LINE_STYLES: [LineStyle, string][] = [
+  ['orthogonal', 'Right-angle lines'],
+  ['straight', 'Straight lines'],
+  ['rounded', 'Rounded corners'],
+  ['curved', 'Curved lines'],
+];
+
 export function Header() {
   const doc = useDocumentStore((s) => s.doc);
   const loading = useDocumentStore((s) => s.loading);
@@ -126,6 +134,7 @@ export function Header() {
   const { reflowView, setReflowView, focusMode, setFocusMode } = useUiStore();
   const layoutDirection = useUiStore((s) => s.layoutDirection);
   const layoutDensity = useUiStore((s) => s.layoutDensity);
+  const currentLineStyle = useUiStore((s) => s.lineStyle);
   const setLayoutOptions = useUiStore((s) => s.setLayoutOptions);
   const directionLocked = !!controller?.layoutDirectionLocked();
   const layoutAllowed = isEnabled(COMMANDS.find((c) => c.id === 'arrange.layout')!);
@@ -154,6 +163,12 @@ export function Header() {
       checked: layoutDensity === density,
       separated: i === 0,
       onSelect: () => layoutWith({ density }),
+    })),
+    ...LINE_STYLES.map(([lineStyle, label], i): ToolbarMenuItem => ({
+      label,
+      checked: currentLineStyle === lineStyle,
+      separated: i === 0,
+      onSelect: () => layoutWith({ lineStyle }),
     })),
   ];
   const exportAllowed = !!doc?.report.exportAllowed;
@@ -306,7 +321,7 @@ export function Header() {
               <CommandButton id="arrange.layout" icon={LayoutDashboard} />
               <ToolbarMenu
                 label="Layout options"
-                title="Auto layout direction and spacing"
+                title="Auto layout direction, spacing and line style"
                 className="w-4 px-0"
                 disabled={!layoutAllowed}
                 trigger={null}

@@ -15,6 +15,7 @@ import { is } from '@/bpmn/model/moddle';
 import { bo, isConnection } from '../model';
 import { outlinePath, polylinePath } from '../renderer/geometry';
 import { outlineFor } from '../renderer/visuals';
+import { lineStyleState, type LineStyleState } from '../lineStyle';
 
 type LayoutHints = NonNullable<Parameters<BaseLayouter['layoutConnection']>[1]>;
 
@@ -39,12 +40,25 @@ export function cropWaypoints(points: Point[], source: Shape, target: Shape): Po
 }
 
 export default class BpmnFlowLayouter extends BaseLayouter {
+  static $inject = ['injector'];
+
+  private readonly line: LineStyleState;
+
+  constructor(injector: { get(name: string, strict?: boolean): unknown }) {
+    super();
+    this.line = lineStyleState(injector);
+  }
+
   override layoutConnection(connection: Connection, hints: LayoutHints = {}): Point[] {
     const source = (hints.source ?? connection.source) as Shape | undefined;
     const target = (hints.target ?? connection.target) as Shape | undefined;
     if (!source || !target) return connection.waypoints;
     if (isConnection(source) || isConnection(target)) {
       return layoutToConnection(source, target);
+    }
+    // Straight lines: from shape to shape (the shapes' outlines crop it).
+    if (this.line.style === 'straight' && source !== target) {
+      return cropWaypoints([getMid(source), getMid(target)], source, target);
     }
 
     const start = getMid(source);

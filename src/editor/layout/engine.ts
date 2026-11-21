@@ -1266,6 +1266,56 @@ function mergeLocal(into: EngineResult, from: EngineResult, dx: number, dy: numb
     into.connections[id] = pts.map((q) => ({ x: Math.round(q.x + dx), y: Math.round(q.y + dy) }));
 }
 
+/** Sequence flows at any depth. */
+function flowsOf(c: LContainer, into: LEdge[] = []): LEdge[] {
+  into.push(...c.edges);
+  for (const n of c.nodes) if (n.content) flowsOf(n.content, into);
+  return into;
+}
+
+/**
+ * Straight lines: sequence and message flows are left to the editor, which
+ * draws them from shape to shape; their names go beside the middle.
+ */
+function straighten(diagram: LDiagram, result: EngineResult): void {
+  const edges = [...diagram.containers.flatMap((c) => flowsOf(c)), ...diagram.messages];
+  for (const e of edges) {
+    delete result.connections[e.id];
+    const label = result.labels[e.id];
+    if (!label) continue;
+    const a = result.shapes[e.from ?? e.source];
+    const b = result.shapes[e.target];
+    if (!a || !b) continue;
+    const center = (x: Box) => ({ x: x.x + x.width / 2, y: x.y + x.height / 2 });
+    const [ca, cb] = [center(a), center(b)];
+    // The middle of the line between the shapes' borders.
+    const exit = (box: Box, from: Point, to: Point): Point => {
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const t = Math.min(
+        dx ? box.width / 2 / Math.abs(dx) : Infinity,
+        dy ? box.height / 2 / Math.abs(dy) : Infinity,
+        1,
+      );
+      return { x: from.x + dx * t, y: from.y + dy * t };
+    };
+    const [p, q] = [exit(a, ca, cb), exit(b, cb, ca)];
+    const mid = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
+    // Beside the line: above a flat one, left of a steep one (a message
+    // envelope's name is drawn on its right), clear of it.
+    const len = Math.hypot(q.x - p.x, q.y - p.y) || 1;
+    let n = { x: -(q.y - p.y) / len, y: (q.x - p.x) / len };
+    const steep = Math.abs(q.y - p.y) > Math.abs(q.x - p.x);
+    if (steep ? n.x > 0 : n.y > 0) n = { x: -n.x, y: -n.y };
+    const off = (Math.abs(n.x) * label.width) / 2 + (Math.abs(n.y) * label.height) / 2 + LABEL_GAP;
+    result.labels[e.id] = {
+      ...label,
+      x: Math.round(mid.x + n.x * off - label.width / 2),
+      y: Math.round(mid.y + n.y * off - label.height / 2),
+    };
+  }
+}
+
 /** Ids inside a container (flow nodes at any depth, boundary events, artifacts). */
 function idsOf(c: LContainer, into: Set<string> = new Set()): Set<string> {
   if (c.id) into.add(c.id);
@@ -1359,6 +1409,8 @@ export function layoutDiagram(
   const local = layoutSet(ctx, containers, diagram.messages);
   const result: EngineResult = { shapes: {}, connections: {}, labels: {} };
   mergeLocal(result, local, diagram.origin.x, diagram.origin.y);
+
+  if (options.lineStyle === 'straight') straighten(diagram, result);
 
   // Groups wrap the shapes they held before.
   for (const group of diagram.groups) {

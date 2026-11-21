@@ -4,6 +4,7 @@
  * only depend on diagram-js' element types.
  */
 import type { ModdleElement } from '@/bpmn/model/moddle';
+import type { LineStyle } from './layout/graph';
 
 export interface DiagramInfo {
   rootId: string;
@@ -51,6 +52,11 @@ export type ElkWorkerSource = string | URL | (() => string | URL | Promise<strin
 export interface EditorOptions {
   /** Show documents read-only even when they could be edited. */
   readOnly?: boolean;
+  /**
+   * How flows are drawn (default 'orthogonal'); see `LineStyle`. Change it
+   * later with `setLineStyle`, or with the `lineStyle` option of auto layout.
+   */
+  lineStyle?: LineStyle;
   /**
    * @deprecated Auto layout no longer uses ELK; the option is accepted and
    * ignored.

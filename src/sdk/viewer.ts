@@ -14,7 +14,7 @@ import { parseBpmnXml } from '@/bpmn/import/parse';
 import { EditorController } from '@/editor/EditorController';
 import { layoutDiagram, type EngineResult } from '@/editor/layout/engine';
 import { extractLayout } from '@/editor/layout/extract';
-import type { LayoutDensity, LayoutDirection, LDiagram } from '@/editor/layout/graph';
+import type { LayoutDensity, LayoutDirection, LDiagram, LineStyle } from '@/editor/layout/graph';
 import { writeLayoutToDi } from '@/editor/layout/project';
 import { measureLabel } from '@/editor/renderer/text';
 import type { CanvasImportResult } from '@/editor/types';
@@ -27,6 +27,8 @@ export interface BpmnFlowViewerOptions {
   reflow?: 'auto' | LayoutDirection | false;
   /** Spacing of the reflowed layout (default 'compact'). */
   density?: LayoutDensity;
+  /** How flows are drawn (default 'orthogonal'). */
+  lineStyle?: LineStyle;
 }
 
 export interface ViewerImportResult extends CanvasImportResult {
@@ -50,7 +52,7 @@ function extent(result: EngineResult): { width: number; height: number } {
 }
 
 export class BpmnFlowViewer extends EditorController {
-  private readonly viewOptions: Required<BpmnFlowViewerOptions>;
+  private readonly viewOptions: Required<Omit<BpmnFlowViewerOptions, 'lineStyle'>>;
   private source: BpmnDocument | null = null;
   private projection: BpmnDocument | null = null;
   private graph: LDiagram | null = null;
@@ -59,7 +61,10 @@ export class BpmnFlowViewer extends EditorController {
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(container: HTMLElement, options: BpmnFlowViewerOptions = {}) {
-    super(container, { readOnly: true });
+    super(container, {
+      readOnly: true,
+      ...(options.lineStyle ? { lineStyle: options.lineStyle } : {}),
+    });
     this.viewOptions = { reflow: options.reflow ?? 'auto', density: options.density ?? 'compact' };
     if (typeof ResizeObserver !== 'undefined') {
       this.observer = new ResizeObserver(() => {
@@ -112,7 +117,7 @@ export class BpmnFlowViewer extends EditorController {
   private layout(direction: LayoutDirection): EngineResult {
     return layoutDiagram(
       this.graph!,
-      { direction, density: this.viewOptions.density },
+      { direction, density: this.viewOptions.density, lineStyle: this.getLineStyle() },
       measureLabel,
     );
   }

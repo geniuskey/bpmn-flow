@@ -86,21 +86,21 @@ the canvas fills it. Files that cannot be round-tripped open read-only
 
 ### Common methods
 
-| Method                                                                                                                                                                             | What it does                                                         |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `importXml(xml, fileName?)`, `createNew(kind?)`, `open(doc)`                                                                                                                       | Show a document. On failure the previous one stays open.             |
-| `exportXml()`                                                                                                                                                                      | Verified BPMN 2.0 XML.                                               |
-| `undo()`, `redo()`                                                                                                                                                                 | Command stack.                                                       |
-| `setTool('select' \| 'pan' \| 'lasso' \| 'connect')`                                                                                                                               | Active tool.                                                         |
-| `startCreate(mouseEvent, 'bpmn:UserTask')`                                                                                                                                         | Start placing an element (call from your palette's click or drag).   |
-| `select(ids)`, `selectAll()`, `reveal(ids)`, `highlight(ids)`                                                                                                                      | Selection, scroll to elements, highlight (e.g. analysis findings).   |
-| `deleteSelection()`, `copy()`, `cut()`, `paste()`, `duplicate()`, `nudge(dx, dy)`                                                                                                  | Editing.                                                             |
-| `updateProperties(id, { name })`, `updateDocumentation(id, text)`, `updateCondition(id, expr)`                                                                                     | Semantic edits (undoable).                                           |
-| `changeType(id, 'bpmn:ServiceTask')`, `setEventDefinition(id, 'bpmn:TimerEventDefinition')`, `setLoop(id, 'parallel')`, `setDefaultFlow(gatewayId, flow)`, `addLane(poolOrLaneId)` | More semantic edits.                                                 |
-| `autoLayout({ direction, density })`                                                                                                                                               | Built-in BPMN layout, one undo step (see below).                     |
-| `zoomBy(f)`, `resetZoom()`, `fit()`, `setSnapToGrid(on)`                                                                                                                           | View.                                                                |
-| `getDiagrams()`, `showDiagram(rootId)`, `drillDownOf(id)`                                                                                                                          | Multiple diagrams and collapsed sub-processes.                       |
-| `getDocument()`, `getElement(id)`, `getElements()`                                                                                                                                 | Read the model (`element.businessObject` is the bpmn-moddle object). |
+| Method                                                                                                                                                                             | What it does                                                          |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `importXml(xml, fileName?)`, `createNew(kind?)`, `open(doc)`                                                                                                                       | Show a document. On failure the previous one stays open.              |
+| `exportXml()`                                                                                                                                                                      | Verified BPMN 2.0 XML.                                                |
+| `undo()`, `redo()`                                                                                                                                                                 | Command stack.                                                        |
+| `setTool('select' \| 'pan' \| 'lasso' \| 'connect')`                                                                                                                               | Active tool.                                                          |
+| `startCreate(mouseEvent, 'bpmn:UserTask')`                                                                                                                                         | Start placing an element (call from your palette's click or drag).    |
+| `select(ids)`, `selectAll()`, `reveal(ids)`, `highlight(ids)`                                                                                                                      | Selection, scroll to elements, highlight (e.g. analysis findings).    |
+| `deleteSelection()`, `copy()`, `cut()`, `paste()`, `duplicate()`, `nudge(dx, dy)`                                                                                                  | Editing.                                                              |
+| `updateProperties(id, { name })`, `updateDocumentation(id, text)`, `updateCondition(id, expr)`                                                                                     | Semantic edits (undoable).                                            |
+| `changeType(id, 'bpmn:ServiceTask')`, `setEventDefinition(id, 'bpmn:TimerEventDefinition')`, `setLoop(id, 'parallel')`, `setDefaultFlow(gatewayId, flow)`, `addLane(poolOrLaneId)` | More semantic edits.                                                  |
+| `autoLayout({ direction, density, lineStyle })`, `setLineStyle(style)`                                                                                                             | Built-in BPMN layout, one undo step; how flows are drawn (see below). |
+| `zoomBy(f)`, `resetZoom()`, `fit()`, `setSnapToGrid(on)`                                                                                                                           | View.                                                                 |
+| `getDiagrams()`, `showDiagram(rootId)`, `drillDownOf(id)`                                                                                                                          | Multiple diagrams and collapsed sub-processes.                        |
+| `getDocument()`, `getElement(id)`, `getElements()`                                                                                                                                 | Read the model (`element.businessObject` is the bpmn-moddle object).  |
 
 ### Keyboard
 
@@ -137,6 +137,15 @@ await editor.autoLayout({ direction: 'TB', density: 'compact' });
 `direction` (`'LR'` default, `'TB'`) applies to process diagrams; pools and lanes
 keep their own orientation. `density` is `'compact'`, `'normal'` (default) or
 `'spacious'`. The `elkWorker` option of earlier versions is accepted and ignored.
+
+`lineStyle` picks how flows are drawn: `'orthogonal'` (default, right angles),
+`'straight'` (shape to shape), `'rounded'` (right angles with rounded bends) or
+`'curved'` (a smooth curve along the route). Straight and right-angle routes are
+saved in the file; rounded and curved lines save right-angle routes and are only
+drawn that way. The style passed to `autoLayout` stays the editor's style:
+flows created or moved afterwards follow it. Set it without a layout with
+`setLineStyle(style)`, or up front with the `lineStyle` editor option; the
+viewer takes the same option.
 
 ### Focus and level of detail
 

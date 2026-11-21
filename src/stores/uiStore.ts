@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { EditorTool } from '@/editor/EditorController';
-import type { LayoutDensity, LayoutDirection } from '@/editor/layout/graph';
+import type { LayoutDensity, LayoutDirection, LineStyle } from '@/editor/layout/graph';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 export type AnalysisTab =
@@ -20,7 +20,13 @@ interface UiState {
   /** Auto layout: flow direction of process diagrams, and spacing. */
   layoutDirection: LayoutDirection;
   layoutDensity: LayoutDensity;
-  setLayoutOptions(options: { direction?: LayoutDirection; density?: LayoutDensity }): void;
+  /** How flows are drawn (straight routes are made by auto layout). */
+  lineStyle: LineStyle;
+  setLayoutOptions(options: {
+    direction?: LayoutDirection;
+    density?: LayoutDensity;
+    lineStyle?: LineStyle;
+  }): void;
   /** Read-only view reflowed to fit the canvas (the file keeps its layout). Not persisted. */
   reflowView: boolean;
   setReflowView(on: boolean): void;
@@ -99,10 +105,12 @@ export const useUiStore = create<UiState>()(
       setFocusMode: (focusMode) => set({ focusMode }),
       layoutDirection: 'LR',
       layoutDensity: 'normal',
-      setLayoutOptions: ({ direction, density }) =>
+      lineStyle: 'orthogonal',
+      setLayoutOptions: ({ direction, density, lineStyle }) =>
         set((s) => ({
           layoutDirection: direction ?? s.layoutDirection,
           layoutDensity: density ?? s.layoutDensity,
+          lineStyle: lineStyle ?? s.lineStyle,
         })),
       libraryOpen: true,
       // Rarely used notation starts collapsed.
@@ -144,9 +152,11 @@ export const useUiStore = create<UiState>()(
         inspectorCollapsed,
         layoutDirection,
         layoutDensity,
+        lineStyle,
       }) => ({
         layoutDirection,
         layoutDensity,
+        lineStyle,
         libraryOpen,
         libraryCollapsed,
         libraryWidth,

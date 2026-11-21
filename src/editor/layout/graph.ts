@@ -5,6 +5,12 @@
 
 export type LayoutDirection = 'LR' | 'TB';
 export type LayoutDensity = 'compact' | 'normal' | 'spacious';
+/**
+ * How flows are drawn. 'orthogonal' (default) and 'straight' are routes saved
+ * in the file; 'rounded' and 'curved' save orthogonal routes and only draw
+ * their bends rounded or as smooth curves.
+ */
+export type LineStyle = 'orthogonal' | 'straight' | 'rounded' | 'curved';
 
 export interface LayoutOptions {
   /** Direction of the flow: left → right (default) or top → bottom. */
@@ -16,6 +22,12 @@ export interface LayoutOptions {
    * (default true; the current order is kept when no order is better).
    */
   reorderPools?: boolean;
+  /**
+   * 'straight' leaves sequence and message flows out of the result (the
+   * editor draws them straight from shape to shape) and puts their names at
+   * the middle; the other styles are routed orthogonally.
+   */
+  lineStyle?: LineStyle;
 }
 
 export interface LabelMeasure {

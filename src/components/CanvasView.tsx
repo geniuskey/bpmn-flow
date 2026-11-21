@@ -58,6 +58,10 @@ export function CanvasView({ onReady }: { onReady: (controller: EditorController
   useEffect(() => {
     controller?.setTool(tool);
   }, [controller, tool]);
+  const lineStyle = useUiStore((s) => s.lineStyle);
+  useEffect(() => {
+    controller?.setLineStyle(lineStyle);
+  }, [controller, lineStyle]);
   // Focus follows the selection (and is re-applied after edits redraw the diagram).
   useEffect(() => {
     controller?.focus(focusMode ? selection : []);

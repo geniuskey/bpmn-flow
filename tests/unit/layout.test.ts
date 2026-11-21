@@ -470,3 +470,59 @@ describe('nested shapes', () => {
     ).toEqual([]);
   });
 });
+
+describe('line styles', () => {
+  const flows = (controller: EditorController) =>
+    controller
+      .getElements()
+      .filter(
+        (e) => isConnection(e) && /^bpmn:(SequenceFlow|MessageFlow)$/.test(bo(e)?.$type ?? ''),
+      ) as Connection[];
+  const drawn = (controller: EditorController, c: Connection) => {
+    const registry = (
+      controller as unknown as { get(n: string): { getGraphics(e: Element): SVGElement } }
+    ).get('elementRegistry');
+    return registry.getGraphics(c).querySelector('path.bf-connection')!.getAttribute('d')!;
+  };
+  const rightAngled = (c: Connection) =>
+    c.waypoints.every(
+      (p, i) => !i || p.x === c.waypoints[i - 1]!.x || p.y === c.waypoints[i - 1]!.y,
+    );
+
+  it('straight: flows run shape to shape, stay straight when shapes move, one undo step', async () => {
+    const controller = await open(fixture('collaboration-messages.bpmn'));
+    const before = await controller.exportXml();
+    expect(await controller.autoLayout({ lineStyle: 'straight' })).toBe(true);
+    expect(controller.getLineStyle()).toBe('straight');
+    const all = flows(controller);
+    expect(all.length).toBeGreaterThan(3);
+    for (const c of all) expect(c.waypoints, c.id).toHaveLength(2);
+    // A diagonal somewhere: not just right angles that happen to be straight.
+    expect(all.some((c) => !rightAngled(c))).toBe(true);
+    const task = all.find((c) => is(bo(c), 'bpmn:SequenceFlow'))!.target as Shape;
+    controller.select([task.id]);
+    controller.nudge(0, 40);
+    for (const c of [...task.incoming, ...task.outgoing] as Connection[])
+      expect(c.waypoints, c.id).toHaveLength(2);
+    controller.undo();
+    controller.undo();
+    expect(await controller.exportXml()).toBe(before);
+  });
+
+  it('rounded and curved: right-angle routes in the file, drawn with curves', async () => {
+    for (const lineStyle of ['rounded', 'curved'] as const) {
+      const controller = await open(fixture('mvp-elements.bpmn'));
+      expect(await controller.autoLayout({ lineStyle })).toBe(true);
+      const all = flows(controller);
+      for (const c of all) expect(rightAngled(c), c.id).toBe(true);
+      const bent = all.filter((c) => c.waypoints.length > 2);
+      expect(bent.length).toBeGreaterThan(0);
+      for (const c of bent) expect(drawn(controller, c), c.id).toContain('Q');
+      const xml = await controller.exportXml();
+      controller.setLineStyle('orthogonal');
+      for (const c of bent) expect(drawn(controller, c), c.id).not.toContain('Q');
+      // Only drawn differently: the file does not change.
+      expect(await controller.exportXml()).toBe(xml);
+    }
+  });
+});

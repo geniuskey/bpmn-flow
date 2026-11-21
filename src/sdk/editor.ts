@@ -52,7 +52,12 @@ export type { CompatibilityReport } from '@/bpmn/validation/compatibility';
 export { bindKeyboard, type KeyboardOptions } from './keyboard';
 /** Read-only viewer that reflows the diagram to fit its container. */
 export { BpmnFlowViewer, type BpmnFlowViewerOptions, type ViewerImportResult } from './viewer';
-export type { LayoutDensity, LayoutDirection, LayoutOptions } from '@/editor/layout/graph';
+export type {
+  LayoutDensity,
+  LayoutDirection,
+  LayoutOptions,
+  LineStyle,
+} from '@/editor/layout/graph';
 /** The lower-level controller `BpmnFlowEditor` extends (takes a loaded `BpmnDocument`). */
 export { EditorController };
 

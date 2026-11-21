@@ -1,5 +1,6 @@
 /** SVG path builders used for hit-testing, connection cropping and drawing. */
 import type { Point } from '@/bpmn/di/di';
+import type { LineStyle } from '../layout/graph';
 
 export interface Box {
   x: number;
@@ -60,6 +61,56 @@ export function outlinePath(outline: Outline, b: Box): string {
 
 export function polylinePath(points: Point[]): string {
   return points.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join('');
+}
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+/** A polyline whose bends are rounded with `radius` (less where segments are short). */
+export function roundedPath(points: Point[], radius = 10): string {
+  if (points.length < 3) return polylinePath(points);
+  let d = `M${points[0]!.x},${points[0]!.y}`;
+  for (let i = 1; i < points.length - 1; i++) {
+    const [a, b, c] = [points[i - 1]!, points[i]!, points[i + 1]!];
+    const l1 = Math.hypot(b.x - a.x, b.y - a.y);
+    const l2 = Math.hypot(c.x - b.x, c.y - b.y);
+    const r = Math.min(radius, l1 / 2, l2 / 2);
+    if (!r) {
+      d += `L${b.x},${b.y}`;
+      continue;
+    }
+    const p = { x: b.x - ((b.x - a.x) / l1) * r, y: b.y - ((b.y - a.y) / l1) * r };
+    const q = { x: b.x + ((c.x - b.x) / l2) * r, y: b.y + ((c.y - b.y) / l2) * r };
+    d += `L${r2(p.x)},${r2(p.y)}Q${b.x},${b.y} ${r2(q.x)},${r2(q.y)}`;
+  }
+  const end = points[points.length - 1]!;
+  return `${d}L${end.x},${end.y}`;
+}
+
+/**
+ * A smooth curve along a polyline: each bend is the control point of a curve
+ * between the middles of its segments; the ends keep their direction (so
+ * arrow heads and markers still line up).
+ */
+export function curvedPath(points: Point[]): string {
+  if (points.length < 3) return polylinePath(points);
+  const mid = (a: Point, b: Point) => ({ x: r2((a.x + b.x) / 2), y: r2((a.y + b.y) / 2) });
+  const first = points[0]!;
+  const last = points[points.length - 1]!;
+  const start = mid(first, points[1]!);
+  let d = `M${first.x},${first.y}L${start.x},${start.y}`;
+  for (let i = 1; i < points.length - 1; i++) {
+    const b = points[i]!;
+    const to = i === points.length - 2 ? mid(b, last) : mid(b, points[i + 1]!);
+    d += `Q${b.x},${b.y} ${to.x},${to.y}`;
+  }
+  return `${d}L${last.x},${last.y}`;
+}
+
+/** The path of a connection drawn in a line style. */
+export function linePath(points: Point[], style: LineStyle = 'orthogonal'): string {
+  if (style === 'rounded') return roundedPath(points);
+  if (style === 'curved') return curvedPath(points);
+  return polylinePath(points);
 }
 
 /** Arrow head triangle at the end of the last segment. */
