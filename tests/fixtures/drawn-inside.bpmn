@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="d" targetNamespace="t">
+  <process id="Proc">
+    <startEvent id="S"/>
+    <task id="Phase" name="Phase"/>
+    <task id="A" name="A"/>
+    <task id="Inner" name="Inner"/>
+    <task id="B1" name="B1"/>
+    <task id="B2" name="B2"/>
+    <task id="C" name="C"/>
+    <endEvent id="E"/>
+    <task id="Z" name="Later"/>
+    <sequenceFlow id="f1" sourceRef="S" targetRef="A"/>
+    <sequenceFlow id="f2" sourceRef="A" targetRef="B1"/>
+    <sequenceFlow id="f3" sourceRef="B1" targetRef="B2"/>
+    <sequenceFlow id="f4" sourceRef="B2" targetRef="C"/>
+    <sequenceFlow id="f5" sourceRef="C" targetRef="Z"/>
+    <sequenceFlow id="f6" sourceRef="Z" targetRef="E"/>
+  </process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="PL" bpmnElement="Proc">
+    <bpmndi:BPMNShape id="S_di" bpmnElement="S"><dc:Bounds x="40" y="600" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Phase_di" bpmnElement="Phase"><dc:Bounds x="150" y="100" width="800" height="400"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="A_di" bpmnElement="A"><dc:Bounds x="170" y="400" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Inner_di" bpmnElement="Inner"><dc:Bounds x="300" y="130" width="400" height="200"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="B1_di" bpmnElement="B1"><dc:Bounds x="320" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="B2_di" bpmnElement="B2"><dc:Bounds x="560" y="150" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="C_di" bpmnElement="C"><dc:Bounds x="800" y="380" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Z_di" bpmnElement="Z"><dc:Bounds x="1000" y="600" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="E_di" bpmnElement="E"><dc:Bounds x="1200" y="700" width="36" height="36"/></bpmndi:BPMNShape>
+  <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="0" y="0"/><di:waypoint x="10" y="10"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="0" y="0"/><di:waypoint x="10" y="10"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><di:waypoint x="0" y="0"/><di:waypoint x="10" y="10"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><di:waypoint x="0" y="0"/><di:waypoint x="10" y="10"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="f5_di" bpmnElement="f5"><di:waypoint x="0" y="0"/><di:waypoint x="10" y="10"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="f6_di" bpmnElement="f6"><di:waypoint x="0" y="0"/><di:waypoint x="10" y="10"/></bpmndi:BPMNEdge>
+</bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</definitions>

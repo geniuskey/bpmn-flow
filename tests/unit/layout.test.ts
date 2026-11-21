@@ -395,3 +395,78 @@ describe('layout engine', () => {
     expect(kept.shapes.P3!.y).toBeGreaterThan(kept.shapes.P2!.y);
   });
 });
+
+describe('nested shapes', () => {
+  const box = (s: Shape): Box => ({ x: s.x, y: s.y, width: s.width, height: s.height });
+  /** Each listed shape lies inside its holder; shapes of one level do not overlap. */
+  function nestingProblems(controller: EditorController, holderOf: Record<string, string>) {
+    const out: string[] = [];
+    const get = (id: string) => controller.getElement(id) as Shape;
+    for (const [id, holder] of Object.entries(holderOf))
+      if (!inside(box(get(id)), box(get(holder)))) out.push(`${id} outside ${holder}`);
+    const levels = new Map<string, string[]>();
+    for (const [id, holder] of Object.entries(holderOf))
+      levels.set(holder, [...(levels.get(holder) ?? []), id]);
+    for (const ids of levels.values())
+      for (let i = 0; i < ids.length; i++)
+        for (let j = i + 1; j < ids.length; j++)
+          if (overlaps(inset(box(get(ids[i]!)), 1), inset(box(get(ids[j]!)), 1)))
+            out.push(`overlap ${ids[i]} / ${ids[j]}`);
+    return out;
+  }
+
+  it('keeps sub-processes in sub-processes, in lanes, both directions', async () => {
+    const holderOf = {
+      OS: 'Outer',
+      OT1: 'Outer',
+      Inner: 'Outer',
+      OT2: 'Outer',
+      OE: 'Outer',
+      IS: 'Inner',
+      IT1: 'Inner',
+      IG: 'Inner',
+      IT2: 'Inner',
+      IT3: 'Inner',
+      IE: 'Inner',
+    };
+    for (const direction of ['LR', 'TB'] as const) {
+      const controller = await open(fixture('nested-layers.bpmn'));
+      expect(await controller.autoLayout({ direction })).toBeTruthy();
+      expect(nestingProblems(controller, holderOf), direction).toEqual([]);
+      expect(problems(controller), direction).toEqual([]);
+    }
+  });
+
+  it('keeps shapes drawn inside an activity inside it, to any depth', async () => {
+    // Siblings in the model, nested on the canvas: Phase ⊃ A, Inner, C; Inner ⊃ B1, B2.
+    const holderOf = { A: 'Phase', Inner: 'Phase', C: 'Phase', B1: 'Inner', B2: 'Inner' };
+    for (const direction of ['LR', 'TB'] as const) {
+      const controller = await open(fixture('drawn-inside.bpmn'));
+      const before = await controller.exportXml();
+      expect(await controller.autoLayout({ direction })).toBeTruthy();
+      expect(nestingProblems(controller, holderOf), direction).toEqual([]);
+      for (const id of ['S', 'Z', 'E']) {
+        const s = controller.getElement(id) as Shape;
+        const phase = controller.getElement('Phase') as Shape;
+        expect(overlaps(box(s), box(phase)), id).toBe(false);
+      }
+      controller.undo();
+      expect(await controller.exportXml()).toBe(before);
+    }
+  });
+
+  it('moves what is drawn inside a selected activity with it', async () => {
+    const controller = await open(fixture('drawn-inside.bpmn'));
+    controller.select(['S', 'Phase', 'Z']);
+    expect(await controller.layoutSelection()).toBeNull();
+    expect(
+      nestingProblems(controller, {
+        A: 'Phase',
+        Inner: 'Phase',
+        C: 'Phase',
+        B1: 'Inner',
+        B2: 'Inner',
+      }),
+    ).toEqual([]);
+  });
+});
