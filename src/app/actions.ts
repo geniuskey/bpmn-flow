@@ -231,6 +231,22 @@ export function downloadOriginal(): void {
   else downloadText(doc.originalXml, exportName(doc.fileName));
 }
 
+export async function runLayoutSelection(): Promise<void> {
+  const ctrl = controller();
+  if (!ctrl) return;
+  const { layoutDirection: direction, layoutDensity: density } = useUiStore.getState();
+  try {
+    const reason = await ctrl.layoutSelection({ direction, density });
+    if (reason) useDocumentStore.getState().notify({ kind: 'info', title: reason });
+  } catch (err) {
+    useDocumentStore.getState().notify({
+      kind: 'error',
+      title: 'Auto layout failed.',
+      details: [err instanceof Error ? err.message : String(err)],
+    });
+  }
+}
+
 export async function runAutoLayout(): Promise<void> {
   const ctrl = controller();
   if (!ctrl) return;

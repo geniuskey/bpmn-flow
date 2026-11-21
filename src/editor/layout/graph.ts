@@ -11,6 +11,11 @@ export interface LayoutOptions {
   direction?: LayoutDirection;
   /** Spacing preset (default 'normal'). */
   density?: LayoutDensity;
+  /**
+   * Reorder pools so that message flows cross as few pools as possible
+   * (default true; the current order is kept when no order is better).
+   */
+  reorderPools?: boolean;
 }
 
 export interface LabelMeasure {

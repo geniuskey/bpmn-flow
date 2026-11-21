@@ -18,6 +18,7 @@ const ELEMENT_ITEMS = [
   'edit.delete',
   'arrange.addLane',
   'arrange.addSubLane',
+  'arrange.layoutSelection',
 ];
 const CANVAS_ITEMS = ['edit.paste', 'edit.selectAll', 'arrange.layout', 'view.fit'];
 

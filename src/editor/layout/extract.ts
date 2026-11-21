@@ -189,6 +189,84 @@ function groupsOf(root: Element): LGroup[] {
     }));
 }
 
+export interface ExtractedSelection {
+  diagram: LDiagram;
+  vertical: boolean;
+  /** Shapes laid out (flow nodes and artifacts of the selection). */
+  shapes: Shape[];
+  /** The area the result must stay inside: the lane, pool, sub-process or nothing. */
+  frame?: { x: number; y: number; width: number; height: number };
+}
+
+/**
+ * Layout input for the selected flow nodes (and selected artifacts) only, or
+ * a reason why the selection cannot be laid out on its own.
+ */
+export function extractSelection(selected: Element[]): ExtractedSelection | string {
+  const picked = new Set<Shape>();
+  for (const el of selected) {
+    if (isConnection(el)) continue;
+    const s = el as Shape;
+    const b = bo(s);
+    if (s.host) picked.add(s.host as Shape);
+    else if (is(b, 'bpmn:FlowNode') || ARTIFACT.test(b?.$type ?? '')) picked.add(s);
+  }
+  const shapes = [...picked];
+  const flowNodes = shapes.filter((s) => is(bo(s), 'bpmn:FlowNode'));
+  if (flowNodes.length < 2) return 'Select two or more connected shapes to lay out.';
+  const parent = shapes[0]!.parent as Shape | undefined;
+  if (!parent || shapes.some((s) => s.parent !== parent))
+    return 'Select shapes of one pool or sub-process.';
+
+  const lanes = childLanes(parent);
+  let frame: ExtractedSelection['frame'];
+  let vertical = false;
+  if (lanes.length) {
+    const membership = laneMembership(parent);
+    const laneIds = new Set(flowNodes.map((s) => membership.get(bo(s)!)));
+    if (laneIds.size > 1) return 'The selection spans several lanes; select shapes of one lane.';
+    const lane = parent.children.find((c) => c.id === [...laneIds][0]) as Shape | undefined;
+    vertical = !isHorizontal(lanes[0]!);
+    if (lane) {
+      const header = 30;
+      frame = vertical
+        ? { x: lane.x, y: lane.y + header, width: lane.width, height: lane.height - header }
+        : { x: lane.x + header, y: lane.y, width: lane.width - header, height: lane.height };
+    }
+  } else if (is(bo(parent), 'bpmn:Participant')) {
+    vertical = !isHorizontal(parent);
+    const header = 30;
+    frame = vertical
+      ? { x: parent.x, y: parent.y + header, width: parent.width, height: parent.height - header }
+      : { x: parent.x + header, y: parent.y, width: parent.width - header, height: parent.height };
+  } else if (parent.parent && isExpandedShape(parent)) {
+    frame = {
+      x: parent.x + 10,
+      y: parent.y + 24,
+      width: parent.width - 20,
+      height: parent.height - 34,
+    };
+  }
+
+  const full = containerOf(parent, false);
+  const ids = new Set(shapes.map((s) => s.id));
+  const container: LContainer = {
+    lanes: [],
+    nodes: full.nodes.filter((n) => ids.has(n.id)).map((n) => ({ ...n, strip: false })),
+    edges: full.edges.filter((e) => ids.has(e.source) && ids.has(e.target)),
+    artifacts: full.artifacts
+      .filter((a) => ids.has(a.id))
+      .map((a) => (a.anchor && ids.has(a.anchor) ? a : { ...a, anchor: undefined, links: [] })),
+  };
+  for (const a of container.artifacts) if (!a.anchor) delete a.anchor;
+  return {
+    diagram: { containers: [container], messages: [], groups: [], origin: { x: 0, y: 0 } },
+    vertical,
+    shapes,
+    ...(frame ? { frame } : {}),
+  };
+}
+
 /** Null when the diagram has nothing the layout can arrange. */
 export function extractLayout(root: Element): Extracted | null {
   const rootBo = bo(root);

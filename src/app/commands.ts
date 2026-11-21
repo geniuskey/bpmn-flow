@@ -11,6 +11,7 @@ import {
   pickFile,
   restorePreviousSession,
   runAutoLayout,
+  runLayoutSelection,
 } from './actions';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useEditorStore } from '@/stores/editorStore';
@@ -166,6 +167,14 @@ export const COMMANDS: AppCommand[] = [
     run: () => runAutoLayout(),
   },
   {
+    id: 'arrange.layoutSelection',
+    label: 'Lay out selection',
+    group: 'Arrange',
+    editing: true,
+    selection: true,
+    run: () => runLayoutSelection(),
+  },
+  {
     id: 'arrange.addLane',
     label: 'Add lane below',
     group: 'Arrange',
@@ -317,6 +326,7 @@ export function isEnabled(cmd: AppCommand): boolean {
   if (cmd.id === 'edit.redo') return snapshot.canRedo;
   if (cmd.id.startsWith('arrange.align')) return controller.arrangeableCount() >= 2;
   if (cmd.id.startsWith('arrange.distribute')) return controller.arrangeableCount() >= 3;
+  if (cmd.id === 'arrange.layoutSelection') return controller.canLayoutSelection();
   if (cmd.id === 'arrange.addLane') return isPoolOrLane(controller, snapshot.selection[0]);
   if (cmd.id === 'arrange.addSubLane') {
     return controller.getElement(snapshot.selection[0] ?? '')?.type === 'bpmn:Lane';

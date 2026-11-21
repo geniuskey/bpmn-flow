@@ -798,27 +798,65 @@ function layoutSet(ctx: Ctx, containers: LContainer[], messages: LEdge[]): Local
     return route;
   };
 
-  /** A loop back to an earlier (or the same) layer, on a free track below both ends. */
-  const loopRoute = (g: GEdge, start: SPoint[], from: Item): Route => {
+  /**
+   * A loop back to an earlier (or the same) layer, on a free track above or
+   * below both ends: whichever spans fewer tracks (a new track costs a little
+   * more than an existing one; below wins ties). `start` is a fixed exit
+   * (boundary events leave downwards), which keeps the loop below.
+   */
+  const loopRoute = (g: GEdge, from: Item, start?: SPoint[]): Route => {
     const { t, e } = g;
     const i = from.layer;
     const j = t.layer;
     const label = labelOf(e);
     const lb = Math.max(from.band, t.band);
-    const ends = [from, t].filter((x) => x.band === lb).map((x) => x.track);
-    const k = freeTrack(lb, Math.max(...ends) + 1, j, i, Math.max(...ends));
-    reserve(lb, k, j, i, e.id);
-    const loop: CExpr = { k: 'track', b: lb, t: k };
-    // A gateway leaves through its far side when nothing is in the way.
-    const exitDown = start.length === 1 && colFree(i, pos(from), { b: lb, t: k });
-    const points = start.length === 1 && !exitDown ? [sideA(from, true)] : [...start];
-    if (exitDown) points.push({ a: start[0]!.a, c: loop });
-    else {
-      const ch = chan(i);
-      points.push({ a: ch, c: points[points.length - 1]!.c }, { a: ch, c: loop });
+    const ub = Math.min(from.band, t.band);
+    const lo = Math.max(...[from, t].filter((x) => x.band === lb).map((x) => x.track));
+    const hi = Math.min(...[from, t].filter((x) => x.band === ub).map((x) => x.track));
+    const NEW_TRACK = 1.5;
+    const below = bands[lb]!;
+    const above = bands[ub]!;
+    let best: { up: boolean; t?: number; cost: number } = {
+      up: false,
+      cost: below.maxT + 1 - lo + NEW_TRACK,
+    };
+    for (let k = lo + 1; k <= below.maxT; k++) {
+      if (runFree(lb, k, j, i)) {
+        if (k - lo < best.cost) best = { up: false, t: k, cost: k - lo };
+        break;
+      }
     }
-    if (t.node?.kind === 'gateway' && colFree(j, { b: lb, t: k }, pos(t))) {
-      points.push({ a: center(t).a, c: loop }, sideC(t, true));
+    if (!start) {
+      let found = false;
+      for (let k = hi - 1; k >= above.minT; k--) {
+        if (runFree(ub, k, j, i)) {
+          if (hi - k < best.cost) best = { up: true, t: k, cost: hi - k };
+          found = true;
+          break;
+        }
+      }
+      const fresh = hi - (above.minT - 1) + NEW_TRACK;
+      if (!found && fresh < best.cost) best = { up: true, cost: fresh };
+    }
+    const up = best.up;
+    const band = up ? ub : lb;
+    const k = best.t ?? (up ? --above.minT : newTrack(lb));
+    reserve(band, k, j, i, e.id);
+    const loop: CExpr = { k: 'track', b: band, t: k };
+    const lp = { b: band, t: k };
+    let points: SPoint[];
+    if (start) {
+      const ch = chan(i);
+      points = [...start, { a: ch, c: start[start.length - 1]!.c }, { a: ch, c: loop }];
+    } else if (from.node?.kind === 'gateway' && colFree(i, pos(from), lp)) {
+      // A gateway leaves through its top / bottom corner when nothing is in the way.
+      points = [sideC(from, !up), { a: center(from).a, c: loop }];
+    } else {
+      const ch = chan(i);
+      points = [sideA(from, true), { a: ch, c: trackC(from) }, { a: ch, c: loop }];
+    }
+    if (t.node?.kind === 'gateway' && colFree(j, lp, pos(t))) {
+      points.push({ a: center(t).a, c: loop }, sideC(t, !up));
     } else {
       const ch = chan(j - 1);
       points.push({ a: ch, c: loop }, { a: ch, c: trackC(t) }, sideA(t, false));
@@ -830,7 +868,7 @@ function layoutSet(ctx: Ctx, containers: LContainer[], messages: LEdge[]): Local
   const exceptionRoute = (g: GEdge): Route => {
     const { s, t, e } = g;
     const place = s.boundaries.find((b) => b.b.id === e.from);
-    if (!place) return g.back ? loopRoute(g, [sideA(s, true)], s) : sequenceRoute(g);
+    if (!place) return g.back ? loopRoute(g, s) : sequenceRoute(g);
     const i = s.layer;
     const j = t.layer;
     const label = labelOf(e);
@@ -840,7 +878,7 @@ function layoutSet(ctx: Ctx, containers: LContainer[], messages: LEdge[]): Local
     };
     if (j <= i) {
       const stub: CExpr = { k: 'tgap', b: s.band, t: s.track };
-      return loopRoute(g, [bottom, { a: bottom.a, c: stub }], s);
+      return loopRoute(g, s, [bottom, { a: bottom.a, c: stub }]);
     }
     if (label) needChan(i, label.sa + 10 - s.ext.aa);
     const route: Route = { id: e.id, points: [], ...(label ? { label } : {}) };
@@ -881,10 +919,8 @@ function layoutSet(ctx: Ctx, containers: LContainer[], messages: LEdge[]): Local
   );
   for (const g of sorted) {
     if (g.exc) routes.push(exceptionRoute(g));
-    else if (g.back) {
-      const start = g.s.node?.kind === 'gateway' ? [sideC(g.s, true)] : [sideA(g.s, true)];
-      routes.push(loopRoute(g, start, g.s));
-    } else routes.push(sequenceRoute(g));
+    else if (g.back) routes.push(loopRoute(g, g.s));
+    else routes.push(sequenceRoute(g));
   }
 
   /** Moves an external label away from the side a message flow attaches to. */
@@ -1230,6 +1266,81 @@ function mergeLocal(into: EngineResult, from: EngineResult, dx: number, dy: numb
     into.connections[id] = pts.map((q) => ({ x: Math.round(q.x + dx), y: Math.round(q.y + dy) }));
 }
 
+/** Ids inside a container (flow nodes at any depth, boundary events, artifacts). */
+function idsOf(c: LContainer, into: Set<string> = new Set()): Set<string> {
+  if (c.id) into.add(c.id);
+  for (const n of c.nodes) {
+    into.add(n.id);
+    for (const b of n.boundary ?? []) into.add(b.id);
+    if (n.content) idsOf(n.content, into);
+  }
+  for (const a of c.artifacts) into.add(a.id);
+  return into;
+}
+
+/**
+ * Pool order with the fewest pools crossed by message flows (and the
+ * shortest message flows). The current order is kept unless another one is
+ * strictly better. Up to 7 pools every order is tried, beyond that adjacent
+ * pools are swapped while it helps.
+ */
+export function orderPools(containers: LContainer[], messages: LEdge[]): LContainer[] {
+  if (containers.length < 3 || !messages.length) return containers;
+  const owner = new Map<string, number>();
+  containers.forEach((c, i) => {
+    for (const id of idsOf(c)) owner.set(id, i);
+  });
+  const pairs = messages
+    .map((m) => [owner.get(m.source), owner.get(m.target)] as const)
+    .filter(
+      (p): p is readonly [number, number] =>
+        p[0] !== undefined && p[1] !== undefined && p[0] !== p[1],
+    );
+  if (!pairs.length) return containers;
+  const cost = (order: number[]) => {
+    const at = new Map(order.map((c, i) => [c, i]));
+    let sum = 0;
+    for (const [a, b] of pairs) {
+      const d = Math.abs(at.get(a)! - at.get(b)!);
+      sum += (d - 1) * 10 + d;
+    }
+    return sum;
+  };
+  const start = containers.map((_, i) => i);
+  let best = start;
+  let bestCost = cost(start);
+  if (containers.length <= 7) {
+    const permute = (prefix: number[], rest: number[]) => {
+      if (!rest.length) {
+        const c = cost(prefix);
+        if (c < bestCost) {
+          best = prefix;
+          bestCost = c;
+        }
+        return;
+      }
+      rest.forEach((x, i) => permute([...prefix, x], [...rest.slice(0, i), ...rest.slice(i + 1)]));
+    };
+    permute([], start);
+  } else {
+    let improved = true;
+    while (improved) {
+      improved = false;
+      for (let i = 0; i + 1 < best.length; i++) {
+        const next = [...best];
+        [next[i], next[i + 1]] = [next[i + 1]!, next[i]!];
+        const c = cost(next);
+        if (c < bestCost) {
+          best = next;
+          bestCost = c;
+          improved = true;
+        }
+      }
+    }
+  }
+  return best.map((i) => containers[i]!);
+}
+
 /** Lays out a whole diagram. */
 export function layoutDiagram(
   diagram: LDiagram,
@@ -1241,7 +1352,11 @@ export function layoutDiagram(
     p: DENSITY[options.density ?? 'normal'],
     measure,
   };
-  const local = layoutSet(ctx, diagram.containers, diagram.messages);
+  const containers =
+    options.reorderPools === false
+      ? diagram.containers
+      : orderPools(diagram.containers, diagram.messages);
+  const local = layoutSet(ctx, containers, diagram.messages);
   const result: EngineResult = { shapes: {}, connections: {}, labels: {} };
   mergeLocal(result, local, diagram.origin.x, diagram.origin.y);
 

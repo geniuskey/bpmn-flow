@@ -135,7 +135,9 @@ export function Header() {
     runCommand('arrange.layout');
   };
   const layoutItems: ToolbarMenuItem[] = [
+    commandItem('arrange.layoutSelection'),
     {
+      separated: true,
       label: 'Left to right',
       checked: directionLocked ? undefined : layoutDirection === 'LR',
       disabled: directionLocked,

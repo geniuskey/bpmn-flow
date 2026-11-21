@@ -117,11 +117,18 @@ on the whole page, or call `bindKeyboard(editor, element, options)` yourself.
 dependency or worker:
 
 - the main path runs on one straight line; branches stack below it, exception
-  paths (boundary events) below their activity, loops on a free row;
-- lanes and pools keep their nodes; pools share columns so message flows line up;
+  paths (boundary events) below their activity; loops take a free row above or
+  below, whichever is shorter;
+- lanes and pools keep their nodes; pools share columns so message flows line up,
+  and pools are reordered when that keeps message flows from crossing a pool
+  (`reorderPools: false` keeps the order);
 - flows are routed around shapes; external labels and flow names get room;
 - data objects and annotations sit next to the activity they belong to;
 - expanded sub-processes are laid out inside and resized to fit.
+
+`layoutSelection(options)` lays out only the selected shapes (of one pool, lane
+or sub-process) and leaves the rest of the diagram in place; it resolves to
+`null`, or to the reason it could not (e.g. the selection spans several lanes).
 
 ```ts
 await editor.autoLayout({ direction: 'TB', density: 'compact' });

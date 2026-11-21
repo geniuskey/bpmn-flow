@@ -184,7 +184,11 @@ a grid of layers (along the flow) and tracks (across it); tracks belong to bands
 pools. Layers come from the longest path over sequence flows (loops broken by
 DFS; exception flows leave from their host; message flows keep their target no
 earlier than their source). The main path (longest start → end) is the first
-track of its band; branches and exception paths stack below. Artifacts take a
+track of its band; branches and exception paths stack below; a loop takes a free
+track above or below, whichever spans fewer tracks. Before layout, pools are
+reordered (`orderPools`) when another order crosses fewer pools with message
+flows. `layoutSelection` lays out a sub-graph of one container and moves it back
+to where the selection was, inside its lane / pool. Artifacts take a
 free cell next to the node they are associated with. Flows are routed through
 the grid (free tracks and the channels between layers), never through a cell
 holding a node; channels and tracks are sized for the shapes, external labels

@@ -10,7 +10,7 @@ import { loadBpmnDocument } from '@/bpmn/document';
 import { getMany, is } from '@/bpmn/model/moddle';
 import { EditorController } from '@/editor/EditorController';
 import { bo, isConnection } from '@/editor/model';
-import { layoutDiagram } from '@/editor/layout/engine';
+import { layoutDiagram, orderPools } from '@/editor/layout/engine';
 import type { LDiagram } from '@/editor/layout/graph';
 import { readFileSync } from 'node:fs';
 import { EDITABLE_FIXTURES } from '../helpers';
@@ -151,6 +151,47 @@ describe('auto layout on the sample diagrams', () => {
   });
 });
 
+describe('lay out the selection', () => {
+  const box = (s: Shape) => ({ x: s.x, y: s.y, width: s.width, height: s.height });
+
+  it('arranges only the selected shapes, one undo step, the rest stays', async () => {
+    const controller = await open(fixture('mvp-elements.bpmn'));
+    const get = (id: string) => controller.getElement(id) as Shape;
+    // Scramble the parallel block, then lay out just that block.
+    controller.select(['Notify']);
+    controller.nudge(0, 140);
+    const before = await controller.exportXml();
+    const outside = ['Start', 'Review', 'Paid', 'Rejected'].map((id) => box(get(id)));
+    controller.select(['Split', 'Pay', 'Notify', 'Join']);
+    expect(controller.canLayoutSelection()).toBe(true);
+    expect(await controller.layoutSelection()).toBeNull();
+    expect(['Start', 'Review', 'Paid', 'Rejected'].map((id) => box(get(id)))).toEqual(outside);
+    const mid = (s: Shape) => s.y + s.height / 2;
+    expect(mid(get('Split'))).toBe(mid(get('Join')));
+    expect(get('Notify').y).toBeGreaterThan(get('Pay').y + get('Pay').height);
+    expect(problems(controller)).toEqual([]);
+    controller.undo();
+    expect(await controller.exportXml()).toBe(before);
+  });
+
+  it('explains why a selection across lanes or with one shape cannot be laid out', async () => {
+    const controller = await open(fixture('collaboration-lanes.bpmn'));
+    controller.select(['Triage', 'Solve']);
+    expect(await controller.layoutSelection()).toMatch(/several lanes/);
+    controller.select(['Triage']);
+    expect(controller.canLayoutSelection()).toBe(false);
+    expect(await controller.layoutSelection()).toMatch(/two or more/);
+    controller.select(['Start_ticket', 'Triage']);
+    expect(await controller.layoutSelection()).toBeNull();
+    const lane = controller.getElement('Lane_agent') as Shape;
+    for (const id of ['Start_ticket', 'Triage']) {
+      const s = controller.getElement(id) as Shape;
+      expect(s.y).toBeGreaterThanOrEqual(lane.y);
+      expect(s.y + s.height).toBeLessThanOrEqual(lane.y + lane.height);
+    }
+  });
+});
+
 describe('layout engine', () => {
   const task = (id: string, lane?: string) => ({
     id,
@@ -227,8 +268,42 @@ describe('layout engine', () => {
     const b = r.shapes.B!;
     expect(cy(b)).toBe(a.y + a.height); // on the bottom edge
     expect(r.shapes.X!.y).toBeGreaterThan(a.y + a.height);
+    // Below is taken by the exception path: the loop runs above instead.
     const loop = r.connections.loop!;
-    expect(Math.max(...loop.map((p) => p.y))).toBeGreaterThan(a.y + a.height);
+    expect(Math.min(...loop.map((p) => p.y))).toBeLessThan(a.y);
+  });
+
+  it('runs a loop below when nothing is in the way, above when the rows below are taken', () => {
+    const base = {
+      nodes: [event('S'), task('A'), task('B'), gw('G'), event('E')],
+      edges: [
+        flow('f1', 'S', 'A'),
+        flow('f2', 'A', 'B'),
+        flow('f3', 'B', 'G'),
+        flow('f4', 'G', 'E'),
+        flow('loop', 'G', 'A'),
+      ],
+    };
+    const free = layoutDiagram(diagram(base));
+    const a = free.shapes.A!;
+    expect(Math.max(...free.connections.loop!.map((p) => p.y))).toBeGreaterThan(a.y + a.height);
+    // Two branches below A..G: going below would span three rows.
+    const busy = layoutDiagram(
+      diagram({
+        nodes: [...base.nodes, task('X'), task('Y'), gw('S2')],
+        edges: [
+          ...base.edges.filter((e) => e.id !== 'f1'),
+          flow('s1', 'S', 'S2'),
+          flow('s2', 'S2', 'A'),
+          flow('s3', 'S2', 'X'),
+          flow('s4', 'S2', 'Y'),
+          flow('s5', 'X', 'G'),
+          flow('s6', 'Y', 'G'),
+        ],
+      }),
+    );
+    const a2 = busy.shapes.A!;
+    expect(Math.min(...busy.connections.loop!.map((p) => p.y))).toBeLessThan(a2.y);
   });
 
   it('keeps nodes in their lanes and lines up layers across lanes', () => {
@@ -287,5 +362,36 @@ describe('layout engine', () => {
     const r = layoutDiagram(diagram({ nodes, edges }));
     expect(performance.now() - t0).toBeLessThan(1500);
     expect(Object.keys(r.shapes)).toHaveLength(nodes.length);
+  });
+
+  it('reorders pools so message flows do not cross a pool, unless told not to', () => {
+    const pool = (id: string, node: string) => ({
+      id,
+      lanes: [],
+      nodes: [task(node)],
+      edges: [],
+      artifacts: [],
+    });
+    const containers = [pool('P1', 'A'), pool('P2', 'B'), pool('P3', 'C')];
+    const messages = [flow('m1', 'A', 'C'), flow('m2', 'C', 'A'), flow('m3', 'B', 'C')];
+    const order = orderPools(containers, messages).map((c) => c.id);
+    expect(order).not.toEqual(['P1', 'P2', 'P3']);
+    expect(Math.abs(order.indexOf('P1') - order.indexOf('P3'))).toBe(1);
+    // Already good: kept.
+    const good = [containers[0]!, containers[2]!, containers[1]!];
+    expect(orderPools(good, messages)).toEqual(good);
+
+    const d: LDiagram = { containers, messages, groups: [], origin: { x: 0, y: 0 } };
+    const r = layoutDiagram(d);
+    const p2 = r.shapes.P2!;
+    for (const id of ['m1', 'm2']) {
+      const pts = r.connections[id]!;
+      const ys = pts.map((p) => p.y);
+      const crosses = Math.min(...ys) < p2.y && Math.max(...ys) > p2.y + p2.height;
+      expect(crosses, id).toBe(false);
+    }
+    const kept = layoutDiagram(d, { reorderPools: false });
+    expect(kept.shapes.P2!.y).toBeGreaterThan(kept.shapes.P1!.y);
+    expect(kept.shapes.P3!.y).toBeGreaterThan(kept.shapes.P2!.y);
   });
 });

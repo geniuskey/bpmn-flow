@@ -767,6 +767,80 @@ export class EditorController {
     return true;
   }
 
+  /** Two or more flow nodes are selected (whether they can be laid out alone is checked on run). */
+  canLayoutSelection(): boolean {
+    if (this.snapshot.readOnly) return false;
+    return (
+      this.selected().filter((e) => !isConnection(e) && is(bo(e), 'bpmn:FlowNode')).length >= 2
+    );
+  }
+
+  /**
+   * Lays out only the selected shapes (of one pool, lane or sub-process) as
+   * one undoable step; the rest of the diagram stays where it is. The result
+   * keeps the selection's left edge (top edge top → bottom) and middle, inside
+   * its lane / pool. Returns null when applied, otherwise why not.
+   */
+  async layoutSelection(options: LayoutOptions = {}): Promise<string | null> {
+    if (!this.diagram || this.snapshot.readOnly) return 'The document is read-only.';
+    const [{ layoutDiagram }, { extractSelection }, { measureLabel }] = await Promise.all([
+      import('./layout/engine'),
+      import('./layout/extract'),
+      import('./renderer/text'),
+    ]);
+    const extracted = extractSelection(this.selected());
+    if (typeof extracted === 'string') return extracted;
+    const framed = !!extracted.frame;
+    const direction = extracted.vertical ? 'TB' : framed ? 'LR' : (options.direction ?? 'LR');
+    const r = layoutDiagram(extracted.diagram, { ...options, direction }, measureLabel);
+    const bbox = (boxes: { x: number; y: number; width: number; height: number }[]) => {
+      const x = Math.min(...boxes.map((b) => b.x));
+      const y = Math.min(...boxes.map((b) => b.y));
+      return {
+        x,
+        y,
+        width: Math.max(...boxes.map((b) => b.x + b.width)) - x,
+        height: Math.max(...boxes.map((b) => b.y + b.height)) - y,
+      };
+    };
+    const before = bbox(extracted.shapes);
+    const after = bbox(extracted.shapes.map((s) => r.shapes[s.id]).filter((b) => !!b));
+    let dx: number;
+    let dy: number;
+    if (direction === 'LR') {
+      dx = before.x - after.x;
+      dy = before.y + before.height / 2 - (after.y + after.height / 2);
+    } else {
+      dx = before.x + before.width / 2 - (after.x + after.width / 2);
+      dy = before.y - after.y;
+    }
+    const frame = extracted.frame;
+    if (frame) {
+      const m = 10;
+      if (after.width > frame.width - 2 * m || after.height > frame.height - 2 * m)
+        return 'Not enough room in the lane or pool: make it larger, or lay out the whole diagram.';
+      const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
+      dx = clamp(dx, frame.x + m - after.x, frame.x + frame.width - m - (after.x + after.width));
+      dy = clamp(dy, frame.y + m - after.y, frame.y + frame.height - m - (after.y + after.height));
+    }
+    dx = Math.round(dx);
+    dy = Math.round(dy);
+    const move = <B extends { x: number; y: number }>(b: B): B => ({
+      ...b,
+      x: b.x + dx,
+      y: b.y + dy,
+    });
+    const layout: LayoutResult = {
+      shapes: Object.fromEntries(Object.entries(r.shapes).map(([id, b]) => [id, move(b)])),
+      connections: Object.fromEntries(
+        Object.entries(r.connections).map(([id, pts]) => [id, pts.map(move)]),
+      ),
+      labels: Object.fromEntries(Object.entries(r.labels).map(([id, b]) => [id, move(b)])),
+    };
+    this.applyLayout(layout);
+    return null;
+  }
+
   /** Root element of the diagram shown on the canvas. */
   protected shownRoot(): Element | null {
     const canvas = this.get<Canvas>('canvas');
