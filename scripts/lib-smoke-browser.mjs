@@ -64,15 +64,14 @@ try {
   await page.keyboard.press('ControlOrMeta+z');
   assert.equal(await page.locator('#vanilla .djs-shape').count(), drawn, 'Mod+Z restored it');
 
-  // Auto layout: the vanilla editor runs ELK in a worker, the React one in-thread.
-  const workers = [];
-  page.on('worker', (w) => workers.push(w.url()));
+  // Auto layout (built in, no worker or extra dependency).
   assert.equal(await page.evaluate(() => window.editor.autoLayout()), true, 'auto layout ran');
-  assert.ok(
-    workers.some((u) => u.includes('elk-worker')),
-    'layout used the ELK worker',
+  assert.equal(
+    await page.evaluate(() =>
+      window.reactEditor.autoLayout({ direction: 'TB', density: 'compact' }),
+    ),
+    true,
   );
-  assert.equal(await page.evaluate(() => window.reactEditor.autoLayout()), true);
   const xml = await page.evaluate(() => window.editor.exportXml());
   assert.match(xml, /<bpmn:definitions/);
   assert.equal(await page.evaluate(() => window.editor.getSnapshot().dirty), false);

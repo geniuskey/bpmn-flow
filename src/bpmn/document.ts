@@ -35,6 +35,11 @@ async function serialize(moddle: BpmnModdleInstance, definitions: ModdleElement)
   return xml;
 }
 
+/** The document's current XML, without verification (for views of a copy). */
+export function serializeDocument(doc: BpmnDocument): Promise<string> {
+  return serialize(doc.moddle, doc.definitions);
+}
+
 /** Serializes and re-parses; returns differences (empty = lossless). */
 export async function verifyRoundTrip(
   moddle: BpmnModdleInstance,

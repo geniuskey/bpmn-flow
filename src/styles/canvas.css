@@ -570,3 +570,17 @@
 .bf-di-text .bf-label {
   fill: var(--bf-di-text);
 }
+
+/* Focus mode: everything outside the focused paths is dimmed. */
+.bf-focusing .djs-element:not(.bf-focus) > .djs-visual {
+  opacity: 0.16;
+  transition: opacity 120ms ease-out;
+}
+
+/* Level of detail: secondary text is hidden when zoomed far out. */
+.bf-lod-mid .bf-flow-label,
+.bf-lod-mid .bf-message-name,
+.bf-lod-far .bf-external-label,
+.bf-lod-far .bf-caption {
+  display: none;
+}

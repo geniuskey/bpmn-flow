@@ -48,7 +48,12 @@ import {
 import PoolBoundaryHandler, { SET_POOL_BOUNDARY } from './commands/PoolBoundaryHandler';
 import ArrangeHandler, { ARRANGE_ELEMENTS } from './commands/ArrangeHandler';
 import ColorsHandler, { SET_COLORS } from './commands/ColorsHandler';
-import { APPLY_LAYOUT, ApplyLayoutHandler } from './layout/ApplyLayoutHandler';
+import {
+  APPLY_LAYOUT,
+  ApplyLayoutHandler,
+  LayoutLabelsHandler,
+  SET_LAYOUT_LABELS,
+} from './layout/ApplyLayoutHandler';
 import BpmnFlowRules from './interaction/BpmnFlowRules';
 import BpmnContextPadProvider from './interaction/ContextPadProvider';
 import DirectEditing from './interaction/DirectEditing';
@@ -84,6 +89,7 @@ class BpmnFlowCommands {
     commandStack.registerHandler(SET_POOL_BLACK_BOX, SetPoolBlackBoxHandler);
     commandStack.registerHandler(SET_POOL_BOUNDARY, PoolBoundaryHandler);
     commandStack.registerHandler(APPLY_LAYOUT, ApplyLayoutHandler);
+    commandStack.registerHandler(SET_LAYOUT_LABELS, LayoutLabelsHandler);
     commandStack.registerHandler(ARRANGE_ELEMENTS, ArrangeHandler);
     commandStack.registerHandler(SET_COLORS, ColorsHandler);
   }

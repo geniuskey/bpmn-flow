@@ -5,13 +5,7 @@ import '@geniuskey/bpmn-flow/style.css';
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import sample from './sample.bpmn?raw';
-// elkjs is a dependency of the package; a consumer that imports it directly lists it too.
-import elkWorker from 'elkjs/lib/elk-worker.min.js?url';
-
-const editor = new BpmnFlowEditor(document.getElementById('vanilla'), {
-  keyboard: true,
-  elkWorker,
-});
+const editor = new BpmnFlowEditor(document.getElementById('vanilla'), { keyboard: true });
 window.editor = editor;
 window.ready = editor.importXml(sample, 'sample.bpmn').then((r) => r.shapes);
 

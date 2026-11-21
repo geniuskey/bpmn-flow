@@ -9,8 +9,12 @@ Embeddable **BPMN 2.0** editor and analyzer — the engine behind
 - **Headless core** (`@geniuskey/bpmn-flow`): parse, validate, export and analyze
   BPMN in Node, browsers or Web Workers.
 - **Editor** (`@geniuskey/bpmn-flow/editor`): framework-agnostic canvas with
-  undo/redo, copy/paste, lanes and pools, auto layout (ELK) and keyboard shortcuts.
-- **React** (`@geniuskey/bpmn-flow/react`): a thin `<BpmnFlowCanvas>` component.
+  undo/redo, copy/paste, lanes and pools, auto layout built for BPMN (lanes, pools, boundary events, labels;
+  left → right or top → bottom) and keyboard shortcuts.
+- **Viewer** (`BpmnFlowViewer`, `<BpmnFlowView>`): read-only, re-lays out a copy of
+  the diagram to fit its container (top → bottom when narrow) and reflows on
+  resize. The XML is never changed.
+- **React** (`@geniuskey/bpmn-flow/react`): thin `<BpmnFlowCanvas>` and `<BpmnFlowView>` components.
 - Built on [diagram-js](https://github.com/bpmn-io/diagram-js) and
   [bpmn-moddle](https://github.com/bpmn-io/bpmn-moddle). Does not use bpmn-js; no
   watermark. MIT licensed.
@@ -93,7 +97,7 @@ the canvas fills it. Files that cannot be round-tripped open read-only
 | `deleteSelection()`, `copy()`, `cut()`, `paste()`, `duplicate()`, `nudge(dx, dy)`                                                                                                  | Editing.                                                             |
 | `updateProperties(id, { name })`, `updateDocumentation(id, text)`, `updateCondition(id, expr)`                                                                                     | Semantic edits (undoable).                                           |
 | `changeType(id, 'bpmn:ServiceTask')`, `setEventDefinition(id, 'bpmn:TimerEventDefinition')`, `setLoop(id, 'parallel')`, `setDefaultFlow(gatewayId, flow)`, `addLane(poolOrLaneId)` | More semantic edits.                                                 |
-| `autoLayout()`                                                                                                                                                                     | ELK layered layout (lanes kept), one undo step.                      |
+| `autoLayout({ direction, density })`                                                                                                                                               | Built-in BPMN layout, one undo step (see below).                     |
 | `zoomBy(f)`, `resetZoom()`, `fit()`, `setSnapToGrid(on)`                                                                                                                           | View.                                                                |
 | `getDiagrams()`, `showDiagram(rootId)`, `drillDownOf(id)`                                                                                                                          | Multiple diagrams and collapsed sub-processes.                       |
 | `getDocument()`, `getElement(id)`, `getElements()`                                                                                                                                 | Read the model (`element.businessObject` is the bpmn-moddle object). |
@@ -107,25 +111,47 @@ Shift+1 fit, Mod+Shift+L auto layout, Escape. Pass
 `{ keyboard: { onSave: () => save(), target: window } }` to handle Mod+S or listen
 on the whole page, or call `bindKeyboard(editor, element, options)` yourself.
 
-### Auto layout in a Web Worker
+### Auto layout
 
-Without configuration ELK runs on the main thread, which is fine for small and
-medium diagrams. To run it in a worker, pass the URL of elkjs' worker script
-(add `elkjs` to your own dependencies to import it):
+`autoLayout()` arranges the shown diagram as one undoable step, with no extra
+dependency or worker:
+
+- the main path runs on one straight line; branches stack below it, exception
+  paths (boundary events) below their activity, loops on a free row;
+- lanes and pools keep their nodes; pools share columns so message flows line up;
+- flows are routed around shapes; external labels and flow names get room;
+- data objects and annotations sit next to the activity they belong to;
+- expanded sub-processes are laid out inside and resized to fit.
 
 ```ts
-// Vite
-import elkWorker from 'elkjs/lib/elk-worker.min.js?url';
-new BpmnFlowEditor(container, { elkWorker });
-
-// webpack 5
-new BpmnFlowEditor(container, {
-  elkWorker: new URL('elkjs/lib/elk-worker.min.js', import.meta.url),
-});
+await editor.autoLayout({ direction: 'TB', density: 'compact' });
 ```
 
-`elkWorker` may also be a function returning the URL (or a promise of it), so the
-file is only fetched when layout is first used.
+`direction` (`'LR'` default, `'TB'`) applies to process diagrams; pools and lanes
+keep their own orientation. `density` is `'compact'`, `'normal'` (default) or
+`'spacious'`. The `elkWorker` option of earlier versions is accepted and ignored.
+
+### Focus and level of detail
+
+`editor.focus(ids)` dims everything except the paths through the given flow
+nodes (upstream and downstream, across sequence and message flows), or the
+content of the given pools / lanes; `editor.focus([])` ends it. Zoomed out below
+60 %, flow and message names are hidden; below 40 %, external labels too.
+
+## Viewer: fit the diagram to a small space
+
+```ts
+import { BpmnFlowViewer } from '@geniuskey/bpmn-flow/editor';
+
+const viewer = new BpmnFlowViewer(sidePanel, { reflow: 'auto', density: 'compact' });
+const { direction } = await viewer.importXml(xml); // 'TB' in a narrow panel
+```
+
+The viewer is read-only. It lays out a private copy of the document with the
+built-in layout and shows it in the direction that fits the container best
+(`reflow: 'auto'`; or `'LR'` / `'TB'`; `false` shows the diagram as drawn).
+When the container is resized it reflows. Pools and lanes turn with the flow.
+`exportXml()` returns the document as given; the reflowed copy is never exported.
 
 ## React
 
@@ -157,6 +183,16 @@ export function ProcessEditor({ xml }: { xml: string }) {
 everything else goes through the editor instance (`ref` or `onReady`). Works with
 React 18 and 19.
 
+### `<BpmnFlowView>`
+
+```tsx
+import { BpmnFlowView } from '@geniuskey/bpmn-flow/react';
+
+<BpmnFlowView xml={xml} density="compact" style={{ height: 480 }} />;
+```
+
+Read-only and reflowed to fit (see the viewer above).
+
 ## Styling and dark mode
 
 `style.css` contains the diagram-js base styles and the BPMN Flow shape styles,
@@ -177,6 +213,5 @@ any ancestor:
 
 ## Licenses
 
-MIT. Runtime dependencies are MIT except elkjs, which is used unmodified under
-EPL-2.0 (source: https://github.com/kieler/elkjs). `style.css` includes the
-diagram-js stylesheet (MIT). See NOTICE.md.
+MIT. Runtime dependencies are MIT / ISC. `style.css` includes the diagram-js
+stylesheet (MIT). See NOTICE.md.

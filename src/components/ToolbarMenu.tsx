@@ -1,4 +1,4 @@
-import { ChevronDown } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import {
   useLayoutEffect,
   useRef,
@@ -19,6 +19,8 @@ export interface ToolbarMenuItem {
   disabled?: boolean;
   /** Draws a divider above the item. */
   separated?: boolean;
+  /** A radio item: shown with a check mark when selected. */
+  checked?: boolean;
   onSelect(): void;
 }
 
@@ -55,7 +57,7 @@ export function ToolbarMenu({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const open = pos !== null;
-  const anyIcon = items.some((i) => i.icon);
+  const anyIcon = items.some((i) => i.icon || i.checked !== undefined);
 
   const close = () => {
     setPos(null);
@@ -68,13 +70,13 @@ export function ToolbarMenu({
     const r = buttonRef.current!.getBoundingClientRect();
     const left = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8));
     if (left !== pos.left) setPos({ top: pos.top, left });
-    menu.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')?.focus();
+    menu.querySelector<HTMLButtonElement>('[role^="menuitem"]:not(:disabled)')?.focus();
   }, [open, pos]);
 
   const onKeyDown = (e: ReactKeyboardEvent) => {
     const enabled = [
       ...(menuRef.current?.querySelectorAll<HTMLButtonElement>(
-        '[role="menuitem"]:not(:disabled)',
+        '[role^="menuitem"]:not(:disabled)',
       ) ?? []),
     ];
     const i = enabled.indexOf(document.activeElement as HTMLButtonElement);
@@ -127,7 +129,8 @@ export function ToolbarMenu({
                   {item.separated && <div className="my-1 h-px bg-border" />}
                   <button
                     type="button"
-                    role="menuitem"
+                    role={item.checked === undefined ? 'menuitem' : 'menuitemradio'}
+                    aria-checked={item.checked}
                     tabIndex={-1}
                     disabled={item.disabled}
                     className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left outline-none hover:bg-accent focus-visible:bg-accent disabled:pointer-events-none disabled:opacity-40 [&_svg]:size-4 [&_svg]:shrink-0"
@@ -136,7 +139,13 @@ export function ToolbarMenu({
                       item.onSelect();
                     }}
                   >
-                    {item.icon ? <item.icon /> : anyIcon && <span className="size-4 shrink-0" />}
+                    {item.checked ? (
+                      <Check />
+                    ) : item.icon ? (
+                      <item.icon />
+                    ) : (
+                      anyIcon && <span className="size-4 shrink-0" />
+                    )}
                     <span className="flex-1">{item.label}</span>
                     {item.keys && (
                       <span className="text-[11px] text-muted-foreground">

@@ -42,12 +42,7 @@ const DEV_REVIEWED = {
  * Production packages with licenses outside ALLOWED, reviewed and accepted.
  * See docs/licenses.md for the full reasoning.
  */
-const PROD_REVIEWED = {
-  elkjs:
-    'Used under EPL-2.0 (elected from "EPL-2.0 OR GPL-3.0-or-later"). Distributed unmodified as a ' +
-    'separate, lazily loaded file; source: https://github.com/kieler/elkjs. EPL-2.0 permits this ' +
-    'provided the license notice and source location are given (below).',
-};
+const PROD_REVIEWED = {};
 const root = process.cwd();
 const own = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 
@@ -136,9 +131,6 @@ if (process.argv.includes('--write')) {
     '  and `bpmn-moddle`, which are MIT-licensed and contain no watermark requirement.',
     '- BPMN 2.0 is an OMG standard; implementing its XML format does not reuse any',
     '  editor source code.',
-    '- `elkjs` (Eclipse Layout Kernel, auto layout) is dual-licensed `EPL-2.0 OR GPL-3.0-or-later`;',
-    '  BPMN Flow uses it under **EPL-2.0**, unmodified. Its source code is available at',
-    '  https://github.com/kieler/elkjs. See docs/licenses.md.',
     '- Some components are adapted from shadcn/ui (MIT, https://ui.shadcn.com); they are',
     '  copied source and therefore listed below.',
     '',
@@ -148,7 +140,7 @@ if (process.argv.includes('--write')) {
     '| --- | --- | --- |',
     ...prod.map(
       (p) =>
-        `| ${p.name} | ${p.version} | ${p.license}${PROD_REVIEWED[p.name] ? ' (used under EPL-2.0)' : ''} |`,
+        `| ${p.name} | ${p.version} | ${p.license}${PROD_REVIEWED[p.name] ? ' (reviewed, see docs/licenses.md)' : ''} |`,
     ),
     '| shadcn/ui (adapted components) | — | MIT |',
     '',

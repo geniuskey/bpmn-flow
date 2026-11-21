@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { EditorTool } from '@/editor/EditorController';
+import type { LayoutDensity, LayoutDirection } from '@/editor/layout/graph';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 export type AnalysisTab =
@@ -16,6 +17,16 @@ interface UiState {
   analysisTab: AnalysisTab;
   commandPaletteOpen: boolean;
   snapToGrid: boolean;
+  /** Auto layout: flow direction of process diagrams, and spacing. */
+  layoutDirection: LayoutDirection;
+  layoutDensity: LayoutDensity;
+  setLayoutOptions(options: { direction?: LayoutDirection; density?: LayoutDensity }): void;
+  /** Read-only view reflowed to fit the canvas (the file keeps its layout). Not persisted. */
+  reflowView: boolean;
+  setReflowView(on: boolean): void;
+  /** Selection dims everything outside the paths through it. Not persisted. */
+  focusMode: boolean;
+  setFocusMode(on: boolean): void;
   /** Shape library panel next to the tools. */
   libraryOpen: boolean;
   /** Library groups the user collapsed. */
@@ -82,6 +93,17 @@ export const useUiStore = create<UiState>()(
       analysisTab: 'overview',
       commandPaletteOpen: false,
       snapToGrid: true,
+      reflowView: false,
+      setReflowView: (reflowView) => set({ reflowView }),
+      focusMode: false,
+      setFocusMode: (focusMode) => set({ focusMode }),
+      layoutDirection: 'LR',
+      layoutDensity: 'normal',
+      setLayoutOptions: ({ direction, density }) =>
+        set((s) => ({
+          layoutDirection: direction ?? s.layoutDirection,
+          layoutDensity: density ?? s.layoutDensity,
+        })),
       libraryOpen: true,
       // Rarely used notation starts collapsed.
       libraryCollapsed: ['conversations', 'choreography'],
@@ -120,7 +142,11 @@ export const useUiStore = create<UiState>()(
         libraryCollapsed,
         libraryWidth,
         inspectorCollapsed,
+        layoutDirection,
+        layoutDensity,
       }) => ({
+        layoutDirection,
+        layoutDensity,
         libraryOpen,
         libraryCollapsed,
         libraryWidth,

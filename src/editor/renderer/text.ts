@@ -5,6 +5,7 @@ import { readLabelBounds, readLabelFont, type LabelFont } from '@/bpmn/di/di';
 import { getRef, is, type ModdleElement } from '@/bpmn/model/moddle';
 import type { BpmnShape } from '../model';
 import { el } from './svg';
+import { estimateLabel } from '../layout/engine';
 
 export const FONT_FAMILY = 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
 
@@ -69,6 +70,21 @@ export function drawCenteredText(
   for (const c of className.split(' ')) svgClasses(node).add(c);
   svgAppend(gfx, node);
   return node;
+}
+
+/** Size of a label wrapped at `maxWidth` in the default font (estimated without a layout engine). */
+export function measureLabel(text: string, maxWidth: number): { width: number; height: number } {
+  try {
+    const d = TEXT.getDimensions(text, {
+      box: { width: maxWidth, height: 0 },
+      padding: 0,
+    } as never);
+    if (d.width > 0 && d.height > 0)
+      return { width: Math.ceil(d.width) + 4, height: Math.ceil(d.height) + 2 };
+  } catch {
+    // No layout engine (Node, tests without canvas measuring).
+  }
+  return estimateLabel(text, maxWidth);
 }
 
 /** Padding inside BPMNLabel bounds: they already are the text's extent. */

@@ -5,6 +5,8 @@ import {
   Command,
   Copy,
   CopyPlus,
+  Crosshair,
+  MonitorSmartphone,
   Download,
   FileDown,
   FilePlus2,
@@ -121,6 +123,37 @@ export function Header() {
   const { inspectorOpen, analysisOpen, toggleInspector, toggleAnalysis } = useUiStore();
 
   const setPaletteOpen = useUiStore((s) => s.setCommandPaletteOpen);
+  const { reflowView, setReflowView, focusMode, setFocusMode } = useUiStore();
+  const layoutDirection = useUiStore((s) => s.layoutDirection);
+  const layoutDensity = useUiStore((s) => s.layoutDensity);
+  const setLayoutOptions = useUiStore((s) => s.setLayoutOptions);
+  const directionLocked = !!controller?.layoutDirectionLocked();
+  const layoutAllowed = isEnabled(COMMANDS.find((c) => c.id === 'arrange.layout')!);
+  // Picking an option applies it right away.
+  const layoutWith = (options: Parameters<typeof setLayoutOptions>[0]) => {
+    setLayoutOptions(options);
+    runCommand('arrange.layout');
+  };
+  const layoutItems: ToolbarMenuItem[] = [
+    {
+      label: 'Left to right',
+      checked: directionLocked ? undefined : layoutDirection === 'LR',
+      disabled: directionLocked,
+      onSelect: () => layoutWith({ direction: 'LR' }),
+    },
+    {
+      label: directionLocked ? 'Top to bottom (pools keep their direction)' : 'Top to bottom',
+      checked: directionLocked ? undefined : layoutDirection === 'TB',
+      disabled: directionLocked,
+      onSelect: () => layoutWith({ direction: 'TB' }),
+    },
+    ...(['compact', 'normal', 'spacious'] as const).map((density, i): ToolbarMenuItem => ({
+      label: `${density[0]!.toUpperCase()}${density.slice(1)} spacing`,
+      checked: layoutDensity === density,
+      separated: i === 0,
+      onSelect: () => layoutWith({ density }),
+    })),
+  ];
   const exportAllowed = !!doc?.report.exportAllowed;
   // Re-evaluated on every snapshot change (selection, read-only, ...).
   const arrangeItems = ARRANGE_ITEMS.map(({ id, icon, separated }) =>
@@ -267,7 +300,18 @@ export function Header() {
               items={arrangeItems}
             />
             <CommandButton id="arrange.addLane" icon={BetweenHorizontalEnd} />
-            <CommandButton id="arrange.layout" icon={LayoutDashboard} />
+            <div className="flex items-center">
+              <CommandButton id="arrange.layout" icon={LayoutDashboard} />
+              <ToolbarMenu
+                label="Layout options"
+                title="Auto layout direction and spacing"
+                className="w-4 px-0"
+                disabled={!layoutAllowed}
+                trigger={null}
+                items={layoutItems}
+                testId="layout-options"
+              />
+            </div>
             <Button
               size="icon"
               variant={snapToGrid ? 'active' : 'ghost'}
@@ -292,6 +336,30 @@ export function Header() {
       </div>
 
       <div className="ml-auto flex items-center gap-0.5">
+        <Button
+          size="icon"
+          variant={focusMode ? 'active' : 'ghost'}
+          title={`Focus: ${focusMode ? 'on' : 'off'} — selecting a shape dims everything outside the paths through it`}
+          aria-label="Focus mode"
+          aria-pressed={focusMode}
+          disabled={!doc}
+          onClick={() => setFocusMode(!focusMode)}
+        >
+          <Crosshair />
+        </Button>
+        <Button
+          size="icon"
+          variant={reflowView ? 'active' : 'ghost'}
+          title="Reflow view: re-lay out the diagram to fit this window, read-only (the file keeps its layout)"
+          aria-label="Reflow view"
+          aria-pressed={reflowView}
+          disabled={!doc}
+          onClick={() => setReflowView(!reflowView)}
+          data-testid="reflow-toggle"
+        >
+          <MonitorSmartphone />
+        </Button>
+        <Separator vertical />
         {medium && (
           <Button
             size="icon"

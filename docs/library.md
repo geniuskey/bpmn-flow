@@ -29,7 +29,6 @@ Rules that keep the package usable:
   internals other than `diagram-js/lib/model/Types` (diagram-js' class
   declarations do not type-check under `moduleResolution: nodenext`). The smoke
   test type-checks a consumer with `skipLibCheck: false` in both resolutions.
-- The ELK worker is injected (`elkWorker` option); the library never bundles elkjs.
 
 ## Release
 

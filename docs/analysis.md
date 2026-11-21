@@ -73,7 +73,7 @@ a multiple event.
 
 Analysis runs synchronously after each change; a 3000-node process is analyzed in
 well under 100 ms (unit test), a 1000-task diagram in ~8 ms in the browser (E2E),
-so a Web Worker is not needed for analysis. Auto layout (ELK) does run in a worker.
+so a Web Worker is not needed for analysis. Auto layout runs on the main thread too.
 
 ## Limits
 

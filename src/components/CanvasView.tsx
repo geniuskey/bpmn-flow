@@ -3,6 +3,7 @@ import { FileUp } from 'lucide-react';
 import { openFile } from '@/app/actions';
 import { EditorController } from '@/editor/EditorController';
 import { ContextMenu } from './ContextMenu';
+import { ReflowView } from './ReflowView';
 import { useEditorStore } from '@/stores/editorStore';
 import { useUiStore } from '@/stores/uiStore';
 import { useDocumentStore } from '@/stores/documentStore';
@@ -18,16 +19,17 @@ export function CanvasView({ onReady }: { onReady: (controller: EditorController
   const snapToGrid = useUiStore((s) => s.snapToGrid);
   const tool = useUiStore((s) => s.tool);
   const controller = useEditorStore((s) => s.controller);
+  const reflowView = useUiStore((s) => s.reflowView);
+  const focusMode = useUiStore((s) => s.focusMode);
+  const selection = useEditorStore((s) => s.snapshot.selection);
+  const revision = useEditorStore((s) => s.snapshot.revision);
+  const doc = useDocumentStore((s) => s.doc);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
     setHostEl(host);
-    const ctrl = new EditorController(host, {
-      // A separate, lazily fetched file: ELK (EPL-2.0) is shipped unmodified, and
-      // large layouts run off the main thread.
-      elkWorker: () => import('elkjs/lib/elk-worker.min.js?url').then((m) => m.default),
-    });
+    const ctrl = new EditorController(host);
     const { setController, setSnapshot } = useEditorStore.getState();
     const unsubscribe = ctrl.subscribe(setSnapshot);
     const offError = ctrl.onCommandError((error) =>
@@ -56,6 +58,15 @@ export function CanvasView({ onReady }: { onReady: (controller: EditorController
   useEffect(() => {
     controller?.setTool(tool);
   }, [controller, tool]);
+  // Focus follows the selection (and is re-applied after edits redraw the diagram).
+  useEffect(() => {
+    controller?.focus(focusMode ? selection : []);
+  }, [controller, focusMode, selection, revision]);
+  // A newly opened document leaves the reflow view.
+  useEffect(() => {
+    useUiStore.getState().setReflowView(false);
+  }, [doc]);
+
   // diagram-js ends tools on its own (e.g. after one connection): reflect that in the palette.
   useEffect(() => {
     if (useUiStore.getState().tool !== activeTool) useUiStore.getState().setTool(activeTool);
@@ -81,6 +92,7 @@ export function CanvasView({ onReady }: { onReady: (controller: EditorController
     >
       <div ref={hostRef} className="absolute inset-0" data-testid="canvas" />
       <ContextMenu host={hostEl} />
+      {reflowView && doc && <ReflowView key={revision} />}
       {dragging && (
         <div className="pointer-events-none absolute inset-3 grid place-items-center rounded-xl border-2 border-dashed border-primary bg-primary/5">
           <div className="flex items-center gap-2 rounded-lg bg-card px-4 py-2 font-medium shadow">

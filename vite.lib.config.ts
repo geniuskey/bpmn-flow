@@ -8,7 +8,7 @@ import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-const external = /^(bpmn-moddle|diagram-js|didi|elkjs|tiny-svg|react|react-dom)(\/|$)/;
+const external = /^(bpmn-moddle|diagram-js|didi|tiny-svg|react|react-dom)(\/|$)/;
 
 export default defineConfig({
   plugins: [react()],

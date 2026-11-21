@@ -49,9 +49,11 @@ export type Listener = (snapshot: EditorSnapshot) => void;
 export type ElkWorkerSource = string | URL | (() => string | URL | Promise<string | URL>);
 
 export interface EditorOptions {
+  /** Show documents read-only even when they could be edited. */
+  readOnly?: boolean;
   /**
-   * Source of the ELK worker script used by auto layout. Without it, layout
-   * runs ELK on the main thread (fine for small and medium diagrams).
+   * @deprecated Auto layout no longer uses ELK; the option is accepted and
+   * ignored.
    */
   elkWorker?: ElkWorkerSource;
 }
@@ -70,8 +72,12 @@ export interface Box {
 }
 
 export interface LayoutResult {
-  /** Target bounds by element id (pools, lanes and flow nodes). */
+  /** Target bounds by element id (pools, lanes, flow nodes, artifacts, groups). */
   shapes: Record<string, Box>;
+  /** Waypoints by connection id; connections left out are routed by the editor. */
+  connections?: Record<string, { x: number; y: number }[]>;
+  /** BPMNLabel bounds by element id (external labels of shapes, flow names). */
+  labels?: Record<string, Box>;
 }
 
 export type LoopKind = 'none' | 'standard' | 'parallel' | 'sequential';

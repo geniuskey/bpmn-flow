@@ -23,6 +23,7 @@ import { loadBpmnDocument } from '@/bpmn/document';
 import { newDiagramXml } from '@/bpmn/model/newDiagram';
 import type { EditorSnapshot, ElkWorkerSource } from '@/editor/types';
 import { BpmnFlowEditor, type ImportResult, type KeyboardOptions } from './editor';
+import { BpmnFlowViewer, type BpmnFlowViewerOptions, type ViewerImportResult } from './viewer';
 
 export interface BpmnFlowCanvasProps {
   /** BPMN 2.0 XML to show. Re-imported whenever the string changes. Omit for a new diagram. */
@@ -30,7 +31,7 @@ export interface BpmnFlowCanvasProps {
   fileName?: string;
   /** Default keyboard shortcuts on the canvas (see `bindKeyboard`). Read once, on mount. */
   keyboard?: boolean | KeyboardOptions;
-  /** ELK worker for auto layout (see `BpmnFlowEditorOptions.elkWorker`). Read once, on mount. */
+  /** @deprecated Ignored: auto layout no longer uses ELK. */
   elkWorker?: ElkWorkerSource;
   /** Called once with the editor instance after it is created. */
   onReady?: (editor: BpmnFlowEditor) => void;
@@ -120,6 +121,79 @@ export const BpmnFlowCanvas = forwardRef<BpmnFlowEditor | null, BpmnFlowCanvasPr
   },
 );
 
-export { BpmnFlowEditor };
+export interface BpmnFlowViewProps extends BpmnFlowViewerOptions {
+  /** BPMN 2.0 XML to show, reflowed to fit. Re-imported whenever the string changes. */
+  xml: string;
+  fileName?: string;
+  /** Called once with the viewer instance after it is created. */
+  onReady?: (viewer: BpmnFlowViewer) => void;
+  onImport?: (result: ViewerImportResult) => void;
+  onImportError?: (error: unknown) => void;
+  className?: string;
+  style?: CSSProperties;
+}
+
+/**
+ * Read-only view that re-lays out the diagram to fit its box (top → bottom
+ * when narrow) and reflows on resize; the XML is never changed.
+ * `reflow` and `density` are read once, on mount.
+ */
+export const BpmnFlowView = forwardRef<BpmnFlowViewer | null, BpmnFlowViewProps>(
+  function BpmnFlowView(props, ref) {
+    const { xml, fileName, className, style } = props;
+    const hostRef = useRef<HTMLDivElement>(null);
+    const [viewer, setViewer] = useState<BpmnFlowViewer | null>(null);
+    const callbacks = useRef(props);
+    callbacks.current = props;
+
+    useImperativeHandle(ref, () => viewer as BpmnFlowViewer, [viewer]);
+
+    useEffect(() => {
+      const host = hostRef.current;
+      if (!host) return;
+      const { reflow, density } = callbacks.current;
+      const instance = new BpmnFlowViewer(host, {
+        ...(reflow !== undefined ? { reflow } : {}),
+        ...(density !== undefined ? { density } : {}),
+      });
+      setViewer(instance);
+      callbacks.current.onReady?.(instance);
+      return () => {
+        instance.destroy();
+        setViewer(null);
+      };
+    }, []);
+
+    useEffect(() => {
+      if (!viewer) return;
+      let cancelled = false;
+      viewer.importXml(xml, fileName).then(
+        (result) => {
+          if (!cancelled) callbacks.current.onImport?.(result);
+        },
+        (error: unknown) => {
+          if (cancelled) return;
+          if (callbacks.current.onImportError) callbacks.current.onImportError(error);
+          else console.error(error);
+        },
+      );
+      return () => {
+        cancelled = true;
+      };
+    }, [viewer, xml, fileName]);
+
+    return (
+      <div
+        ref={hostRef}
+        className={className}
+        style={{ position: 'relative', overflow: 'hidden', ...style }}
+        data-bpmn-flow=""
+      />
+    );
+  },
+);
+
+export { BpmnFlowEditor, BpmnFlowViewer };
 export type { BpmnFlowEditorOptions, ImportResult, KeyboardOptions } from './editor';
+export type { BpmnFlowViewerOptions, ViewerImportResult } from './viewer';
 export type { EditorSnapshot } from '@/editor/types';

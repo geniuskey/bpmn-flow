@@ -235,7 +235,8 @@ export async function runAutoLayout(): Promise<void> {
   const ctrl = controller();
   if (!ctrl) return;
   try {
-    const applied = await ctrl.autoLayout();
+    const { layoutDirection: direction, layoutDensity: density } = useUiStore.getState();
+    const applied = await ctrl.autoLayout({ direction, density });
     if (!applied)
       useDocumentStore.getState().notify({ kind: 'info', title: 'Nothing to lay out.' });
   } catch (err) {

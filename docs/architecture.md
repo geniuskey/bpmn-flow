@@ -17,7 +17,7 @@ BPMN Flow is a static single-page app. There is no backend.
 │ canvas/    importDiagram (DI → diagram elements)                                   │
 │ modeling/  BpmnElementFactory, BpmnIds, SemanticSync, StructureBehavior, ChangeLog │
 │ commands/  DiSync, property/documentation/condition/type, lanes, collaboration     │
-│ layout/    BpmnFlowLayouter (orthogonal), autoLayout (ELK in a worker), apply      │
+│ layout/    BpmnFlowLayouter (orthogonal), engine (BPMN grid layout), extract, apply │
 │ interaction/ rules, context pad, inline rename, clipboard, connect tool            │
 └────────────┬───────────────────────────────────────────────────────────────────────┘
              ▼ live references (businessObject / di)
@@ -171,6 +171,31 @@ Autosave (`src/app/useAutosave.ts`, `src/app/actions.ts`):
 ## Performance
 
 Measured in `tests/e2e/performance.spec.ts` (1000 tasks, Chromium, Apple M-series):
-open + render ≈ 0.3 s, analysis ≈ 8 ms, export with verification ≈ 0.1 s. The ELK
-layout engine (≈1.5 MB) is loaded only when auto layout is used and runs in a Web
-Worker.
+open + render ≈ 0.3 s, analysis ≈ 8 ms, export with verification ≈ 0.1 s. Auto
+layout of the same diagram takes well under a second on the main thread (unit test);
+the engine is plain TypeScript, loaded only when layout is first used.
+
+## Auto layout
+
+`src/editor/layout/engine.ts` works on a plain description of the diagram
+(`graph.ts`, built by `extract.ts`), so it runs headless. Flow nodes get a cell in
+a grid of layers (along the flow) and tracks (across it); tracks belong to bands
+(one per leaf lane, or per pool / process), and the layers are shared by all
+pools. Layers come from the longest path over sequence flows (loops broken by
+DFS; exception flows leave from their host; message flows keep their target no
+earlier than their source). The main path (longest start → end) is the first
+track of its band; branches and exception paths stack below. Artifacts take a
+free cell next to the node they are associated with. Flows are routed through
+the grid (free tracks and the channels between layers), never through a cell
+holding a node; channels and tracks are sized for the shapes, external labels
+and flow names in them. Expanded sub-processes are laid out first and become
+large nodes. `ApplyLayoutHandler` applies the result as one command; BPMNLabel
+bounds are set by `LayoutLabelsHandler` (relative to DiSync's label move).
+
+The reflow view (`src/sdk/viewer.ts`, `BpmnFlowViewer`) is read-only and works on
+a private copy of the document: the copy is opened, its layout input extracted
+once, then for the container's size both directions are laid out and the one
+shown larger wins; `project.ts` writes the result straight into the copy's DI
+(no commands) and the copy is opened again. Pools and lanes turn with the flow
+(`isHorizontal`). The app shows it over the canvas (`components/ReflowView.tsx`);
+the edited document is untouched.

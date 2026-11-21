@@ -70,7 +70,7 @@ import type DirectEditing from './interaction/DirectEditing';
 import type Clipboard from './interaction/Clipboard';
 import { guardCommandStack } from './commands/guardCommandStack';
 import type ConnectTool from './interaction/ConnectTool';
-import { bo, childrenOf, isColorable, rootOf, type BpmnData } from './model';
+import { bo, childrenOf, isColorable, isConnection, rootOf, type BpmnData } from './model';
 import { labelOf } from '@/bpmn/model/elements';
 import { getMany, getRef, is } from '@/bpmn/model/moddle';
 import { coreModule, EDITING_MODULES } from './modules';
@@ -92,7 +92,7 @@ import type {
   ShapePreset,
   SvgExport,
 } from './types';
-import type { ELK } from 'elkjs/lib/elk-api';
+import type { LayoutOptions } from './layout/graph';
 
 export type { DiagramInfo, EditorOptions, EditorSnapshot, EditorTool, ShapePreset } from './types';
 
@@ -115,7 +115,6 @@ export class EditorController {
   /** Undo-stack entry that was on top when the document was last exported (null: none). */
   private savedAction: unknown = null;
   private tool: EditorTool = 'select';
-  private elk: Promise<ELK> | null = null;
 
   constructor(
     protected readonly container: HTMLElement,
@@ -144,7 +143,7 @@ export class EditorController {
 
   /** Replaces the displayed document. The previous diagram is only destroyed once the new one imported. */
   open(doc: BpmnDocument): CanvasImportResult {
-    const readOnly = doc.report.mode === 'readonly';
+    const readOnly = !!this.options.readOnly || doc.report.mode === 'readonly';
     const host = document.createElement('div');
     host.className = 'bf-canvas-host';
     const modules: ModuleDeclaration[] = [
@@ -212,7 +211,10 @@ export class EditorController {
     });
     eventBus.on('canvas.viewbox.changed', (e: { viewbox: { scale: number } }) => {
       this.update({ zoom: e.viewbox.scale });
+      this.levelOfDetail(e.viewbox.scale);
     });
+    this.container.classList.remove('bf-focusing');
+    this.focused = [];
     this.update({
       selection: [],
       canUndo: false,
@@ -739,28 +741,45 @@ export class EditorController {
     this.exec(APPLY_LAYOUT, { layout });
   }
 
-  /** Runs ELK auto layout on the whole diagram as one undoable step. */
-  async autoLayout(): Promise<boolean> {
+  /**
+   * Lays out the shown diagram as one undoable step. Collaborations keep the
+   * direction of their pools (vertical pools flow top → bottom).
+   */
+  async autoLayout(options: LayoutOptions = {}): Promise<boolean> {
     const canvas = this.get<Canvas>('canvas');
     if (!canvas || this.snapshot.readOnly) return false;
-    const [{ computeLayout, createElk }, { extractLayoutContainers }] = await Promise.all([
-      import('./layout/autoLayout'),
+    const [{ layoutDiagram }, { extractLayout }, { measureLabel }] = await Promise.all([
+      import('./layout/engine'),
       import('./layout/extract'),
+      import('./renderer/text'),
     ]);
-    const containers = extractLayoutContainers(rootOf(canvas));
-    if (!containers.some((c) => c.nodes.length)) return false;
-    this.elk ??= createElk(this.options.elkWorker);
-    let elk: ELK;
-    try {
-      elk = await this.elk;
-    } catch (err) {
-      this.elk = null; // let a later attempt retry (e.g. the worker file failed to load)
-      throw err;
-    }
-    const layout = await computeLayout(elk, containers);
+    const extracted = extractLayout(rootOf(canvas));
+    if (!extracted) return false;
+    const pooled = extracted.diagram.containers.some((c) => c.id || c.lanes.length);
+    const direction = pooled
+      ? extracted.vertical
+        ? 'TB'
+        : 'LR'
+      : (options.direction ?? (extracted.vertical ? 'TB' : 'LR'));
+    const layout = layoutDiagram(extracted.diagram, { ...options, direction }, measureLabel);
     this.applyLayout(layout);
     this.fit();
     return true;
+  }
+
+  /** Root element of the diagram shown on the canvas. */
+  protected shownRoot(): Element | null {
+    const canvas = this.get<Canvas>('canvas');
+    return canvas ? rootOf(canvas) : null;
+  }
+
+  /** Pools and lanes fix the layout direction of the shown diagram (their orientation). */
+  layoutDirectionLocked(): boolean {
+    const canvas = this.get<Canvas>('canvas');
+    if (!canvas) return false;
+    return childrenOf(rootOf(canvas)).some(
+      (c) => is(bo(c), 'bpmn:Participant') || is(bo(c), 'bpmn:Lane'),
+    );
   }
 
   /** Root-level graph of the current diagram for auto layout. */
@@ -823,6 +842,37 @@ export class EditorController {
     const paint = (value: string) =>
       value && value !== 'none' && !value.startsWith('url(') ? value : undefined;
     return { fill: paint(style.fill), stroke: paint(style.stroke) };
+  }
+
+  /**
+   * Level of detail: zoomed far out, secondary text (flow names, message
+   * names, then external labels) is hidden so the structure stays readable.
+   */
+  private levelOfDetail(scale: number): void {
+    this.container.classList.toggle('bf-lod-mid', scale < 0.6);
+    this.container.classList.toggle('bf-lod-far', scale < 0.4);
+  }
+
+  private focused: string[] = [];
+
+  /**
+   * Focus: everything except the given elements' context is dimmed. For flow
+   * nodes the context is every path through them (upstream and downstream,
+   * across sequence and message flows); for pools and lanes, their content.
+   * An empty list ends the focus.
+   */
+  focus(ids: string[]): void {
+    const canvas = this.get<Canvas>('canvas');
+    const registry = this.get<ElementRegistry>('elementRegistry');
+    if (!canvas || !registry) return;
+    for (const id of this.focused) if (registry.get(id)) canvas.removeMarker(id, 'bf-focus');
+    const keep = focusContext(
+      ids.map((id) => registry.get(id) as Element | undefined).filter((e): e is Element => !!e),
+      registry.getAll() as Element[],
+    );
+    this.focused = [...keep].map((e) => e.id);
+    for (const id of this.focused) canvas.addMarker(id, 'bf-focus');
+    this.container.classList.toggle('bf-focusing', keep.size > 0);
   }
 
   highlight(ids: string[]): void {
@@ -921,4 +971,83 @@ export class EditorController {
     this.listeners.clear();
     this.errorListeners.clear();
   }
+}
+
+const FLOW = /^bpmn:(SequenceFlow|MessageFlow)$/;
+const LINKS = /^bpmn:(Association|DataInputAssociation|DataOutputAssociation)$/;
+
+/** The elements kept visible when focusing on `targets` (see `EditorController.focus`). */
+export function focusContext(targets: Element[], all: Element[]): Set<Element> {
+  const keep = new Set<Element>();
+  const nodes: Element[] = [];
+  for (const t of targets) {
+    const b = bo(t);
+    if (is(b, 'bpmn:Lane')) {
+      const refs = new Set(getMany(b, 'flowNodeRef'));
+      nodes.push(...all.filter((e) => refs.has(bo(e)!) && !isConnection(e)));
+      keep.add(t);
+    } else if (is(b, 'bpmn:Participant')) {
+      for (const e of all) {
+        for (let p: Element | undefined = e; p; p = p.parent) {
+          if (p === t) {
+            keep.add(e);
+            break;
+          }
+        }
+      }
+    } else if (!isConnection(t)) {
+      nodes.push(t);
+    } else {
+      keep.add(t);
+      const c = t as Connection;
+      if (c.source) nodes.push(c.source as Element);
+      if (c.target) nodes.push(c.target as Element);
+    }
+  }
+  if (!nodes.length && !keep.size) return keep;
+
+  // Every path through the nodes: walk downstream and upstream separately.
+  const walk = (start: Element[], forward: boolean) => {
+    const seen = new Set<Element>();
+    const todo = [...start];
+    while (todo.length) {
+      const n = todo.pop()!;
+      if (seen.has(n)) continue;
+      seen.add(n);
+      keep.add(n);
+      const shape = n as Shape;
+      const related: Element[] = [];
+      // A host and its boundary events go together.
+      if (forward) related.push(...((shape.attachers ?? []) as Element[]));
+      else if (shape.host) related.push(shape.host as Element);
+      for (const r of related) todo.push(r);
+      const conns = (forward ? shape.outgoing : shape.incoming) as Connection[] | undefined;
+      for (const c of conns ?? []) {
+        if (!FLOW.test(bo(c)?.$type ?? '')) continue;
+        keep.add(c);
+        const next = (forward ? c.target : c.source) as Element | undefined;
+        if (next) todo.push(next);
+      }
+    }
+  };
+  walk(nodes, true);
+  walk(nodes, false);
+
+  // Data and annotations attached to what is kept; the containers around it.
+  for (const e of [...keep]) {
+    const shape = e as Shape;
+    for (const c of [...(shape.incoming ?? []), ...(shape.outgoing ?? [])] as Connection[]) {
+      if (!LINKS.test(bo(c)?.$type ?? '')) continue;
+      keep.add(c);
+      const other = (c.source === e ? c.target : c.source) as Element | undefined;
+      if (other) keep.add(other);
+    }
+    for (let p = e.parent; p && p.parent; p = p.parent) keep.add(p);
+  }
+  for (const e of all) {
+    if (!is(bo(e), 'bpmn:Lane') || !e.parent || !keep.has(e.parent)) continue;
+    const refs = new Set(getMany(bo(e), 'flowNodeRef'));
+    if ([...keep].some((k) => refs.has(bo(k)!))) keep.add(e);
+  }
+  return keep;
 }
