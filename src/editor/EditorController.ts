@@ -142,7 +142,7 @@ export class EditorController {
     const registry = this.get<ElementRegistry>('elementRegistry');
     const graphics = this.get<GraphicsFactory>('graphicsFactory');
     if (!registry || !graphics) return;
-    for (const c of registry.filter((e) => isConnection(e)))
+    for (const c of registry.filter((e) => isConnection(e as Element)) as Connection[])
       graphics.update('connection', c, registry.getGraphics(c));
   }
 
